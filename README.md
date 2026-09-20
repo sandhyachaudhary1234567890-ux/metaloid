@@ -10,6 +10,60 @@ npm run dev      # http://localhost:5173
 npm run build
 ```
 
+## Deploy — frontend on Vercel (`metaloid`), gateway on Render
+
+The gateway is a persistent Node process (missions, OSINT jobs, SSE
+streams), so it canNOT live on Vercel serverless. Split deploy:
+
+**A. Push the repo to GitHub** (already committed locally — keys, certs,
+and logs were verified absent from the commit):
+
+```bash
+cd C:\metaloid
+gh repo create metaloid --private --source=. --push
+```
+
+(or create an empty private repo on github.com, then
+`git remote add origin <url>`, `git push -u origin master`)
+
+**B. Gateway → Render** (free tier works):
+
+1. Render dashboard → New → Web Service → select the `metaloid` repo
+2. Root directory: `server` · Build: `npm install` · Start: `npm start`
+   (or use the `render.yaml` blueprint at repo root)
+3. Environment variables:
+   - `BIND_HOST` = `0.0.0.0`
+   - `ALLOW_ORIGINS` = `https://metaloid.vercel.app`
+     (use the real frontend URL once Vercel assigns it)
+   - `OPENROUTER_API_KEY` = fresh key (**rotate first** — the key once
+     pasted in chat is burned: dashboard → revoke → new key)
+   - `NVIDIA_API_KEY` = leave unset unless NVIDIA access is enabled
+     afterwards (current key has no model entitlements)
+   - `NVIDIA_ENABLED` = `false`
+4. Deploy → copy the service URL, e.g. `https://metaloid-gateway.onrender.com`
+   (health: `GET /api/health` → `ai:true`)
+
+**C. Frontend → Vercel** (project name: `metaloid`):
+
+1. Vercel dashboard → Add New → Project → Import the `metaloid` repo
+2. Framework preset: **Vite** (auto-detected; `vercel.json` pins
+   build `npm run build`, output `dist`, SPA rewrites)
+3. Environment variable (set BEFORE first build — Vite bakes it in):
+   - `VITE_API_URL` = `https://metaloid-gateway.onrender.com`
+4. Deploy → `https://metaloid.vercel.app`
+   (If the gateway URL came later: set `VITE_API_URL`, redeploy — or set
+   Backend URL once inside the app: Settings → Connections.)
+
+**Notes that bite:**
+
+- Free Render services sleep when idle → first request wakes in ~30–60s;
+  the app shows honest offline/demo states meanwhile, then ONLINE.
+- `server/data/*.json` resets on Render redeploys — browser history and
+  memories (localStorage) are unaffected.
+- Real `https://` on both ends: mic + transcription work with no cert
+  tricks (unlike LAN testing). CORS stays locked to the frontend origin.
+- Keys live only in Render env vars; the browser never sees them.
+
 ## Same-WiFi phone testing (host local)
 
 Both servers bind the LAN **over HTTPS** (`certs/` from `server/certs-gen.mjs`;
