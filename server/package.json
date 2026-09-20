@@ -1,0 +1,16 @@
+{
+  "name": "metaloid-gateway",
+  "private": true,
+  "version": "0.1.0",
+  "type": "module",
+  "description": "METALOID edge/API gateway — model router, agent skills, OSINT orchestration. Keys stay here, never in the frontend.",
+  "scripts": {
+    "start": "node src/index.js",
+    "dev": "node --watch src/index.js"
+  },
+  "dependencies": {
+    "cors": "^2.8.5",
+    "express": "^4.21.2",
+    "selfsigned": "^5.5.0"
+  }
+}

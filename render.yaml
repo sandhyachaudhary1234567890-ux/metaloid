@@ -1,0 +1,23 @@
+# Render blueprint for the METALOID gateway (persistent Node process).
+# The gateway CANNOT run on Vercel serverless (in-memory missions/OSINT
+# jobs, file stores, long SSE streams) — frontend goes to Vercel,
+# gateway goes here (or Railway/Fly with the same start command).
+services:
+  - type: web
+    name: metaloid-gateway
+    runtime: node
+    rootDir: server
+    buildCommand: npm install
+    startCommand: npm start
+    healthCheckPath: /api/health
+    envVars:
+      - key: BIND_HOST
+        value: 0.0.0.0
+      - key: ALLOW_ORIGINS
+        value: https://metaloid.vercel.app
+      - key: OPENROUTER_API_KEY
+        sync: false
+      - key: NVIDIA_API_KEY
+        sync: false
+      - key: NVIDIA_ENABLED
+        value: 'false'

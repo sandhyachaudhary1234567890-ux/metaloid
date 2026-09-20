@@ -1,0 +1,31 @@
+# dependencies
+node_modules/
+voicetest/node_modules/
+dist/
+dist-ssr/
+.tsbuild-temp/
+vite.config.js
+vite.config.d.ts
+# user scratch drops (integrated designs live in src/)
+/code-20260920-173911/
+/*.mjs
+# local-only TLS certs for LAN https (regenerate via server/certs-gen.mjs)
+certs/*.pem
+
+# logs
+*.log
+npm-debug.log*
+
+# local test audio (regenerable harnesses)
+voicetest/*.wav
+
+# env (never commit keys — prototype must stay key-free)
+.env
+.env.*
+
+# editor
+.vscode/
+.idea/
+*.swp
+.DS_Store
+Thumbs.db
