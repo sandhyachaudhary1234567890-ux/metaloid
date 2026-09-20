@@ -131,6 +131,16 @@ process.on('uncaughtException', (e) => {
   process.exitCode = 1;
 });
 
+// Root: friendly status instead of "Cannot GET /" when opened in a browser.
+app.get('/', (req, res) => {
+  res.json({
+    service: 'metaloid-gateway',
+    ok: true,
+    usage: 'API only — the app UI lives on the frontend deployment.',
+    health: '/api/health',
+  });
+});
+
 // ---- health: REAL backend state (frontend shows this, never fakes it) ----
 app.get('/api/health', async (req, res) => {
   const models = await listFreeModels().catch(() => []);
