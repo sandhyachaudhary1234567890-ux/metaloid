@@ -75,7 +75,7 @@ export function DocumentWorkspace({ doc, onClose }: DocumentWorkspaceProps) {
       {/* Body: TOC + Reading Pane */}
       <div className="flex-1 flex overflow-hidden">
         {/* Table of Contents Column */}
-        <div className="w-48 sm:w-56 border-r border-[var(--border)] overflow-y-auto p-3 space-y-1 bg-[var(--surface-sunken)]/40 shrink-0">
+        <div className="hidden md:block w-48 sm:w-56 border-r border-[var(--border)] overflow-y-auto p-3 space-y-1 bg-[var(--surface-sunken)]/40 shrink-0">
           <div className="text-[10.5px] font-bold uppercase tracking-wider text-[var(--fg-muted)] px-2 mb-2">
             Contents
           </div>
@@ -95,8 +95,8 @@ export function DocumentWorkspace({ doc, onClose }: DocumentWorkspaceProps) {
         </div>
 
         {/* Document Reading Pane */}
-        <div className="flex-1 overflow-y-auto p-6 sm:p-10 bg-[var(--bg)]">
-          <div className="max-w-[680px] mx-auto bg-[var(--surface)] border border-[var(--border)] rounded-2xl p-8 sm:p-12 shadow-sm">
+        <div className="flex-1 overflow-y-auto p-3 sm:p-6 md:p-10 bg-[var(--bg)]">
+          <div className="max-w-[680px] mx-auto bg-[var(--surface)] border border-[var(--border)] rounded-2xl p-5 sm:p-8 md:p-12 shadow-sm">
             <Markdown text={doc.markdown} />
           </div>
         </div>

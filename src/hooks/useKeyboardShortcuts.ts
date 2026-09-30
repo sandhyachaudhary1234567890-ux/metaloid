@@ -2,7 +2,11 @@ import { useEffect } from 'react';
 import { useApp } from '../lib/store';
 
 export function useKeyboardShortcuts() {
-  const { setPaletteOpen, paletteOpen, closeModal, setVoiceOpen, voiceOpen, newConversation, setView, setToolsOpen, setMissionsOpen, setOsintOpen, setSkillsOpen } = useApp();
+  const {
+    setPaletteOpen, paletteOpen, closeModal, setVoiceOpen, voiceOpen,
+    newConversation, setView, setToolsOpen, setMissionsOpen, setOsintOpen, setSkillsOpen,
+    sidebarCollapsed, setSidebarCollapsed,
+  } = useApp();
 
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
@@ -10,6 +14,11 @@ export function useKeyboardShortcuts() {
       if (mod && e.key.toLowerCase() === 'k') {
         e.preventDefault();
         setPaletteOpen(!paletteOpen);
+        return;
+      }
+      if (mod && (e.key === '\\' || e.key.toLowerCase() === 'b')) {
+        e.preventDefault();
+        setSidebarCollapsed(!sidebarCollapsed);
         return;
       }
       if (e.key === 'Escape') {
@@ -38,5 +47,5 @@ export function useKeyboardShortcuts() {
     };
     window.addEventListener('keydown', onKey);
     return () => window.removeEventListener('keydown', onKey);
-  }, [paletteOpen, setPaletteOpen, closeModal, setVoiceOpen, voiceOpen, newConversation, setView, setToolsOpen, setMissionsOpen, setOsintOpen, setSkillsOpen]);
+  }, [paletteOpen, setPaletteOpen, closeModal, setVoiceOpen, voiceOpen, newConversation, setView, setToolsOpen, setMissionsOpen, setOsintOpen, setSkillsOpen, sidebarCollapsed, setSidebarCollapsed]);
 }

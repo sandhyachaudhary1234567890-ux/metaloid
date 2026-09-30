@@ -3,12 +3,12 @@ import { motion, AnimatePresence } from 'framer-motion';
 import {
   MessageSquare, Settings, ChevronLeft, ChevronRight,
   Plus, FolderKanban, Library, ListTodo, MoreHorizontal,
-  Pencil, Trash2, User, Code2
+  Pencil, Trash2, User, Code2, X
 } from 'lucide-react';
 import { useApp } from '../lib/store';
 import type { ViewId } from '../lib/types';
 import { cn } from '../lib/cn';
-import { MetaIoidMark, MetaIoidLockup } from './brand';
+import { MetaIoidMark, MetaIoidWordmark, MetaIoidLockup } from './brand';
 
 const NAV: { id: ViewId; label: string; icon: typeof MessageSquare }[] = [
   { id: 'chat', label: 'Chat', icon: MessageSquare },
@@ -22,7 +22,7 @@ export function LiveIndicator({ compact = false }: { compact?: boolean }) {
 
   if (connection === 'online') {
     return (
-      <span className={cn('inline-flex items-center gap-1.5 text-[var(--fg-muted)]', compact ? 'text-[10px]' : 'text-[11px]', 'font-medium tracking-wide')}>
+      <span className={cn('inline-flex items-center gap-1.5 text-emerald-600 dark:text-emerald-400 font-semibold tracking-wide', compact ? 'text-[10px]' : 'text-[10.5px]')}>
         <span className="h-1.5 w-1.5 rounded-full bg-emerald-500 animate-pulse" />
         <span>LIVE</span>
       </span>
@@ -30,7 +30,7 @@ export function LiveIndicator({ compact = false }: { compact?: boolean }) {
   }
   if (connection === 'checking') {
     return (
-      <span className={cn('inline-flex items-center gap-1.5 text-amber-500/80', compact ? 'text-[10px]' : 'text-[11px]', 'font-medium tracking-wide')}>
+      <span className={cn('inline-flex items-center gap-1.5 text-amber-500/80 font-medium tracking-wide', compact ? 'text-[10px]' : 'text-[10.5px]')}>
         <span className="h-1.5 w-1.5 rounded-full bg-amber-400 animate-pulse" />
         <span>CHECKING</span>
       </span>
@@ -40,10 +40,10 @@ export function LiveIndicator({ compact = false }: { compact?: boolean }) {
     <button
       onClick={() => recheckConnection()}
       title="Backend disconnected. Click to recheck."
-      className={cn('inline-flex items-center gap-1.5 text-[var(--fg-muted)] hover:text-[var(--fg)] transition-colors', compact ? 'text-[10px]' : 'text-[11px]', 'font-medium')}
+      className={cn('inline-flex items-center gap-1.5 text-[var(--fg-muted)] hover:text-[var(--fg)] transition-colors', compact ? 'text-[10px]' : 'text-[10.5px]', 'font-medium')}
     >
       <span className="h-1.5 w-1.5 rounded-full bg-[var(--fg-subtle)]" />
-      <span>LOCAL DEMO</span>
+      <span>DEMO</span>
     </button>
   );
 }
@@ -53,6 +53,7 @@ export const ConnectionPill = LiveIndicator;
 export function Sidebar() {
   const {
     view, setView, sidebarCollapsed, setSidebarCollapsed,
+    mobileSidebarOpen, setMobileSidebarOpen,
     newConversation, conversations, selectConversation, activeId,
     openModal, renameConversation,
   } = useApp();
@@ -125,18 +126,19 @@ export function Sidebar() {
   }
 
   return (
-    <aside className="hidden md:flex w-[256px] shrink-0 flex-col border-r border-[var(--border-subtle)] bg-[var(--surface)] text-[var(--fg)] select-none" aria-label="Primary">
-      <div className="px-4 pt-4 pb-3">
-        <div className="flex items-center justify-between">
-          <div className="flex items-center gap-2">
-            <MetaIoidLockup variant="full" size="md" />
-            <span className="text-[var(--border)]">|</span>
-            <LiveIndicator />
+    <>
+      <aside className="hidden md:flex w-[256px] shrink-0 flex-col border-r border-[var(--border-subtle)] bg-[var(--surface)] text-[var(--fg)] select-none" aria-label="Primary">
+        <div className="px-4 pt-4 pb-3">
+          <div className="flex items-center justify-between">
+            <div className="flex items-center gap-2 min-w-0">
+              <MetaIoidMark size={22} className="shrink-0" />
+              <MetaIoidWordmark height={14} className="shrink-0" />
+              <LiveIndicator />
+            </div>
+            <button onClick={() => setSidebarCollapsed(true)} className="icon-btn w-7 h-7 rounded-lg text-[var(--fg-muted)] hover:text-[var(--fg)] shrink-0 ml-1" aria-label="Collapse sidebar" title="Collapse">
+              <ChevronLeft size={15} />
+            </button>
           </div>
-          <button onClick={() => setSidebarCollapsed(true)} className="icon-btn w-7 h-7 rounded-lg text-[var(--fg-muted)] hover:text-[var(--fg)]" aria-label="Collapse sidebar" title="Collapse">
-            <ChevronLeft size={15} />
-          </button>
-        </div>
 
         {/* Refined Integrated New Chat Button */}
         <button
@@ -277,5 +279,131 @@ export function Sidebar() {
         </div>
       </div>
     </aside>
+
+    {/* Mobile Navigation Drawer */}
+    <AnimatePresence>
+      {mobileSidebarOpen && (
+        <>
+          <motion.div
+            initial={{ opacity: 0 }}
+            animate={{ opacity: 1 }}
+            exit={{ opacity: 0 }}
+            transition={{ duration: 0.2 }}
+            onClick={() => setMobileSidebarOpen(false)}
+            className="fixed inset-0 z-50 bg-black/60 backdrop-blur-xs md:hidden"
+            aria-hidden
+          />
+          <motion.aside
+            initial={{ x: '-100%' }}
+            animate={{ x: 0 }}
+            exit={{ x: '-100%' }}
+            transition={{ type: 'spring', damping: 28, stiffness: 280 }}
+            className="fixed inset-y-0 left-0 z-50 w-[min(300px,85vw)] bg-[var(--surface)] border-r border-[var(--border)] flex flex-col md:hidden text-[var(--fg)] shadow-2xl select-none"
+            aria-label="Mobile navigation drawer"
+          >
+            <div className="px-4 pt-4 pb-3">
+              <div className="flex items-center justify-between">
+                <div className="flex items-center gap-2 min-w-0">
+                  <MetaIoidMark size={22} className="shrink-0" />
+                  <MetaIoidWordmark height={14} className="shrink-0" />
+                  <LiveIndicator />
+                </div>
+                <button
+                  onClick={() => setMobileSidebarOpen(false)}
+                  className="icon-btn w-8 h-8 rounded-lg text-[var(--fg-muted)] hover:text-[var(--fg)]"
+                  aria-label="Close drawer"
+                >
+                  <X size={18} />
+                </button>
+              </div>
+
+              <button
+                onClick={() => { newConversation(); setView('chat'); setMobileSidebarOpen(false); }}
+                className="w-full mt-3.5 h-10 px-3.5 rounded-xl text-[13.5px] font-medium inline-flex items-center justify-between border border-[var(--border)] bg-[var(--surface-elevated)] hover:bg-[var(--surface-hover)] text-[var(--fg)] shadow-xs transition-all active:scale-[0.99]"
+              >
+                <span className="flex items-center gap-2">
+                  <Plus size={16} strokeWidth={2.2} className="text-[var(--accent)]" />
+                  <span>New chat</span>
+                </span>
+              </button>
+            </div>
+
+            <nav className="px-3 space-y-0.5" aria-label="Mobile navigation">
+              {NAV.map((n) => {
+                const active = view === n.id;
+                return (
+                  <button
+                    key={n.id}
+                    onClick={() => { setView(n.id); setMobileSidebarOpen(false); }}
+                    className={cn('w-full flex items-center gap-2.5 px-3 h-9 rounded-lg text-[13.5px] font-medium transition-all relative',
+                      active ? 'bg-[var(--surface-elevated)] text-[var(--fg)] shadow-xs' : 'text-[var(--fg-muted)] hover:text-[var(--fg)] hover:bg-[var(--surface-hover)]')}
+                  >
+                    {active && <motion.span layoutId="mobile-nav-pill" className="absolute left-1 top-2 bottom-2 w-[2px] rounded-full bg-[var(--accent)]" />}
+                    <n.icon size={16} strokeWidth={active ? 2 : 1.8} className={active ? 'text-[var(--accent)]' : 'text-[var(--fg-muted)]'} />
+                    <span>{n.label}</span>
+                  </button>
+                );
+              })}
+            </nav>
+
+            <div className="px-3 mt-4 flex-1 overflow-y-auto min-h-0 space-y-4">
+              {groupedChats.map((group) => (
+                <div key={group.label}>
+                  <p className="px-3 pb-1 text-[11px] font-semibold text-[var(--fg-muted)] tracking-wider">
+                    {group.label}
+                  </p>
+                  <div className="space-y-0.5">
+                    {group.items.map((c) => {
+                      const isSelected = view === 'chat' && activeId === c.id;
+                      return (
+                        <button
+                          key={c.id}
+                          onClick={() => {
+                            selectConversation(c.id);
+                            setView('chat');
+                            setMobileSidebarOpen(false);
+                          }}
+                          className={cn(
+                            'w-full text-left px-3 py-2 rounded-lg text-[13px] truncate transition-colors block',
+                            isSelected
+                              ? 'bg-[var(--surface-elevated)] text-[var(--fg)] font-medium shadow-xs'
+                              : 'text-[var(--fg-secondary)] hover:bg-[var(--surface-hover)] hover:text-[var(--fg)]'
+                          )}
+                          title={c.title}
+                        >
+                          {c.title || 'Untitled conversation'}
+                        </button>
+                      );
+                    })}
+                  </div>
+                </div>
+              ))}
+            </div>
+
+            <div className="mt-auto px-3 py-3 border-t border-[var(--border-subtle)] space-y-1">
+              <button
+                onClick={() => { setView('settings'); setMobileSidebarOpen(false); }}
+                className={cn('w-full flex items-center gap-2.5 px-3 h-9 rounded-lg text-[13.5px] font-medium transition-colors',
+                  view === 'settings' ? 'bg-[var(--surface-elevated)] text-[var(--fg)] shadow-xs' : 'text-[var(--fg-muted)] hover:text-[var(--fg)] hover:bg-[var(--surface-hover)]'
+                )}
+              >
+                <Settings size={16} />
+                <span>Settings</span>
+              </button>
+              <div className="flex items-center justify-between px-3 py-2 rounded-lg text-[13px]">
+                <div className="flex items-center gap-2.5 min-w-0">
+                  <span className="w-6 h-6 rounded-full bg-[var(--accent)]/15 border border-[var(--accent)]/30 flex items-center justify-center text-[var(--accent)] text-[11px] font-bold">
+                    A
+                  </span>
+                  <span className="font-medium text-[var(--fg)] truncate text-[12.5px]">Aryan</span>
+                </div>
+                <span className="text-[10px] font-mono text-[var(--fg-subtle)]">Free</span>
+              </div>
+            </div>
+          </motion.aside>
+        </>
+      )}
+    </AnimatePresence>
+  </>
   );
 }

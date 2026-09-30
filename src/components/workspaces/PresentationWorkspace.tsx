@@ -51,10 +51,10 @@ export function PresentationWorkspace({ deck, onClose }: PresentationWorkspacePr
         <div className="flex items-center gap-1.5 shrink-0">
           <button
             onClick={handleDownloadPptx}
-            className="btn-primary h-8 px-3 text-[12px] rounded-lg inline-flex items-center gap-1.5"
+            className="btn-primary h-8 px-2.5 sm:px-3 text-[12px] rounded-lg inline-flex items-center gap-1.5"
             title="Download verified .pptx file"
           >
-            <Download size={13} /> Download PPTX
+            <Download size={13} /> <span className="hidden sm:inline">Download</span> PPTX
           </button>
           <button
             onClick={handleDownloadMarkdown}
@@ -65,7 +65,7 @@ export function PresentationWorkspace({ deck, onClose }: PresentationWorkspacePr
           </button>
           <button
             onClick={() => setIsFullscreen(!isFullscreen)}
-            className="icon-btn w-8 h-8 rounded-lg text-[var(--fg-muted)] hover:text-[var(--fg)]"
+            className="icon-btn w-8 h-8 rounded-lg text-[var(--fg-muted)] hover:text-[var(--fg)] hidden sm:flex"
             title={isFullscreen ? 'Exit full screen' : 'Expand full screen'}
           >
             {isFullscreen ? <Minimize2 size={14} /> : <Maximize2 size={14} />}
@@ -83,7 +83,7 @@ export function PresentationWorkspace({ deck, onClose }: PresentationWorkspacePr
       {/* Workspace Body */}
       <div className="flex-1 flex overflow-hidden">
         {/* Slide Thumbnails Column */}
-        <div className="w-48 sm:w-56 border-r border-[var(--border)] overflow-y-auto p-3 space-y-2.5 bg-[var(--surface-sunken)]/40 shrink-0">
+        <div className="hidden md:block w-48 sm:w-56 border-r border-[var(--border)] overflow-y-auto p-3 space-y-2.5 bg-[var(--surface-sunken)]/40 shrink-0">
           <div className="text-[10.5px] font-bold uppercase tracking-wider text-[var(--fg-muted)] px-1 mb-1">
             Slides ({deck.slides.length})
           </div>
@@ -107,9 +107,9 @@ export function PresentationWorkspace({ deck, onClose }: PresentationWorkspacePr
         </div>
 
         {/* Slide Stage Canvas */}
-        <div className="flex-1 flex flex-col p-6 overflow-y-auto items-center justify-between bg-[var(--bg)]">
+        <div className="flex-1 flex flex-col p-3 sm:p-6 overflow-y-auto items-center justify-between bg-[var(--bg)]">
           {/* Main Slide Canvas */}
-          <div className="w-full max-w-[720px] aspect-[16/9] rounded-2xl border border-[var(--border-strong)] bg-[var(--surface)] p-8 sm:p-12 shadow-pop flex flex-col justify-between select-text transition-all relative overflow-hidden">
+          <div className="w-full max-w-[720px] aspect-[16/9] rounded-2xl border border-[var(--border-strong)] bg-[var(--surface)] p-5 sm:p-8 md:p-12 shadow-pop flex flex-col justify-between select-text transition-all relative overflow-hidden">
             {/* Subtle background glow */}
             <div className="absolute top-0 right-0 w-64 h-64 bg-[var(--accent)]/5 rounded-full blur-3xl pointer-events-none" />
 

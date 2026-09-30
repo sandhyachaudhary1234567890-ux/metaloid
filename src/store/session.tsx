@@ -41,6 +41,8 @@ interface SessionValue {
   closeModal: () => void;
   sidebarCollapsed: boolean;
   setSidebarCollapsed: (b: boolean) => void;
+  mobileSidebarOpen: boolean;
+  setMobileSidebarOpen: (b: boolean) => void;
   voiceOpen: boolean;
   setVoiceOpen: (b: boolean) => void;
   paletteOpen: boolean;
@@ -97,6 +99,7 @@ export function SessionProvider({ children }: { children: React.ReactNode }) {
   const [toasts, setToasts] = useState<ToastItem[]>([]);
   const [modal, setModal] = useState<ModalState>({ kind: null });
   const [sidebarCollapsed, setSidebarCollapsed] = useState(false);
+  const [mobileSidebarOpen, setMobileSidebarOpen] = useState(false);
   const [voiceOpen, setVoiceOpen] = useState(false);
   const [paletteOpen, setPaletteOpen] = useState(false);
   const [toolsOpen, setToolsOpen] = useState(false);
@@ -275,6 +278,7 @@ export function SessionProvider({ children }: { children: React.ReactNode }) {
     model: settings.model, setModel,
     toasts, toast, closeToast, modal, openModal, closeModal,
     sidebarCollapsed, setSidebarCollapsed,
+    mobileSidebarOpen, setMobileSidebarOpen,
     voiceOpen, setVoiceOpen, paletteOpen, setPaletteOpen,
     toolsOpen, setToolsOpen,
     osintOpen, setOsintOpen, osintTarget, setOsintTarget,

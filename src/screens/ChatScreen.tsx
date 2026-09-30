@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState } from 'react';
 import { AnimatePresence, motion } from 'framer-motion';
-import { Square, MoreHorizontal, Pencil, Trash2, Plus, ArrowRight, Unplug, PanelRightClose, PanelRightOpen } from 'lucide-react';
+import { Square, MoreHorizontal, Pencil, Trash2, Plus, ArrowRight, Unplug, PanelLeft } from 'lucide-react';
 import { useApp } from '../lib/store';
 import { ChatWindow } from '../components/ChatWindow';
 import { CommandBar } from '../components/CommandBar';
@@ -19,7 +19,7 @@ export function ChatScreen() {
   const {
     activeConv, status, isGenerating, stopGenerating, detectedLang,
     newConversation, setView, openModal, renameConversation, language,
-    connection,
+    connection, sidebarCollapsed, setSidebarCollapsed, setMobileSidebarOpen,
   } = useApp();
   const messages = activeConv?.messages ?? [];
   const [moreOpen, setMoreOpen] = useState(false);
@@ -46,14 +46,29 @@ export function ChatScreen() {
         activeWorkspacePayload ? 'flex-1 lg:w-1/2' : 'w-full'
       }`}>
         {/* top: title · model · language · more */}
-        <div className="w-full mx-auto px-4 sm:px-8 pt-4 pb-2 flex items-center gap-3 border-b border-[var(--border-subtle)]">
+        <div className="w-full mx-auto px-3 sm:px-6 md:px-8 h-14 flex items-center gap-2.5 border-b border-[var(--border-subtle)] shrink-0">
+          <button
+            onClick={() => {
+              if (window.innerWidth < 768) {
+                setMobileSidebarOpen(true);
+              } else {
+                setSidebarCollapsed(!sidebarCollapsed);
+              }
+            }}
+            className="icon-btn w-8 h-8 rounded-lg text-[var(--fg-muted)] hover:text-[var(--fg)] hover:bg-[var(--surface-hover)] shrink-0"
+            title={sidebarCollapsed ? 'Expand sidebar (⌘\\)' : 'Collapse sidebar (⌘\\)'}
+            aria-label="Toggle sidebar"
+          >
+            <PanelLeft size={18} />
+          </button>
+
           {messages.length <= 2 && (
             <div className="hidden sm:block shrink-0">
-              <MetaloidCore status={status} size={36} glyph={false} minimal />
+              <MetaloidCore status={status} size={30} glyph={false} minimal />
             </div>
           )}
-          <div className="min-w-0 flex-1 flex items-center gap-2.5">
-            <h2 className="text-[15px] font-medium text-[var(--fg)] tracking-tight truncate">
+          <div className="min-w-0 flex-1 flex items-center gap-2">
+            <h2 className="text-[14.5px] font-medium text-[var(--fg)] tracking-tight truncate">
               {activeConv?.title ?? 'New conversation'}
             </h2>
             {offline && (
@@ -173,8 +188,8 @@ export function ChatScreen() {
         )}
 
         {/* bottom composer */}
-        <div className="border-t border-[var(--border)] bg-[var(--bg)]/90 backdrop-blur-md pb-[76px] md:pb-0">
-          <div className="max-w-[760px] mx-auto px-4 sm:px-8 py-3.5">
+        <div className="border-t border-[var(--border)] bg-[var(--bg)]/90 backdrop-blur-md pb-[max(0.75rem,env(safe-area-inset-bottom))]">
+          <div className="max-w-[760px] mx-auto px-3 sm:px-6 md:px-8 py-2.5 sm:py-3.5">
             <CommandBar onCamera={() => setView('live')} injected={draft} />
           </div>
         </div>

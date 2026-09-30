@@ -23,14 +23,22 @@ import { SettingsScreen } from './screens/SettingsScreen';
 import { WorkspaceScreen } from './screens/WorkspaceScreen';
 import { AuthScreen } from './components/AuthScreen';
 import { Onboarding } from './components/Onboarding';
-import { WifiOff } from 'lucide-react';
+import { WifiOff, Menu } from 'lucide-react';
 
 import { MetaIoidLockup, MetaIoidFavicon } from './components/brand';
 
 function MobileTopBar() {
+  const { setMobileSidebarOpen } = useApp();
   return (
     <div className="md:hidden sticky top-0 z-30 border-b border-[var(--border)] bg-[var(--surface)]/90 backdrop-blur-md">
-      <div className="px-4 h-[56px] flex items-center gap-2.5">
+      <div className="px-3 h-14 flex items-center gap-2">
+        <button
+          onClick={() => setMobileSidebarOpen(true)}
+          className="icon-btn w-9 h-9 rounded-lg text-[var(--fg-muted)] hover:text-[var(--fg)] shrink-0"
+          aria-label="Open menu"
+        >
+          <Menu size={20} />
+        </button>
         <MetaIoidLockup variant="compact" size="sm" />
         <span className="ml-auto"><ConnectionPill compact /></span>
       </div>
@@ -105,7 +113,7 @@ export default function App() {
       <Sidebar />
 
       <div className="flex-1 flex flex-col min-w-0 min-h-0">
-        <MobileTopBar />
+        {view !== 'chat' && <MobileTopBar />}
         {view !== 'home' && view !== 'chat' && (
           <div className="hidden md:block">
             <Header
@@ -156,7 +164,7 @@ export default function App() {
           </AnimatePresence>
         </main>
 
-        <BottomNav onMore={() => setMoreOpen(true)} />
+        {view !== 'chat' && <BottomNav onMore={() => setMoreOpen(true)} />}
         <MobileMoreSheet open={moreOpen} onClose={() => setMoreOpen(false)} />
       </div>
 
