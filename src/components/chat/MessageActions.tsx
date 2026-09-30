@@ -141,8 +141,8 @@ function ActBtn({
       title={label}
       aria-label={label}
       className={cn(
-        'icon-btn w-9 h-9 min-w-[36px] min-h-[36px]',
-        active && 'text-[var(--fg)]'
+        'inline-flex items-center justify-center w-7 h-7 rounded-md text-[var(--fg-muted)] hover:text-[var(--fg)] hover:bg-[var(--surface-hover)] transition-all active:scale-95',
+        active && 'text-[var(--fg)] bg-[var(--surface-hover)]'
       )}
     >
       {children}

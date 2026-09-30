@@ -114,7 +114,9 @@ const UserBubble = memo(function UserBubble({ msg, interactive = true }: { msg: 
                 setDraft(msg.content);
                 setEditing(true);
               }}
-              className="msg-actions icon-btn w-9 h-9" aria-label="Edit message" title="Edit and resend"
+              className="opacity-0 group-hover:opacity-100 focus-within:opacity-100 transition-opacity duration-150 icon-btn w-8 h-8 rounded-lg"
+              aria-label="Edit message"
+              title="Edit and resend"
             >
               <Pencil size={13} />
             </button>
@@ -192,24 +194,24 @@ const AssistantBubble = memo(function AssistantBubble({
           <span className="inline-block w-[6px] h-[14px] ml-1 align-middle rounded-sm bg-[var(--accent)] animate-pulse" aria-label="Generating" />
         ) : null}
         {!msg.streaming && shown && interactive && (
-          <MessageActions            content={shown}
-            isLast={isLast}
-            feedback={msg.feedback}
-            versions={versions}
-            versionIndex={msg.versionIndex ?? -1}
-            onRegenerate={() => {
-              if (!isGenerating) regenerate(msg.id);
-              else toast({ title: 'Generation in progress', desc: 'Stop the active stream before regenerating' });
-            }}
-            onFeedback={(f) => setFeedback(msg.id, f)}
-            onVersion={(i) => setVersionIndex(msg.id, i)}
-          />
+          <div className="opacity-0 group-hover:opacity-100 focus-within:opacity-100 transition-opacity duration-150 mt-1">
+            <MessageActions
+              content={shown}
+              isLast={isLast}
+              feedback={msg.feedback}
+              versions={versions}
+              versionIndex={msg.versionIndex ?? -1}
+              onRegenerate={() => {
+                if (!isGenerating) regenerate(msg.id);
+                else toast({ title: 'Generation in progress', desc: 'Stop the active stream before regenerating' });
+              }}
+              onFeedback={(f) => setFeedback(msg.id, f)}
+              onVersion={(i) => setVersionIndex(msg.id, i)}
+            />
+          </div>
         )}
         {!msg.streaming && msg.artifact && (
           <ArtifactCard artifact={msg.artifact} onOpenWorkspace={onOpenWorkspace} />
-        )}
-        {!msg.streaming && msg.detectedLang && (
-          <p className="text-[11px] text-[var(--fg-subtle)] mt-1">Detected: {msg.detectedLang}</p>
         )}
       </div>
     </motion.div>

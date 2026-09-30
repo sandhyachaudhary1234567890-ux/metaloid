@@ -52,17 +52,18 @@ export function ChatScreen() {
               <MetaloidCore status={status} size={36} glyph={false} minimal />
             </div>
           )}
-          <div className="min-w-0 flex-1">
-            <h2 className="text-[15px] font-semibold text-[var(--fg)] truncate">{activeConv?.title ?? 'New conversation'}</h2>
-            <p className="text-[12px] text-[var(--fg-muted)] truncate">
-              {offline ? 'Local demo' : activeConv ? `${activeConv.model} · live` : 'live'}
-              {activeConv ? ` · ${activeConv.language}` : ''}
-              {detectedLang ? ` · Detected: ${detectedLang}` : ''} &middot; {messages.length} messages
-            </p>
+          <div className="min-w-0 flex-1 flex items-center gap-2.5">
+            <h2 className="text-[15px] font-medium text-[var(--fg)] tracking-tight truncate">
+              {activeConv?.title ?? 'New conversation'}
+            </h2>
+            {offline && (
+              <span className="text-[11px] font-medium px-2 py-0.5 rounded-full bg-amber-500/10 text-amber-500 border border-amber-500/20">
+                Offline
+              </span>
+            )}
           </div>
-          <div className="hidden sm:flex items-center gap-2 shrink-0">
+          <div className="flex items-center gap-2 shrink-0">
             <ModelSelector compact />
-            <LanguageSelector compact />
           </div>
           <div className="relative shrink-0">
             <button

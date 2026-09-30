@@ -229,28 +229,22 @@ export function CommandBar({
         </div>
       )}
 
-      <div className={cn('flex items-end gap-1.5', large ? 'p-3 pb-1.5' : 'p-2 pb-1')}>
-        <input
-          ref={fileRef}
-          type="file"
-          multiple
-          accept="image/*,.pdf,.txt,.md,.csv,.json,.ts,.tsx,.js,.jsx,.py"
-          className="hidden"
-          aria-hidden
-          tabIndex={-1}
-          onChange={(e) => {
-            if (e.target.files?.length) addFiles(e.target.files);
-            e.target.value = '';
-          }}
-        />
-        <button
-          className="icon-btn w-10 h-10 min-w-[40px] rounded-xl border border-[var(--border)] shrink-0"
-          aria-label="Attach files"
-          title="Attach files or images"
-          onClick={() => fileRef.current?.click()}
-        >
-          <Plus size={18} />
-        </button>
+      <input
+        ref={fileRef}
+        type="file"
+        multiple
+        accept="image/*,.pdf,.txt,.md,.csv,.json,.ts,.tsx,.js,.jsx,.py"
+        className="hidden"
+        aria-hidden
+        tabIndex={-1}
+        onChange={(e) => {
+          if (e.target.files?.length) addFiles(e.target.files);
+          e.target.value = '';
+        }}
+      />
+
+      {/* Primary Textarea Area */}
+      <div className={cn('w-full px-4 pt-3.5 pb-1', large && 'px-5 pt-4 pb-2')}>
         <textarea
           ref={taRef}
           value={value}
@@ -272,178 +266,134 @@ export function CommandBar({
             }
           }}
           rows={1}
-          placeholder={mode && mode.id !== 'ask' ? mode.hint : 'Ask anything…'}
+          placeholder={mode && mode.id !== 'ask' ? mode.hint : 'Ask MetaIoid anything…'}
           aria-label="Prompt input"
           className={cn(
-            'flex-1 bg-transparent resize-none outline-none placeholder:text-[var(--fg-subtle)] text-[var(--fg)] overflow-y-auto font-sans',
-            large ? 'text-[15px] py-2' : 'text-[14px] py-1.5'
+            'w-full bg-transparent resize-none outline-none placeholder:text-[var(--fg-subtle)] text-[var(--fg)] overflow-y-auto font-sans leading-relaxed',
+            large ? 'text-[15.5px]' : 'text-[14.5px]'
           )}
-          style={{ minHeight: large ? 28 : 24 }}
+          style={{ minHeight: large ? 36 : 28 }}
         />
       </div>
 
-      {/* action bar: Tools · Mode … camera · mic · send */}
-      <div className="relative flex items-center gap-1.5 px-3 pb-3">
-        <button
-          onClick={() => {
-            setModeOpen(false);
-            setToolsOpen((o) => !o);
-          }}
-          aria-expanded={toolsOpen}
-          aria-haspopup="menu"
-          className={cn(
-            'inline-flex items-center gap-1.5 h-9 px-3.5 rounded-full border text-[13px] font-medium transition-all active:scale-95 min-h-[36px]',
-            toolsOpen
-              ? 'border-[var(--accent)] bg-[var(--accent-subtle)] text-[var(--fg)]'
-              : 'border-[var(--border)] bg-transparent text-[var(--fg-secondary)] hover:text-[var(--fg)] hover:border-[var(--fg-muted)]'
-          )}
-        >
-          <SlidersHorizontal size={14} />
-          Tools
-        </button>
-        <button
-          onClick={() => {
-            setToolsOpen(false);
-            setModeOpen((o) => !o);
-          }}
-          aria-expanded={modeOpen}
-          aria-haspopup="listbox"
-          className={cn(
-            'inline-flex items-center gap-1.5 h-9 px-3.5 rounded-full border text-[13px] font-medium transition-all active:scale-95 min-w-0 max-w-[160px] min-h-[36px]',
-            modeOpen
-              ? 'border-[var(--accent)] bg-[var(--accent-subtle)] text-[var(--fg)]'
-              : 'border-[var(--border)] bg-transparent text-[var(--fg-secondary)] hover:text-[var(--fg)] hover:border-[var(--fg-muted)]'
-          )}
-        >
-          <span aria-hidden className="text-[15px] leading-none text-[var(--accent)]">⌁</span>
-          <span className="truncate">{activeModel.label}</span>
-        </button>
+      {/* Minimal Ergonomic Controls: ＋ ... 🎙 ↑ */}
+      <div className="relative flex items-center justify-between px-3 pb-2.5 pt-1">
+        <div className="relative">
+          <button
+            onClick={() => setToolsOpen((o) => !o)}
+            aria-expanded={toolsOpen}
+            aria-haspopup="menu"
+            className={cn(
+              'inline-flex items-center justify-center w-8 h-8 rounded-full border transition-all active:scale-95',
+              toolsOpen
+                ? 'border-[var(--accent)] bg-[var(--accent-subtle)] text-[var(--fg)]'
+                : 'border-[var(--border)] bg-[var(--surface-elevated)] text-[var(--fg-secondary)] hover:text-[var(--fg)] hover:border-[var(--fg-muted)]'
+            )}
+            title="Attach files or capabilities"
+            aria-label="Attach or select capabilities"
+          >
+            <Plus size={16} strokeWidth={2.2} />
+          </button>
+        </div>
 
-        <span className="flex-1" />
+        <div className="flex items-center gap-1.5 shrink-0">
+          <button
+            onClick={() => setVoiceOpen(true)}
+            className="inline-flex items-center justify-center w-8 h-8 rounded-full text-[var(--fg-muted)] hover:text-[var(--accent)] hover:bg-[var(--accent-subtle)] transition-colors"
+            aria-label="Voice input"
+            title="Voice mode"
+          >
+            <Mic size={17} strokeWidth={2} />
+          </button>
+          <LiquidMetalButton
+            onClick={submit}
+            isGenerating={isGenerating}
+            disabled={!isGenerating && !value.trim() && !atts.length}
+            size={34}
+            title={isGenerating ? 'Stop generating' : 'Send message'}
+          />
+        </div>
 
-        <button
-          onClick={onCamera}
-          className="icon-btn w-9 h-9 min-w-[36px] rounded-xl"
-          aria-label="Camera input"
-          title="Live camera"
-        >
-          <Camera size={17} />
-        </button>
-        <button
-          onClick={() => setVoiceOpen(true)}
-          className="icon-btn w-9 h-9 min-w-[36px] rounded-xl hover:text-[var(--accent)] hover:bg-[var(--accent-subtle)]"
-          aria-label="Voice input"
-          title="Voice mode"
-        >
-          <Mic size={17} />
-        </button>
-        <LiquidMetalButton
-          onClick={submit}
-          isGenerating={isGenerating}
-          disabled={!isGenerating && !value.trim() && !atts.length}
-          size={36}
-          title={isGenerating ? 'Stop generating' : 'Send message'}
-        />
-
-        {/* popups */}
-        <AnimatePresence>
-          {(toolsOpen || modeOpen) && (
-            <div className="fixed inset-0 z-40" onClick={closeMenus} aria-hidden />
-          )}
-        </AnimatePresence>
+        {/* Universal Attachments & Capabilities Popover */}
         <AnimatePresence>
           {toolsOpen && (
-            <motion.div
-              initial={{ opacity: 0, y: 8, scale: 0.98 }}
-              animate={{ opacity: 1, y: 0, scale: 1 }}
-              exit={{ opacity: 0, y: 6, scale: 0.98 }}
-              transition={{ duration: 0.18, ease: [0.22, 1, 0.36, 1] }}
-              className="absolute z-50 left-2 bottom-full mb-2 w-[min(340px,calc(100vw-3rem))] rounded-2xl border border-white/10 bg-[#12141a]/95 backdrop-blur-xl shadow-pop p-1.5 max-h-[min(60svh,380px)] overflow-y-auto"
-              role="menu"
-              aria-label="Composer capabilities"
-            >
-              {menuModes.map((m) => {
-                const Icon = MODE_MENU_ICONS[m.id] ?? MessageSquare;
-                const active = mode?.id === m.id || (!mode && m.id === 'ask');
-                return (
-                  <button
-                    key={m.id}
-                    role="menuitemradio"
-                    aria-checked={active}
-                    onClick={() => selectMode(m)}
-                    className={cn(
-                      'w-full flex items-center gap-3 px-3 py-2.5 rounded-xl text-left transition-colors',
-                      active ? 'bg-white/[0.07]' : 'hover:bg-white/[0.04]'
-                    )}
-                  >
-                    <span className="w-6 text-center text-zinc-400 shrink-0" aria-hidden>
-                      <Icon size={15} />
-                    </span>
-                    <span className="flex-1 min-w-0">
-                      <span className="block text-[13.5px] font-medium text-zinc-100">{m.label}</span>
-                      {m.desc && <span className="block text-[12px] text-zinc-500 truncate">{m.desc}</span>}
-                    </span>
-                    {active && <Check size={15} className="text-cyan-200 shrink-0" />}
-                  </button>
-                );
-              })}
-              <div className="h-px bg-white/[0.07] my-1.5" />
-              <button
-                role="menuitem"
-                onClick={() => {
-                  closeMenus();
-                  setPaletteOpen(true);
-                }}
-                className="w-full flex items-center gap-3 px-3 py-2.5 rounded-xl text-left hover:bg-white/[0.04] transition-colors"
+            <>
+              <div className="fixed inset-0 z-40" onClick={closeMenus} aria-hidden />
+              <motion.div
+                initial={{ opacity: 0, y: 8, scale: 0.98 }}
+                animate={{ opacity: 1, y: 0, scale: 1 }}
+                exit={{ opacity: 0, y: 6, scale: 0.98 }}
+                transition={{ duration: 0.18, ease: [0.22, 1, 0.36, 1] }}
+                className="absolute z-50 left-0 bottom-full mb-2 w-[min(300px,calc(100vw-3rem))] rounded-2xl border border-[var(--border)] bg-[var(--surface-elevated)] backdrop-blur-xl shadow-pop p-1.5 overflow-y-auto"
+                role="menu"
+                aria-label="Composer capabilities"
               >
-                <span className="w-6 text-center text-zinc-400 shrink-0" aria-hidden>
-                  <Command size={15} />
-                </span>
-                <span className="flex-1 text-[13.5px] font-medium text-zinc-100">Commands</span>
-                <kbd className="font-mono text-[11px] text-zinc-500 border border-white/10 rounded px-1.5 py-0.5">⌘K</kbd>
-              </button>
-            </motion.div>
-          )}
-        </AnimatePresence>
-        <AnimatePresence>
-          {modeOpen && (
-            <motion.div
-              initial={{ opacity: 0, y: 8, scale: 0.98 }}
-              animate={{ opacity: 1, y: 0, scale: 1 }}
-              exit={{ opacity: 0, y: 6, scale: 0.98 }}
-              transition={{ duration: 0.18, ease: [0.22, 1, 0.36, 1] }}
-              className="absolute z-50 left-2 bottom-full mb-2 w-[min(320px,calc(100vw-3rem))] rounded-2xl border border-white/10 bg-[#12141a]/95 backdrop-blur-xl shadow-pop p-1.5 max-h-[min(60svh,380px)] overflow-y-auto"
-              role="listbox"
-              aria-label="Reasoning mode"
-            >
-              <div className="px-3 pt-1.5 pb-1 text-[11px] font-semibold tracking-[0.14em] uppercase text-zinc-500">
-                Reasoning
-              </div>
-              {MODELS.map((m) => {
-                const active = model === m.id;
-                return (
+                <button
+                  role="menuitem"
+                  onClick={() => {
+                    closeMenus();
+                    fileRef.current?.click();
+                  }}
+                  className="w-full flex items-center gap-3 px-3 py-2 rounded-xl text-left hover:bg-[var(--surface-hover)] transition-colors text-[var(--fg)]"
+                >
+                  <span className="w-6 text-center text-[var(--fg-muted)] shrink-0">
+                    <FileText size={15} />
+                  </span>
+                  <span className="flex-1 min-w-0">
+                    <span className="block text-[13px] font-medium text-[var(--fg)]">Upload file or document</span>
+                    <span className="block text-[11px] text-[var(--fg-muted)]">PDF, DOCX, CSV, TXT, images</span>
+                  </span>
+                </button>
+
+                {onCamera && (
                   <button
-                    key={m.id}
-                    role="option"
-                    aria-selected={active}
-                    onClick={() => selectModel(m.id as ModelId)}
-                    className={cn(
-                      'w-full flex items-center gap-3 px-3 py-2.5 rounded-xl text-left transition-colors',
-                      active ? 'bg-white/[0.07]' : 'hover:bg-white/[0.04]'
-                    )}
+                    role="menuitem"
+                    onClick={() => {
+                      closeMenus();
+                      onCamera();
+                    }}
+                    className="w-full flex items-center gap-3 px-3 py-2 rounded-xl text-left hover:bg-[var(--surface-hover)] transition-colors text-[var(--fg)]"
                   >
-                    <span className="w-6 text-center text-[15px] text-zinc-300 shrink-0" aria-hidden>
-                      {m.icon}
+                    <span className="w-6 text-center text-[var(--fg-muted)] shrink-0">
+                      <Camera size={15} />
                     </span>
                     <span className="flex-1 min-w-0">
-                      <span className="block text-[13.5px] font-semibold text-zinc-100">{m.label}</span>
-                      <span className="block text-[12px] text-zinc-500 truncate">{m.desc}</span>
+                      <span className="block text-[13px] font-medium text-[var(--fg)]">Take photo / Camera</span>
+                      <span className="block text-[11px] text-[var(--fg-muted)]">Visual context capture</span>
                     </span>
-                    {active && <Check size={15} className="text-cyan-200 shrink-0" />}
                   </button>
-                );
-              })}
-            </motion.div>
+                )}
+
+                <div className="h-px bg-[var(--border-subtle)] my-1" />
+
+                <div className="px-3 pt-1.5 pb-1 text-[10.5px] font-bold tracking-[0.14em] uppercase text-[var(--fg-muted)]">
+                  Workspaces & Capabilities
+                </div>
+
+                {menuModes.map((m) => {
+                  const Icon = MODE_MENU_ICONS[m.id] ?? MessageSquare;
+                  return (
+                    <button
+                      key={m.id}
+                      role="menuitem"
+                      onClick={() => {
+                        closeMenus();
+                        selectMode(m);
+                      }}
+                      className="w-full flex items-center gap-3 px-3 py-2 rounded-xl text-left hover:bg-[var(--surface-hover)] transition-colors text-[var(--fg)]"
+                    >
+                      <span className="w-6 text-center text-[var(--fg-muted)] shrink-0">
+                        <Icon size={15} />
+                      </span>
+                      <span className="flex-1 min-w-0">
+                        <span className="block text-[13px] font-medium text-[var(--fg)]">{m.label}</span>
+                        {m.desc && <span className="block text-[11px] text-[var(--fg-muted)] truncate">{m.desc}</span>}
+                      </span>
+                    </button>
+                  );
+                })}
+              </motion.div>
+            </>
           )}
         </AnimatePresence>
       </div>

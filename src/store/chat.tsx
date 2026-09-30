@@ -756,11 +756,13 @@ export function ChatProvider({ children }: { children: React.ReactNode }) {
     }
 
     const artifactKind = pptMatch ? 'pptx' : docMatch ? 'docx' : null;
+
     if (artifactKind && connection === 'online') {
       renameTask(taskId, artifactKind === 'pptx' ? 'presentation' : 'document');
       const topic = artifactKind === 'pptx'
-        ? topicOf(/\b(presentation|pptx?|power\s*point|slide\s*deck|pitch\s*deck|slides?)\b/i)
+        ? topicOf(/\b(presentation|presetation|pptx?|power\s*point|slide\s*deck|pitch\s*deck|slides?)\b/i)
         : topicOf(/\b(report|essay|proposal|resume|résumé|invoice|letter|meeting notes|worksheet|formal document|word document|docx|word doc|school project|document)\b/i);
+
       if (!topic) {
         setConversations((prev) => prev.map((c) =>
           c.id === convId ? { ...c, updatedAt: Date.now(), messages: [...c.messages, { id: uid('msg'), role: 'assistant', content: `What should the ${artifactKind === 'pptx' ? 'presentation' : 'document'} be about? Tell me a topic.`, createdAt: Date.now() }] } : c
@@ -792,11 +794,12 @@ export function ChatProvider({ children }: { children: React.ReactNode }) {
         if (actl.signal.aborted) throw new Error('aborted');
         if (outcome.ok && outcome.artifact) {
           const a = outcome.artifact;
+          const pdfNote = workIntent.exportPdf ? ' & PDF Printable' : '';
           setConversations((prev) => prev.map((c) =>
             c.id === convId ? {
               ...c, updatedAt: Date.now(), messages: [...c.messages, {
                 id: uid('msg'), role: 'assistant', createdAt: Date.now(),
-                content: `**${a.name}** — created and verified.${projectId ? ` Saved to the ${projectId} project.` : ''}`,
+                content: `**${a.name}**${pdfNote} — created, verified and ready.${projectId ? ` Saved to the ${projectId} project.` : ''}`,
                 artifact: { id: a.id, name: a.name, kind: a.kind, status: a.status, version: a.version },
               }],
             } : c
