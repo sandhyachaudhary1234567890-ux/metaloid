@@ -1,7 +1,7 @@
-// Production Binary OpenXML .pptx Generator (§4, §40)
-// Generates a genuine, standard PKZip archive containing valid OpenXML PresentationML schemas.
-// Universally opens in Microsoft PowerPoint, LibreOffice Impress, Google Slides, and Apple Keynote.
-// Zero third-party dependencies — pure standard TypeScript.
+// Retired browser-only packager. It is deliberately not exported from the
+// agent barrel and must not be used on a product path: verified PPTX creation
+// belongs exclusively to server/core/artifacts.js → server/core/pptx.js.
+// Kept temporarily as a migration reference for legacy development tooling.
 
 import type { PresentationDeck, SlideContent } from './types';
 

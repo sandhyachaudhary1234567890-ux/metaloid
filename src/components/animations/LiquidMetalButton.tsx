@@ -29,7 +29,9 @@ export function LiquidMetalButton({
   const [hovered, setHovered] = useState(false);
   const [active, setActive] = useState(false);
 
-  // Render fluid liquid-metal ripples on canvas
+  // Render fluid liquid-metal ripples on canvas.
+  // Perf: animates only while hovered/generating; otherwise paints one
+  // static frame. Always static when the tab is hidden or motion is reduced.
   useEffect(() => {
     const canvas = canvasRef.current;
     if (!canvas) return;
@@ -37,6 +39,7 @@ export function LiquidMetalButton({
     if (!ctx) return;
 
     let animFrame: number;
+    const reduceMotion = window.matchMedia?.('(prefers-reduced-motion: reduce)').matches ?? false;
     let t = 0;
 
     const render = () => {
@@ -114,13 +117,23 @@ export function LiquidMetalButton({
       ctx.stroke();
 
       t += 1;
-      animFrame = requestAnimationFrame(render);
+      // Keep animating only while there is visible motion; otherwise rest.
+      if ((hovered || isGenerating) && !reduceMotion && !document.hidden) {
+        animFrame = requestAnimationFrame(render);
+      }
     };
 
     render();
 
+    const onVis = () => {
+      cancelAnimationFrame(animFrame);
+      render();
+    };
+    document.addEventListener('visibilitychange', onVis);
+
     return () => {
       cancelAnimationFrame(animFrame);
+      document.removeEventListener('visibilitychange', onVis);
     };
   }, [disabled, hovered, isGenerating]);
 

@@ -1,6 +1,5 @@
 // METALOID product types — single source of truth for domain shapes.
-// Primary IA: home · chat · live · memory · history · settings
-// Tools are contextual (drawers / inline cards), never a route.
+// Primary IA only exposes capabilities that have a real runtime contract.
 
 export type AgentStatus =
   | 'idle'
@@ -18,7 +17,8 @@ export type LanguageId =
 export type ModelId = 'auto' | 'fast' | 'balanced' | 'smart' | 'vision';
 
 export type ViewId =
-  | 'home' | 'chat' | 'live' | 'memory' | 'history' | 'settings';
+  | 'home' | 'chat' | 'projects' | 'library' | 'research' | 'tasks'
+  | 'live' | 'memory' | 'history' | 'settings' | 'auth';
 
 export type ConnectionState = 'checking' | 'online' | 'offline';
 
@@ -60,6 +60,22 @@ export interface ChatMessage {
   edited?: boolean;
   /** attachments sent with a user message */
   attachments?: Attachment[];
+  /** real file artifact attached to an assistant message */
+  artifact?: {
+    id: string;
+    name: string;
+    kind: string;
+    status: string;
+    version?: number;
+    payload?: any;
+  };
+  /** minimal calm activity progression */
+  activity?: {
+    label: string;
+    stages: string[];
+    currentStageIndex: number;
+    isComplete?: boolean;
+  };
   /** generation failed — bubble shows compact error + Retry */
   error?: boolean;
 }
@@ -119,6 +135,7 @@ export interface ToastItem {
   id: string;
   title: string;
   desc?: string;
+  tone?: 'success' | 'error' | 'info';
 }
 
 // ---- Provider contracts (transport layer implements these) ----

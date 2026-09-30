@@ -6,6 +6,25 @@ import { defineTool } from '../core/tools.js';
 import { createInvestigation, runInvestigation, getInvestigation, detectTargetType } from '../osint.js';
 import { remember, recall, forget } from '../core/memory.js';
 import { upsertEntity, relate, neighbors, findEntities } from '../core/world.js';
+import {
+  createArtifact, editArtifact, validateArtifact, renderArtifact, finalizeArtifact,
+  getArtifact, listArtifacts, visualQA, repairArtifact, ARTIFACT_KINDS,
+} from '../core/artifacts.js';
+
+function scopedUser(grants) {
+  const userId = grants?.userId;
+  if (!userId || typeof userId !== 'string') throw new Error('Artifact tools require an authenticated user session.');
+  return userId;
+}
+
+function scopedArgs(args, grants) {
+  const userId = scopedUser(grants);
+  const scope = {};
+  for (const k of ['projectId', 'workspaceId', 'taskId', 'conversationId']) {
+    if (typeof args?.[k] === 'string' && args[k]) scope[k] = args[k].slice(0, 80);
+  }
+  return { userId, scope };
+}
 
 async function httpsJSON(url, headers = {}, timeoutMs = 9000) {
   const r = await fetch(url, { headers, signal: AbortSignal.timeout(timeoutMs) });
@@ -171,4 +190,240 @@ defineTool({
   inputs: { id: { type: 'string', required: true }, depth: { type: 'number', required: false } },
   outputs: { graph: 'object' },
   handler: async ({ id, depth = 1 }) => ({ graph: neighbors(id, Math.min(depth || 1, 3)) }),
+});
+
+// ---- artifact tools (scoped file creation, user-owned) ----
+defineTool({
+  name: 'artifact.create',
+  purpose: 'Create a REAL file artifact (pptx, docx, md, txt) in the user-scoped artifact store. Bytes are genuinely built, never mocked.',
+  tags: ['artifact', 'file', 'create', 'document', 'presentation'],
+  risk: 'reversible', timeoutMs: 15000, verify: 'schema',
+  inputs: {
+    kind: { type: 'string', required: true, pattern: '^(pptx|docx|md|txt)$' },
+    name: { type: 'string', required: true, max: 80 },
+    spec: { type: 'object', required: true },
+    projectId: { type: 'string', required: false },
+    workspaceId: { type: 'string', required: false },
+    taskId: { type: 'string', required: false },
+    conversationId: { type: 'string', required: false },
+  },
+  outputs: { artifact: 'object' },
+  handler: async (args, grants) => {
+    const { userId, scope } = scopedArgs(args, grants);
+    const r = createArtifact({ userId, kind: args.kind, name: args.name, spec: args.spec, ...scope });
+    if (!r.ok) throw new Error(r.error);
+    return { artifact: r.artifact };
+  },
+});
+
+defineTool({
+  name: 'artifact.write',
+  purpose: 'Write a new version of an existing artifact (v1 → v2). Previous versions preserved.',
+  tags: ['artifact', 'file', 'edit', 'version'],
+  risk: 'reversible', timeoutMs: 15000, verify: 'schema',
+  inputs: {
+    id: { type: 'string', required: true },
+    spec: { type: 'object', required: true },
+    note: { type: 'string', required: false, max: 120 },
+  },
+  outputs: { artifact: 'object' },
+  handler: async (args, grants) => {
+    const r = editArtifact(scopedUser(grants), args.id, args.spec, args.note || '');
+    if (!r.ok) throw new Error(r.error);
+    return { artifact: r.artifact };
+  },
+});
+
+defineTool({
+  name: 'artifact.read',
+  purpose: 'Read artifact metadata (never raw bytes unless download is used).',
+  tags: ['artifact', 'file', 'read'],
+  risk: 'read', timeoutMs: 3000, verify: 'none',
+  inputs: { id: { type: 'string', required: true } },
+  outputs: { artifact: 'object' },
+  handler: async (args, grants) => {
+    const a = getArtifact(scopedUser(grants), args.id);
+    if (!a) throw new Error('Unknown artifact.');
+    const { bytes, ...meta } = a;
+    void bytes;
+    return { artifact: meta };
+  },
+});
+
+defineTool({
+  name: 'artifact.inspect',
+  purpose: 'Inspect artifact structure: slides/paragraphs, versions, timeline, renders.',
+  tags: ['artifact', 'inspect', 'qa'],
+  risk: 'read', timeoutMs: 5000, verify: 'none',
+  inputs: { id: { type: 'string', required: true } },
+  outputs: { inspection: 'object' },
+  handler: async (args, grants) => {
+    const a = getArtifact(scopedUser(grants), args.id);
+    if (!a) throw new Error('Unknown artifact.');
+    const qa = visualQA(scopedUser(grants), args.id);
+    return {
+      inspection: {
+        id: a.id, name: a.name, kind: a.kind, status: a.status, version: a.version,
+        verification: a.verification, renders: a.renders, versions: a.versions,
+        qaIssues: qa.ok ? qa.issues : [{ reason: qa.error }],
+        renderNote: qa.renderNote,
+      },
+    };
+  },
+});
+
+defineTool({
+  name: 'artifact.validate',
+  purpose: 'Structurally validate an artifact (PKZIP/Content_Types/slides/text — never just the extension).',
+  tags: ['artifact', 'validate', 'qa'],
+  risk: 'read', timeoutMs: 10000, verify: 'schema',
+  inputs: { id: { type: 'string', required: true } },
+  outputs: { verification: 'object' },
+  handler: async (args, grants) => {
+    const r = validateArtifact(scopedUser(grants), args.id);
+    if (!r.ok) throw new Error(r.error);
+    return { verification: r.verification };
+  },
+});
+
+defineTool({
+  name: 'artifact.render',
+  purpose: 'Render artifact to PDF proof via local renderer if installed; honestly reports when unavailable.',
+  tags: ['artifact', 'render', 'preview'],
+  risk: 'reversible', timeoutMs: 90000, verify: 'none',
+  inputs: { id: { type: 'string', required: true } },
+  outputs: { render: 'object' },
+  handler: async (args, grants) => {
+    const r = await renderArtifact(scopedUser(grants), args.id);
+    if (!r.ok) throw new Error(r.error);
+    return { render: { rendered: r.rendered, message: r.message || null, pdfBytes: r.pdfBytes || 0, previews: r.previews || 0 } };
+  },
+});
+
+defineTool({
+  name: 'artifact.finalize',
+  purpose: 'Finalize a validated artifact (optionally attach to a project). Only from passing validation.',
+  tags: ['artifact', 'finalize', 'project', 'library'],
+  risk: 'reversible', timeoutMs: 5000, verify: 'schema',
+  inputs: { id: { type: 'string', required: true }, projectId: { type: 'string', required: false } },
+  outputs: { artifact: 'object' },
+  handler: async (args, grants) => {
+    const r = finalizeArtifact(scopedUser(grants), args.id, args.projectId || null);
+    if (!r.ok) throw new Error(r.error);
+    return { artifact: r.artifact };
+  },
+});
+
+// ---- document tools ----
+defineTool({
+  name: 'document.create',
+  purpose: 'Create a REAL text document (md, txt, or genuine .docx) from a title + blocks.',
+  tags: ['document', 'create', 'docx', 'markdown', 'writing'],
+  risk: 'reversible', timeoutMs: 15000, verify: 'schema',
+  inputs: {
+    kind: { type: 'string', required: true, pattern: '^(docx|md|txt)$' },
+    title: { type: 'string', required: true, max: 150 },
+    blocks: { type: 'object', required: true },
+    projectId: { type: 'string', required: false },
+    conversationId: { type: 'string', required: false },
+  },
+  outputs: { artifact: 'object' },
+  handler: async (args, grants) => {
+    const { userId, scope } = scopedArgs(args, grants);
+    const spec = args.kind === 'docx'
+      ? { title: args.title, blocks: args.blocks }
+      : { text: `# ${args.title}\n\n${blocksToMarkdown(args.blocks)}` };
+    const r = createArtifact({ userId, kind: args.kind, name: args.title, spec, ...scope });
+    if (!r.ok) throw new Error(r.error);
+    return { artifact: r.artifact };
+  },
+});
+
+function blocksToMarkdown(blocks) {
+  if (!Array.isArray(blocks)) return '';
+  return blocks.map((b) => {
+    if (b.h === 1) return `## ${b.text || b.p || ''}`;
+    if (b.h === 2) return `### ${b.text || b.p || ''}`;
+    if (b.h === 3) return `#### ${b.text || b.p || ''}`;
+    if (Array.isArray(b.bullets)) return b.bullets.map((x) => `- ${x}`).join('\n');
+    return String(b.p || '');
+  }).join('\n\n').slice(0, 200000);
+}
+
+defineTool({
+  name: 'document.edit',
+  purpose: 'Edit a document artifact (new version, old preserved).',
+  tags: ['document', 'edit', 'version'],
+  risk: 'reversible', timeoutMs: 15000, verify: 'schema',
+  inputs: { id: { type: 'string', required: true }, spec: { type: 'object', required: true }, note: { type: 'string', required: false, max: 120 } },
+  outputs: { artifact: 'object' },
+  handler: async (args, grants) => {
+    const r = editArtifact(scopedUser(grants), args.id, args.spec, args.note || '');
+    if (!r.ok) throw new Error(r.error);
+    return { artifact: r.artifact };
+  },
+});
+
+defineTool({
+  name: 'document.validate',
+  purpose: 'Validate a document artifact structurally.',
+  tags: ['document', 'validate', 'qa'],
+  risk: 'read', timeoutMs: 10000, verify: 'schema',
+  inputs: { id: { type: 'string', required: true } },
+  outputs: { verification: 'object' },
+  handler: async (args, grants) => {
+    const r = validateArtifact(scopedUser(grants), args.id);
+    if (!r.ok) throw new Error(r.error);
+    return { verification: r.verification };
+  },
+});
+
+// ---- presentation tools ----
+defineTool({
+  name: 'presentation.create',
+  purpose: 'Create a REAL .pptx presentation from a deck spec {title, slides:[{title, bullets[]}], accent?}. Genuine OpenXML bytes.',
+  tags: ['presentation', 'pptx', 'slides', 'create'],
+  risk: 'reversible', timeoutMs: 15000, verify: 'schema',
+  inputs: {
+    title: { type: 'string', required: true, max: 120 },
+    slides: { type: 'object', required: true },
+    accent: { type: 'string', required: false, max: 7 },
+    projectId: { type: 'string', required: false },
+    conversationId: { type: 'string', required: false },
+  },
+  outputs: { artifact: 'object' },
+  handler: async (args, grants) => {
+    const { userId, scope } = scopedArgs(args, grants);
+    const r = createArtifact({ userId, kind: 'pptx', name: args.title, spec: { title: args.title, slides: args.slides, accent: args.accent }, ...scope });
+    if (!r.ok) throw new Error(r.error);
+    return { artifact: r.artifact };
+  },
+});
+
+defineTool({
+  name: 'presentation.edit',
+  purpose: 'Edit presentation slides (new version, e.g. fix slide N).',
+  tags: ['presentation', 'pptx', 'edit', 'version'],
+  risk: 'reversible', timeoutMs: 15000, verify: 'schema',
+  inputs: { id: { type: 'string', required: true }, spec: { type: 'object', required: true }, note: { type: 'string', required: false, max: 120 } },
+  outputs: { artifact: 'object' },
+  handler: async (args, grants) => {
+    const r = editArtifact(scopedUser(grants), args.id, args.spec, args.note || '');
+    if (!r.ok) throw new Error(r.error);
+    return { artifact: r.artifact };
+  },
+});
+
+defineTool({
+  name: 'presentation.validate',
+  purpose: 'Validate a .pptx structurally (package, slides, text presence, overcrowding).',
+  tags: ['presentation', 'pptx', 'validate', 'qa'],
+  risk: 'read', timeoutMs: 10000, verify: 'schema',
+  inputs: { id: { type: 'string', required: true } },
+  outputs: { verification: 'object' },
+  handler: async (args, grants) => {
+    const r = validateArtifact(scopedUser(grants), args.id);
+    if (!r.ok) throw new Error(r.error);
+    return { verification: r.verification };
+  },
 });

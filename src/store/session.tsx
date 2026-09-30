@@ -4,9 +4,14 @@
 
 import React, { createContext, useCallback, useContext, useEffect, useState } from 'react';
 import type { AgentStatus, AppSettings, ConnectionState, LanguageId, ModelId, ToastItem, ViewId } from '../lib/types';
-import { storage, uid } from '../lib/storage';
+import { storage, uid, setActiveUser, claimLegacyForUser } from '../lib/storage';
 import { applyTheme } from '../lib/theme';
 import { allDown, checkBackend, type ServiceHealth } from '../lib/transport';
+import {
+  getSession, setSession as saveSession, clearSession, onSessionChange,
+  type AuthUser,
+} from '../lib/auth';
+import { authSignup as apiSignup, authLogin as apiLogin, authLogout as apiLogout, fetchMe as apiMe } from '../lib/transport';
 
 export interface ModalState {
   kind: string | null;
@@ -30,6 +35,7 @@ interface SessionValue {
   setModel: (m: ModelId) => void;
   toasts: ToastItem[];
   toast: (t: Omit<ToastItem, 'id'>) => void;
+  closeToast: (id: string) => void;
   modal: ModalState;
   openModal: (kind: string, payload?: unknown) => void;
   closeModal: () => void;
@@ -53,7 +59,19 @@ interface SessionValue {
   setDeviceMorphOpen: (b: boolean) => void;
   skillForgeOpen: boolean;
   setSkillForgeOpen: (b: boolean) => void;
+  skillsOpen: boolean;
+  setSkillsOpen: (b: boolean) => void;
+  liveTaskId: string | null;
+  setLiveTaskId: (id: string | null) => void;
   clearAllData: () => void;
+  // ---- identity (multi-user) ----
+  authUser: AuthUser | null;
+  authReady: boolean;
+  onboardingDone: boolean;
+  signup: (handle: string, displayName: string, passcode: string) => Promise<void>;
+  login: (handle: string, passcode: string) => Promise<void>;
+  logout: () => Promise<void>;
+  refreshAuth: () => Promise<void>;
 }
 
 const Ctx = createContext<SessionValue | null>(null);
@@ -88,6 +106,92 @@ export function SessionProvider({ children }: { children: React.ReactNode }) {
   const [missionDraft, setMissionDraft] = useState('');
   const [deviceMorphOpen, setDeviceMorphOpen] = useState(false);
   const [skillForgeOpen, setSkillForgeOpen] = useState(false);
+  const [skillsOpen, setSkillsOpen] = useState(false);
+  const [liveTaskId, setLiveTaskId] = useState<string | null>(null);
+
+  // ---- identity: session → namespaced stores → full context switch ----
+  const [authUser, setAuthUser] = useState<AuthUser | null>(() => getSession()?.user || null);
+  const [authReady, setAuthReady] = useState(false);
+  const [onboardingDone, setOnboardingDone] = useState(false);
+
+  const applySessionUser = useCallback((u: AuthUser | null, onboarded?: boolean) => {
+    setActiveUser(u ? u.id : null);
+    setAuthUser(u);
+    if (u) claimLegacyForUser();
+    if (onboarded !== undefined) setOnboardingDone(onboarded);
+  }, []);
+
+  const signup = useCallback(async (handle: string, displayName: string, passcode: string) => {
+    const r = await apiSignup(settings.backendUrl, handle, displayName, passcode);
+    saveSession({ access: r.access, refresh: r.refresh, user: r.user });
+    applySessionUser(r.user, !!(r.profile as { onboardingDone?: boolean }).onboardingDone);
+    window.location.reload(); // slices rehydrate from the new namespace
+  }, [settings.backendUrl, applySessionUser]);
+
+  const login = useCallback(async (handle: string, passcode: string) => {
+    const r = await apiLogin(settings.backendUrl, handle, passcode);
+    saveSession({ access: r.access, refresh: r.refresh, user: r.user });
+    applySessionUser(r.user, !!(r.profile as { onboardingDone?: boolean }).onboardingDone);
+    window.location.reload();
+  }, [settings.backendUrl, applySessionUser]);
+
+  const logout = useCallback(async () => {
+    try {
+      await apiLogout(settings.backendUrl);
+    } catch { /* session already dead — still switch locally */ }
+    clearSession();
+    applySessionUser(null, false);
+    window.location.reload(); // no stale context from the previous identity
+  }, [settings.backendUrl, applySessionUser]);
+
+  const refreshAuth = useCallback(async () => {
+    try {
+      const me = await apiMe(settings.backendUrl);
+      const s = getSession();
+      if (s) saveSession({ ...s, user: me.user });
+      setAuthUser(me.user);
+      setOnboardingDone(!!(me.profile as { onboardingDone?: boolean } | undefined)?.onboardingDone);
+    } catch {
+      clearSession();
+      applySessionUser(null, false);
+    } finally {
+      setAuthReady(true);
+    }
+  }, [settings.backendUrl, applySessionUser]);
+
+  // boot: namespace stores to the session user, validate the session
+  useEffect(() => {
+    const s = getSession();
+    setActiveUser(s?.user.id || null);
+    if (!s) {
+      setAuthReady(true);
+      return;
+    }
+    let alive = true;
+    apiMe(settings.backendUrl)
+      .then((me) => {
+        if (!alive) return;
+        const cur = getSession();
+        if (cur) saveSession({ ...cur, user: me.user });
+        setAuthUser(me.user);
+        setOnboardingDone(!!(me.profile as { onboardingDone?: boolean } | undefined)?.onboardingDone);
+        setAuthReady(true);
+      })
+      .catch(() => {
+        if (!alive) return;
+        clearSession();
+        applySessionUser(null, false);
+        setAuthReady(true);
+      });
+    const off = onSessionChange(() => {
+      const cur = getSession();
+      applySessionUser(cur?.user || null);
+    });
+    return () => {
+      alive = false;
+      off();
+    };
+  }, [settings.backendUrl, applySessionUser]);
 
   useEffect(() => storage.saveSettings(settings), [settings]);
 
@@ -134,7 +238,11 @@ export function SessionProvider({ children }: { children: React.ReactNode }) {
   const toast = useCallback((t: Omit<ToastItem, 'id'>) => {
     const id = uid('toast');
     setToasts((p) => [...p.slice(-3), { ...t, id }]);
-    window.setTimeout(() => setToasts((p) => p.filter((x) => x.id !== id)), 3400);
+    window.setTimeout(() => setToasts((p) => p.filter((x) => x.id !== id)), t.tone === 'error' ? 5200 : 3400);
+  }, []);
+
+  const closeToast = useCallback((id: string) => {
+    setToasts((p) => p.filter((x) => x.id !== id));
   }, []);
 
   const setView = useCallback((v: ViewId) => {
@@ -165,7 +273,7 @@ export function SessionProvider({ children }: { children: React.ReactNode }) {
     connection, health, recheckConnection,
     settings, updateSettings, language: settings.defaultLanguage, setLanguage,
     model: settings.model, setModel,
-    toasts, toast, modal, openModal, closeModal,
+    toasts, toast, closeToast, modal, openModal, closeModal,
     sidebarCollapsed, setSidebarCollapsed,
     voiceOpen, setVoiceOpen, paletteOpen, setPaletteOpen,
     toolsOpen, setToolsOpen,
@@ -173,7 +281,10 @@ export function SessionProvider({ children }: { children: React.ReactNode }) {
     missionsOpen, setMissionsOpen, missionDraft, setMissionDraft,
     deviceMorphOpen, setDeviceMorphOpen,
     skillForgeOpen, setSkillForgeOpen,
+    skillsOpen, setSkillsOpen,
+    liveTaskId, setLiveTaskId,
     clearAllData,
+    authUser, authReady, onboardingDone, signup, login, logout, refreshAuth,
   };
   return <Ctx.Provider value={value}>{children}</Ctx.Provider>;
 }

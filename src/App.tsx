@@ -11,34 +11,28 @@ import { ToolsDrawer } from './components/ToolsDrawer';
 import { OsintPanel } from './components/OsintPanel';
 import { MissionsPanel } from './components/MissionsPanel';
 import { SkillForgePanel } from './components/developer/SkillForgePanel';
+import { SkillsPanel } from './components/SkillsPanel';
 import { Toasts, ModalRoot } from './components/Overlays';
 import { StartupSequence } from './components/StartupSequence';
-import { BlockSwitchingTransition } from './components/animations/BlockSwitchingTransition';
-import { DeviceMorphPreview } from './components/animations/DeviceMorphPreview';
 import { HomeScreen } from './screens/HomeScreen';
 import { ChatScreen } from './screens/ChatScreen';
 import { LiveScreen } from './screens/LiveScreen';
 import { MemoryScreen } from './screens/MemoryScreen';
 import { HistoryScreen } from './screens/HistoryScreen';
 import { SettingsScreen } from './screens/SettingsScreen';
-import { WifiOff, Smartphone } from 'lucide-react';
+import { WorkspaceScreen } from './screens/WorkspaceScreen';
+import { AuthScreen } from './components/AuthScreen';
+import { Onboarding } from './components/Onboarding';
+import { WifiOff } from 'lucide-react';
 
 import { MetaIoidLockup, MetaIoidFavicon } from './components/brand';
 
-function MobileTopBar({ onDeviceMorph }: { onDeviceMorph: () => void }) {
+function MobileTopBar() {
   return (
     <div className="md:hidden sticky top-0 z-30 border-b border-[var(--border)] bg-[var(--surface)]/90 backdrop-blur-md">
       <div className="px-4 h-[56px] flex items-center gap-2.5">
         <MetaIoidLockup variant="compact" size="sm" />
-        <button
-          onClick={onDeviceMorph}
-          className="icon-btn w-8 h-8 rounded-lg ml-auto hover:text-[var(--accent)]"
-          title="Showcase 360° Morphing Device (4s)"
-          aria-label="360 Device Showcase"
-        >
-          <Smartphone size={15} />
-        </button>
-        <span><ConnectionPill compact /></span>
+        <span className="ml-auto"><ConnectionPill compact /></span>
       </div>
     </div>
   );
@@ -49,12 +43,12 @@ export default function App() {
   const {
     view, newConversation, setView, status, setStatus, voiceOpen,
     settings, connection, missionsOpen, setMissionsOpen, missionDraft,
-    deviceMorphOpen, setDeviceMorphOpen,
     skillForgeOpen, setSkillForgeOpen,
+    skillsOpen, setSkillsOpen,
+    authUser, authReady, onboardingDone,
   } = useApp();
 
   const [moreOpen, setMoreOpen] = useState(false);
-  const [switchingView, setSwitchingView] = useState(false);
   const prevViewRef = useRef(view);
   const [intro, setIntro] = useState(
     () =>
@@ -63,34 +57,60 @@ export default function App() {
       !new URLSearchParams(window.location.search).has('no-intro')
   );
 
-  // Block Switching Transition on page/view changes (min 1.25s, max 5s)
   useEffect(() => {
     if (prevViewRef.current !== view) {
       prevViewRef.current = view;
-      setSwitchingView(true);
       MetaIoidFavicon.setDocumentTitle(view === 'home' ? undefined : view.charAt(0).toUpperCase() + view.slice(1));
     }
   }, [view]);
 
   const meta: Record<string, { title: string; sub: string }> = {
+    projects: { title: 'Projects', sub: 'Persistent workspaces' },
+    library: { title: 'Library', sub: 'Created files and artifacts' },
+    research: { title: 'Research', sub: 'Cited investigations' },
+    tasks: { title: 'Tasks', sub: 'Resumable agent work' },
     live: { title: 'Live', sub: 'Camera vision feed' },
     memory: { title: 'Memory Vault', sub: 'Personal durable context' },
     history: { title: 'History', sub: 'Past conversations' },
     settings: { title: 'Settings', sub: 'Configuration' },
   };
 
+  // ---- identity gates (online gateway only; offline demo needs no account) ----
+  if (!authReady || connection === 'checking') {
+    return (
+      <div className="h-full flex items-center justify-center bg-[var(--bg)] text-[var(--fg-muted)] text-[13.5px]">
+        Waking Metaloid…
+      </div>
+    );
+  }
+  if (view === 'auth') {
+    return (
+      <div className="h-full bg-[var(--bg)] text-[var(--fg)] overflow-hidden">
+        <AuthScreen />
+        <Toasts />
+      </div>
+    );
+  }
+  if (authUser && !onboardingDone) {
+    return (
+      <div className="h-full bg-[var(--bg)] text-[var(--fg)] overflow-hidden">
+        <Onboarding />
+        <Toasts />
+      </div>
+    );
+  }
+
   return (
     <div className="h-full flex bg-[var(--bg)] text-[var(--fg)] overflow-hidden transition-colors duration-150">
       <Sidebar />
 
       <div className="flex-1 flex flex-col min-w-0 min-h-0">
-        <MobileTopBar onDeviceMorph={() => setDeviceMorphOpen(true)} />
+        <MobileTopBar />
         {view !== 'home' && view !== 'chat' && (
           <div className="hidden md:block">
             <Header
               title={meta[view].title}
               subtitle={meta[view].sub}
-              onDeviceMorph={() => setDeviceMorphOpen(true)}
             />
           </div>
         )}
@@ -124,6 +144,10 @@ export default function App() {
             >
               {view === 'home' && <HomeScreen />}
               {view === 'chat' && <ChatScreen />}
+              {view === 'projects' && <WorkspaceScreen kind="projects" />}
+              {view === 'library' && <WorkspaceScreen kind="library" />}
+              {view === 'research' && <WorkspaceScreen kind="research" />}
+              {view === 'tasks' && <WorkspaceScreen kind="tasks" />}
               {view === 'live' && <LiveScreen />}
               {view === 'memory' && <MemoryScreen />}
               {view === 'history' && <HistoryScreen />}
@@ -141,6 +165,7 @@ export default function App() {
       <OsintPanel />
       <MissionsPanel open={missionsOpen} onClose={() => setMissionsOpen(false)} initialObjective={missionDraft} />
       <SkillForgePanel open={skillForgeOpen} onClose={() => setSkillForgeOpen(false)} />
+      <SkillsPanel open={skillsOpen} onClose={() => setSkillsOpen(false)} />
       <CommandPalette />
       <ModalRoot />
       <Toasts />
@@ -148,22 +173,6 @@ export default function App() {
       {/* Type 1: 3D Reflection Metal Cube Startup Animation (4s) */}
       {intro && <StartupSequence onDone={() => setIntro(false)} />}
 
-      {/* Type 3: 360 Rotating Morphing Device Animation (4s on trigger) */}
-      <DeviceMorphPreview
-        isOpen={deviceMorphOpen}
-        onClose={() => setDeviceMorphOpen(false)}
-        featureName="360° Responsive Morph Showcase"
-      />
-
-      {/* Block Switching Animation: Page transition & process loader (min 1.25s, max 5s) */}
-      <BlockSwitchingTransition
-        active={switchingView}
-        minDuration={1250}
-        maxDuration={5000}
-        label={view.toUpperCase()}
-        hint="Switching workspace…"
-        onComplete={() => setSwitchingView(false)}
-      />
     </div>
   );
 }

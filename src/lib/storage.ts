@@ -7,6 +7,39 @@ const K = {
   activeConv: 'metaloid.activeConv.v1',
 };
 
+// ---- multi-user namespacing ----
+// Signed-in user → isolated key namespace (own conversations, memories,
+// settings, active chat). Logged out → legacy global keys (demo mode).
+// Switching accounts switches namespaces completely: no stale context.
+let activeUser: string | null = null;
+export function setActiveUser(id: string | null) {
+  activeUser = id;
+}
+export function getActiveUser(): string | null {
+  return activeUser;
+}
+function ku(base: string): string {
+  return activeUser ? `metaloid.u.${activeUser}.${base}` : base;
+}
+const LEGACY_CLAIMED = 'metaloid.legacyClaimed.v1';
+/** First signed-in user adopts the pre-multi-user local data (one time). */
+export function claimLegacyForUser(): boolean {
+  if (!activeUser) return false;
+  try {
+    if (localStorage.getItem(LEGACY_CLAIMED)) return false;
+    localStorage.setItem(LEGACY_CLAIMED, activeUser);
+  } catch {
+    return false;
+  }
+  for (const k of Object.values(K)) {
+    try {
+      const raw = localStorage.getItem(k);
+      if (raw && !localStorage.getItem(ku(k))) localStorage.setItem(ku(k), raw);
+    } catch { /* ignore */ }
+  }
+  return true;
+}
+
 function read<T>(key: string, fallback: T): T {
   try {
     const raw = localStorage.getItem(key);
@@ -25,9 +58,42 @@ function write(key: string, value: unknown) {
   }
 }
 
+// Generated images are data-URLs (hundreds of KB each). Persist only the 4
+// newest across all conversations so history can never blow the ~5MB
+// localStorage quota and silently drop everything. Older images keep their
+// prompt + a repaint hint. In-memory state is untouched — only the
+// persisted copy is trimmed.
+const IMG_MD_RE = /!\[[^\]]*\]\(data:image\/[^)]+\)/;
+const IMG_ALT_RE = /!\[([^\]]*)\]\(data:image\/[^)]+\)/;
+const MAX_PERSISTED_IMAGES = 4;
+
+function trimImageForPersist(content: string): string {
+  const alt = content.match(IMG_ALT_RE)?.[1]?.slice(0, 120) || 'untitled';
+  return content.replace(
+    IMG_MD_RE,
+    `*🖼 Cached image expired from local storage — prompt: "${alt}". Press regenerate to repaint it.*`
+  );
+}
+
+function sanitizeForPersist(list: Conversation[]): Conversation[] {
+  let kept = 0;
+  return list.map((c) => ({
+    ...c,
+    messages: c.messages.map((m) => {
+      if (m.role !== 'assistant' || !IMG_MD_RE.test(m.content)) return m;
+      if (kept < MAX_PERSISTED_IMAGES) {
+        kept += 1;
+        return m;
+      }
+      const versions = m.versions?.map((v) => (IMG_MD_RE.test(v) ? trimImageForPersist(v) : v));
+      return { ...m, content: trimImageForPersist(m.content), versions };
+    }),
+  }));
+}
+
 export const defaultSettings: AppSettings = {
-  theme: 'obsidian',
-  accent: '#0ea5e9', // Titanium Teal (replaces generic AI indigo)
+  theme: 'warm-paper',
+  accent: '#0d9488', // Restrained emerald / warm earth tone
   radius: 'refined',
   density: 'comfortable',
   animations: 'full',
@@ -119,7 +185,7 @@ export const defaultConversations: Conversation[] = [
 export const storage = {
   loadSettings(): AppSettings {
     // merge over defaults so new keys (memoryEnabled, showStartup, backendUrl, radius) land safely
-    const legacy = read<Partial<AppSettings>>(K.settings, {});
+    const legacy = read<Partial<AppSettings>>(ku(K.settings), {});
     const v1 = read<Partial<AppSettings>>('metaloid.settings.v1', {});
     const merged: AppSettings = { ...defaultSettings, ...v1, ...legacy };
 
@@ -140,47 +206,55 @@ export const storage = {
     return merged;
   },
   saveSettings(s: AppSettings) {
-    write(K.settings, s);
+    write(ku(K.settings), s);
   },
   loadMemories(): MemoryItem[] {
-    const m = read<(MemoryItem & { category: LegacyCategory })[] | null>(K.memories, null);
+    const m = read<(MemoryItem & { category: LegacyCategory })[] | null>(ku(K.memories), null);
     if (m) return m.map((x) => ({ ...x, category: migrateCategory(x.category) }));
     const v1 = read<(MemoryItem & { category: LegacyCategory })[] | null>('metaloid.memories.v1', null);
     if (v1) {
       const migrated = v1.map((x) => ({ ...x, category: migrateCategory(x.category) }));
-      write(K.memories, migrated);
+      write(ku(K.memories), migrated);
       return migrated;
     }
-    write(K.memories, defaultMemories);
+    write(ku(K.memories), defaultMemories);
     return defaultMemories;
   },
   saveMemories(m: MemoryItem[]) {
-    write(K.memories, m);
+    write(ku(K.memories), m);
   },
   loadConversations(): Conversation[] {
-    const c = read<Conversation[] | null>(K.conversations, null);
+    const c = read<Conversation[] | null>(ku(K.conversations), null);
     if (c) return c.map((x) => ({ ...x, preview: x.preview ?? x.messages.find((mm) => mm.role === 'user')?.content.slice(0, 90) }));
     const v1 = read<Conversation[] | null>('metaloid.conversations.v1', null);
     if (v1) {
       const mapped = v1.map((x) => ({ ...x, preview: x.messages.find((mm) => mm.role === 'user')?.content.slice(0, 90) }));
-      write(K.conversations, mapped);
+      write(ku(K.conversations), mapped);
       return mapped;
     }
-    write(K.conversations, defaultConversations);
+    write(ku(K.conversations), defaultConversations);
     return defaultConversations;
   },
   saveConversations(c: Conversation[]) {
-    write(K.conversations, c);
+    write(ku(K.conversations), sanitizeForPersist(c));
   },
   loadActiveConv(): string | null {
-    return read<string | null>(K.activeConv, null);
+    return read<string | null>(ku(K.activeConv), null);
   },
   saveActiveConv(id: string | null) {
-    if (id) write(K.activeConv, id);
-    else localStorage.removeItem(K.activeConv);
+    if (id) write(ku(K.activeConv), id);
+    else {
+      try {
+        localStorage.removeItem(ku(K.activeConv));
+      } catch { /* ignore */ }
+    }
   },
   clearAll() {
-    Object.values(K).forEach((k) => localStorage.removeItem(k));
+    Object.values(K).forEach((k) => {
+      try {
+        localStorage.removeItem(ku(k));
+      } catch { /* ignore */ }
+    });
   },
 };
 

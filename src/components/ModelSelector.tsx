@@ -73,7 +73,7 @@ export function ModelSelector({ compact = false }: { compact?: boolean }) {
               <div className="px-3 pt-2 pb-1 text-[11px] font-semibold uppercase tracking-wider text-[var(--fg-muted)] flex items-center gap-2">
                 Live engine
                 {online && (
-                  <button onClick={refresh} className="icon-btn w-5 h-5" aria-label="Refresh model list"><RefreshCw size={11} /></button>
+                  <button onClick={refresh} className="icon-btn w-8 h-8" aria-label="Refresh model list"><RefreshCw size={12} /></button>
                 )}
               </div>
               {online ? (

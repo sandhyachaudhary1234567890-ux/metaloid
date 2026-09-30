@@ -1,7 +1,10 @@
-import { Palette, Mic2, Globe2, Cpu, Brain, ShieldCheck, Plug, Server, Keyboard, Trash2, Check, Flame } from 'lucide-react';
+import { Palette, Mic2, Globe2, Cpu, Brain, ShieldCheck, Plug, Server, Keyboard, Trash2, Check, Flame, CircleUserRound, Network } from 'lucide-react';
 import { useApp } from '../lib/store';
 import { SettingsSection, SettingsRow, Seg, Toggle } from '../components/SettingsGroup';
 import { SystemStatus } from '../components/SystemStatus';
+import { ControlCenter } from '../components/ControlCenter';
+import { ProviderSettings } from '../components/ProviderSettings';
+import { PuterConnect } from '../components/PuterConnect';
 import { LANGUAGES, MODELS } from '../lib/i18n';
 import { getVoices } from '../providers/tts';
 import { THEME_PRESETS, ACCENT_PALETTES, type ThemePreset } from '../lib/theme';
@@ -21,7 +24,7 @@ export function SettingsScreen() {
   return (
     <div className="max-w-[860px] mx-auto px-4 sm:px-8 py-6 pb-32 md:pb-12 space-y-4">
       <div>
-        <h2 className="text-[22px] font-bold tracking-tight text-[var(--fg)]">Settings</h2>
+        <h1 className="text-[22px] font-bold tracking-tight text-[var(--fg)]">Settings</h1>
         <p className="text-[13.5px] text-[var(--fg-muted)] mt-0.5">
           Configure {settings.agentName} &middot; All preferences are preserved locally on this device.
         </p>
@@ -140,7 +143,7 @@ export function SettingsScreen() {
         {/* Radius Scale */}
         <SettingsRow
           label="Corner Radius"
-          hint="Controls the physical curvature scale across the interface"
+          hint="How rounded corners feel across the interface"
           control={
             <Seg
               options={['sharp', 'refined', 'soft'] as const}
@@ -184,7 +187,7 @@ export function SettingsScreen() {
         {/* Startup animation */}
         <SettingsRow
           label="Startup sequence"
-          hint="Cinematic telemetry boot into workspace"
+          hint="Short intro animation when the app opens"
           control={
             <Toggle
               on={settings.showStartup}
@@ -196,7 +199,7 @@ export function SettingsScreen() {
       </SettingsSection>
 
       {/* ============ VOICE ============ */}
-      <SettingsSection icon={Mic2} title="Voice Engine" desc="Streaming speech synthesis and dynamic endpoint sensitivity">
+      <SettingsSection icon={Mic2} title="Voice" desc="Spoken conversations, voices and interruption behavior">
         <SettingsRow
           label="Voice interaction enabled"
           control={
@@ -257,8 +260,8 @@ export function SettingsScreen() {
           }
         />
         <SettingsRow
-          label="Speech endpoint sensitivity"
-          hint="Higher sensitivity for rapid conversational turn-taking"
+          label="Mic sensitivity"
+          hint="Higher values react faster in quick back-and-forth conversation"
           control={
             <Seg
               options={['Low', 'Medium', 'High'] as const}
@@ -269,8 +272,8 @@ export function SettingsScreen() {
           }
         />
         <SettingsRow
-          label="Barge-in interrupt"
-          hint="Instantly cancels agent playback when speech is detected"
+          label="Interrupt on voice"
+          hint="Stops the reply out loud as soon as you start speaking"
           control={
             <Toggle
               on={settings.stopOnTalk}
@@ -310,7 +313,7 @@ export function SettingsScreen() {
       </SettingsSection>
 
       {/* ============ AGENT ============ */}
-      <SettingsSection icon={Cpu} title="Agent Personality" desc="Name, model intelligence tier, and response profile">
+      <SettingsSection icon={Cpu} title="Personality" desc="Name, answer depth and tone of voice">
         <SettingsRow
           label="Agent name"
           control={
@@ -323,7 +326,8 @@ export function SettingsScreen() {
           }
         />
         <SettingsRow
-          label="Reasoning tier"
+          label="Answer smarts"
+          hint="Higher tiers reason more before replying"
           control={
             <select
               value={settings.model}
@@ -364,7 +368,7 @@ export function SettingsScreen() {
       </SettingsSection>
 
       {/* ============ MEMORY & PRIVACY ============ */}
-      <SettingsSection icon={Brain} title="Memory & Privacy" desc="Local durable memory and zero telemetry leak guarantees">
+      <SettingsSection icon={Brain} title="Memory & Privacy" desc="What MetaIoid remembers on this device">
         <SettingsRow
           label="Durable memory enabled"
           hint="Allows agent to retain key user preferences and project facts locally"
@@ -392,11 +396,21 @@ export function SettingsScreen() {
         </div>
       </SettingsSection>
 
+      {/* ============ CONTROL CENTER (multi-user) ============ */}
+      <SettingsSection icon={CircleUserRound} title="Control Center" desc="Your profile, autonomy, usage, devices, and data — isolated per account">
+        <ControlCenter />
+      </SettingsSection>
+
+      {/* ============ AI PROVIDERS (BYOK) ============ */}
+      <SettingsSection icon={Network} title="AI Providers" desc="Your keys, your models — encrypted, tested, routed with fallbacks">
+        <ProviderSettings />
+      </SettingsSection>
+
       {/* ============ CONNECTIONS & SYSTEM ============ */}
-      <SettingsSection icon={Plug} title="Gateway & System Status" desc="Backend service status and keyboard accelerators">
+      <SettingsSection icon={Plug} title="Connection & System" desc="Backend connection and service health">
         <SettingsRow
-          label="Backend Gateway URL"
-          hint="Empty uses on-device mock transport"
+          label="Server address"
+          hint="Leave empty to use the built-in demo mode"
           control={
             <input
               value={settings.backendUrl}
@@ -407,17 +421,22 @@ export function SettingsScreen() {
             />
           }
         />
+        <SettingsRow
+          label="Puter — free images & AI"
+          hint="One-time free sign-in; image costs use your Puter allowance, never ours"
+          control={<PuterConnect />}
+        />
         <SystemStatus />
       </SettingsSection>
 
-      {/* ============ DEVELOPER / OWNER & SKILL FORGE ============ */}
-      <SettingsSection icon={Flame} title="Developer / Owner &middot; Skill Forge" desc="Autonomous continuous self-improvement engine, sandboxed workers, benchmarks, and canary rollback">
+      {/* ============ ADVANCED ============ */}
+      <SettingsSection icon={Flame} title="Advanced · Skill Forge" desc="Experimental self-improvement tools for owners">
         <SettingsRow
-          label="Continuous Skill Engine"
-          hint="Self-improvement loop with zero-credential sandboxed worker isolation"
+          label="Skill engine"
+          hint="Learns new capabilities in an isolated sandbox"
           control={
             <span className="text-[11px] font-mono uppercase px-2 py-0.5 rounded border border-emerald-500/30 bg-emerald-500/10 text-emerald-400">
-              Active &middot; Sandboxed
+              On
             </span>
           }
         />
@@ -426,7 +445,7 @@ export function SettingsScreen() {
             onClick={() => setSkillForgeOpen(true)}
             className="w-full h-11 rounded-xl text-[13px] font-semibold border border-[var(--accent)] bg-[var(--accent-subtle)] text-[var(--accent)] hover:opacity-90 flex items-center justify-center gap-2 transition-all"
           >
-            <Flame size={16} /> Open Skill Forge & Continuous Engine
+            <Flame size={16} /> Open Skill Forge
           </button>
         </div>
       </SettingsSection>

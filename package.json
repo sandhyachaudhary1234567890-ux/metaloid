@@ -6,6 +6,8 @@
   "description": "metaloid — private personal AI operating system (frontend prototype)",
   "scripts": {
     "dev": "vite",
+    "gateway": "node server/src/index.js",
+    "start": "node scripts/start-all.mjs",
     "build": "tsc -b && vite build",
     "preview": "vite preview",
     "check": "tsc --noEmit"

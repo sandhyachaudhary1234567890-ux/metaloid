@@ -38,7 +38,7 @@ export function HistoryScreen() {
     <div className="max-w-[860px] mx-auto px-4 sm:px-8 py-6 pb-32 md:pb-12">
       <div className="flex items-center gap-3">
         <div>
-          <h2 className="text-[22px] font-semibold tracking-tight text-[var(--fg)]">History</h2>
+          <h1 className="text-[22px] font-semibold tracking-tight text-[var(--fg)]">History</h1>
           <p className="text-[13px] text-[var(--fg-muted)] mt-0.5">{conversations.length} conversations · on this device</p>
         </div>
         <button onClick={() => { newConversation(); setView('chat'); }} className="btn-primary h-10 px-3.5 text-[13px] ml-auto min-h-[40px]">
@@ -55,7 +55,7 @@ export function HistoryScreen() {
           className="flex-1 bg-transparent outline-none text-[13.5px] text-[var(--fg)] placeholder:text-[var(--fg-muted)]"
           aria-label="Search conversations"
         />
-        {q && <button onClick={() => setQ('')} className="icon-btn w-6 h-6" aria-label="Clear"><X size={13} /></button>}
+        {q && <button onClick={() => setQ('')} className="icon-btn w-9 h-9" aria-label="Clear"><X size={14} /></button>}
       </div>
 
       {filtered.length === 0 ? (
@@ -99,32 +99,32 @@ export function HistoryScreen() {
                       <span className="block text-[12px] text-[var(--fg-muted)] mt-0.5 truncate">{c.preview || `${c.messages.length} messages`}</span>
                       <span className="block text-[11px] text-[var(--fg-subtle)] mt-0.5">{timeAgo(c.updatedAt)} · {c.model}</span>
                     </button>
-                    <span className="flex items-center gap-1 shrink-0 opacity-60 group-hover:opacity-100 transition-opacity">
-                      <button
-                        onClick={() => pinConversation(c.id)}
-                        className={cn('icon-btn w-8 h-8', c.pinned && 'text-[var(--accent)] opacity-100')}
-                        title={c.pinned ? 'Unpin' : 'Pin'}
-                        aria-label="Pin conversation"
-                      >
-                        <Pin size={13} fill={c.pinned ? 'currentColor' : 'none'} />
-                      </button>
-                      <button
-                        onClick={() => { setEditingId(c.id); setEditVal(c.title); }}
-                        className="icon-btn w-8 h-8"
-                        title="Rename"
-                        aria-label="Rename conversation"
-                      >
-                        <Pencil size={13} />
-                      </button>
-                      <button
-                        onClick={() => openModal('delete-chat', c.id)}
-                        className="icon-btn w-8 h-8 hover:!text-red-400"
-                        title="Delete"
-                        aria-label="Delete conversation"
-                      >
-                        <Trash2 size={13} />
-                      </button>
-                    </span>
+                      <span className="flex items-center gap-1 shrink-0 opacity-100 md:opacity-60 md:group-hover:opacity-100 md:focus-within:opacity-100 transition-opacity">
+                        <button
+                          onClick={() => pinConversation(c.id)}
+                          className={cn('icon-btn w-9 h-9', c.pinned && 'text-[var(--accent)] opacity-100')}
+                          title={c.pinned ? 'Unpin' : 'Pin'}
+                          aria-label="Pin conversation"
+                        >
+                          <Pin size={14} fill={c.pinned ? 'currentColor' : 'none'} />
+                        </button>
+                        <button
+                          onClick={() => { setEditingId(c.id); setEditVal(c.title); }}
+                          className="icon-btn w-9 h-9"
+                          title="Rename"
+                          aria-label="Rename conversation"
+                        >
+                          <Pencil size={14} />
+                        </button>
+                        <button
+                          onClick={() => openModal('delete-chat', c.id)}
+                          className="icon-btn w-9 h-9 hover:!text-red-400"
+                          title="Delete"
+                          aria-label="Delete conversation"
+                        >
+                          <Trash2 size={14} />
+                        </button>
+                      </span>
                   </motion.div>
                 ))}
               </div>

@@ -19,7 +19,7 @@ export type ComposerMode =
 const DEFAULT_MODES: ComposerMode[] = [
   { id: 'ask', label: 'Ask anything', prefix: '', hint: 'Ask anything…', desc: 'Balanced responses for everyday tasks' },
   { id: 'research', label: 'Deep Research', prefix: 'Research deeply: ', hint: 'What should I research?', desc: 'Thorough investigation with sources' },
-  { id: 'image', label: 'Create Image', prefix: 'Create an image of: ', hint: 'Describe the image…', desc: 'Generate visuals from a description' },
+  { id: 'image', label: 'Create Image', prefix: '/imagine ', hint: 'Describe the image…', desc: 'Free AI images via Puter — no key needed' },
   { id: 'analyze', label: 'Analyze', prefix: 'Analyze: ', hint: 'What should I analyze?', desc: 'Break down data, text or ideas' },
   { id: 'code', label: 'Code', prefix: 'Write code for: ', hint: 'Describe what to build…', desc: 'Write and debug code' },
   { id: 'brainstorm', label: 'Brainstorm', prefix: 'Brainstorm ideas for: ', hint: 'What should we brainstorm?', desc: 'Divergent ideas, then converge' },
@@ -219,7 +219,7 @@ export function CommandBar({
               </span>
               <button
                 onClick={() => setAtts((p) => p.filter((x) => x.id !== a.id))}
-                className="absolute top-1.5 right-1.5 icon-btn w-5 h-5"
+                className="absolute top-1 right-1 icon-btn w-7 h-7"
                 aria-label={`Remove ${a.name}`}
               >
                 <X size={11} />

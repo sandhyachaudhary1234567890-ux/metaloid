@@ -1,4 +1,4 @@
-import { Search, Plus, Command, Smartphone } from 'lucide-react';
+import { Search, Plus, Command } from 'lucide-react';
 import { useApp } from '../lib/store';
 import { LanguageSelector } from './LanguageSelector';
 import { ModelSelector } from './ModelSelector';
@@ -6,7 +6,7 @@ import { cn } from '../lib/cn';
 
 import { MetaIoidMark } from './brand';
 
-export function Header({ title, subtitle, onNew, onDeviceMorph }: { title: string; subtitle?: string; onNew?: () => void; onDeviceMorph?: () => void }) {
+export function Header({ title, subtitle, onNew }: { title: string; subtitle?: string; onNew?: () => void }) {
   const { status, statusText, setPaletteOpen, settings } = useApp();
   return (
     <header className="sticky top-0 z-30 border-b border-[var(--border)] bg-[var(--surface)]/90 backdrop-blur-md">
@@ -38,16 +38,6 @@ export function Header({ title, subtitle, onNew, onDeviceMorph }: { title: strin
           </button>
           <div className="hidden md:block"><ModelSelector compact /></div>
           <LanguageSelector compact />
-          {onDeviceMorph && (
-            <button
-              onClick={onDeviceMorph}
-              className="icon-btn w-8 h-8 rounded-lg hover:text-[var(--accent)]"
-              title="Showcase 360° Morphing Device (4s)"
-              aria-label="360 Device Showcase"
-            >
-              <Smartphone size={15} />
-            </button>
-          )}
           {onNew && (
             <button onClick={onNew} className="btn-primary h-8 px-3 text-[12.5px]" aria-label="New chat">
               <Plus size={14} /> <span className="hidden sm:inline">New</span>

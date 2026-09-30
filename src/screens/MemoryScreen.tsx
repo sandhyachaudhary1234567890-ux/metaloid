@@ -57,7 +57,7 @@ export function MemoryScreen() {
     <div className="max-w-[1000px] mx-auto px-4 sm:px-8 py-6 pb-32 md:pb-12 text-[var(--fg)]">
       <div className="flex items-start gap-4 flex-wrap">
         <div>
-          <h2 className="text-[22px] font-bold tracking-tight text-[var(--fg)]">Memory Vault</h2>
+          <h1 className="text-[22px] font-bold tracking-tight text-[var(--fg)]">Memory Vault</h1>
           <p className="text-[13.5px] text-[var(--fg-muted)] mt-0.5">Durable local context remembered by {settings.agentName}.</p>
         </div>
         <div className="ml-auto flex items-center gap-2">
@@ -81,7 +81,7 @@ export function MemoryScreen() {
             className="flex-1 bg-transparent outline-none text-[13.5px] placeholder:text-[var(--fg-subtle)] text-[var(--fg)]"
             aria-label="Search memories"
           />
-          {q && <button onClick={() => setQ('')} className="icon-btn w-6 h-6" aria-label="Clear search"><X size={13} /></button>}
+          {q && <button onClick={() => setQ('')} className="icon-btn w-9 h-9" aria-label="Clear search"><X size={14} /></button>}
         </div>
         <div className="flex gap-1.5 overflow-x-auto pb-1">
           {(['All', ...CATS] as const).map((c) => (

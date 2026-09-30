@@ -7,6 +7,10 @@ import { Markdown } from './chat/Markdown';
 import { MessageActions } from './chat/MessageActions';
 import { formatSize } from './CommandBar';
 import { ThinkingLinesSpinner } from './animations/ThinkingLinesSpinner';
+import { LiveActivity } from './LiveActivity';
+import { ArtifactCard } from './ArtifactCard';
+import { MinimalActivity } from './MinimalActivity';
+import type { PlatformArtifactPayload } from '../lib/artifacts/artifactGenerator';
 import { cn } from '../lib/cn';
 
 // Editorial conversation surface: user turns are clean elevated prompt blocks,
@@ -110,9 +114,9 @@ const UserBubble = memo(function UserBubble({ msg, interactive = true }: { msg: 
                 setDraft(msg.content);
                 setEditing(true);
               }}
-              className="msg-actions icon-btn w-6 h-6" aria-label="Edit message" title="Edit and resend"
+              className="msg-actions icon-btn w-9 h-9" aria-label="Edit message" title="Edit and resend"
             >
-              <Pencil size={12} />
+              <Pencil size={13} />
             </button>
           )}
         </div>
@@ -121,7 +125,17 @@ const UserBubble = memo(function UserBubble({ msg, interactive = true }: { msg: 
   );
 });
 
-const AssistantBubble = memo(function AssistantBubble({ msg, isLast, interactive = true }: { msg: ChatMessage; isLast: boolean; interactive?: boolean }) {
+const AssistantBubble = memo(function AssistantBubble({
+  msg,
+  isLast,
+  interactive = true,
+  onOpenWorkspace,
+}: {
+  msg: ChatMessage;
+  isLast: boolean;
+  interactive?: boolean;
+  onOpenWorkspace?: (payload: PlatformArtifactPayload) => void;
+}) {
   const { toast, regenerate, setFeedback, setVersionIndex, retryFailed, isGenerating } = useApp();
   const versions = msg.versions ?? [];
   const shown = msg.versionIndex !== undefined && msg.versionIndex >= 0 ? versions[msg.versionIndex] ?? msg.content : msg.content;
@@ -149,6 +163,14 @@ const AssistantBubble = memo(function AssistantBubble({ msg, isLast, interactive
             <Eye size={12} /> VISION CONTEXT
           </span>
         )}
+        {msg.activity && (
+          <MinimalActivity
+            label={msg.activity.label}
+            stages={msg.activity.stages}
+            currentStageIndex={msg.activity.currentStageIndex}
+            isComplete={msg.activity.isComplete}
+          />
+        )}
         {hasTool && (
           <div className="mb-2.5 space-y-2">
             {msg.toolActivity!.map((t) => <ToolCard key={t.id} t={t} />)}
@@ -170,8 +192,7 @@ const AssistantBubble = memo(function AssistantBubble({ msg, isLast, interactive
           <span className="inline-block w-[6px] h-[14px] ml-1 align-middle rounded-sm bg-[var(--accent)] animate-pulse" aria-label="Generating" />
         ) : null}
         {!msg.streaming && shown && interactive && (
-          <MessageActions
-            content={shown}
+          <MessageActions            content={shown}
             isLast={isLast}
             feedback={msg.feedback}
             versions={versions}
@@ -183,6 +204,9 @@ const AssistantBubble = memo(function AssistantBubble({ msg, isLast, interactive
             onFeedback={(f) => setFeedback(msg.id, f)}
             onVersion={(i) => setVersionIndex(msg.id, i)}
           />
+        )}
+        {!msg.streaming && msg.artifact && (
+          <ArtifactCard artifact={msg.artifact} onOpenWorkspace={onOpenWorkspace} />
         )}
         {!msg.streaming && msg.detectedLang && (
           <p className="text-[11px] text-[var(--fg-subtle)] mt-1">Detected: {msg.detectedLang}</p>
@@ -201,7 +225,22 @@ export function ThinkingDots({ label = 'Thinking…' }: { label?: string }) {
   );
 }
 
-export function ChatWindow({ messages, live = false }: { messages: ChatMessage[]; live?: boolean }) {
+/** Live engine when a task is tracked, honest spinner otherwise. */
+export function LiveActivityBlock({ fallbackLabel }: { fallbackLabel: string }) {
+  const { liveTaskId } = useApp();
+  if (liveTaskId) return <LiveActivity />;
+  return <ThinkingDots label={fallbackLabel} />;
+}
+
+export function ChatWindow({
+  messages,
+  live = false,
+  onOpenWorkspace,
+}: {
+  messages: ChatMessage[];
+  live?: boolean;
+  onOpenWorkspace?: (payload: PlatformArtifactPayload) => void;
+}) {
   const scrollRef = useRef<HTMLDivElement>(null);
   const [stick, setStick] = useState(true);
   const [showJump, setShowJump] = useState(false);
@@ -263,12 +302,18 @@ export function ChatWindow({ messages, live = false }: { messages: ChatMessage[]
               m.role === 'user' ? (
                 <UserBubble key={m.id} msg={m} interactive={!live} />
               ) : (
-                <AssistantBubble key={m.id} msg={m} isLast={i === lastAsstIdx} interactive={!live} />
+                <AssistantBubble
+                  key={m.id}
+                  msg={m}
+                  isLast={i === lastAsstIdx}
+                  interactive={!live}
+                  onOpenWorkspace={onOpenWorkspace}
+                />
               )
             )}
           </AnimatePresence>
           {status !== 'idle' && status !== 'error' && (
-            <div className="pt-1"><ThinkingDots label={statusText} /></div>
+            <div className="pt-1"><LiveActivityBlock fallbackLabel={statusText} /></div>
           )}
         </div>
       </div>

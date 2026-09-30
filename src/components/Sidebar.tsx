@@ -1,19 +1,15 @@
 import { motion } from 'framer-motion';
-import { Home, MessageSquare, Radio, Brain, History, Settings, ChevronLeft, ChevronRight, Plus, ArrowRight } from 'lucide-react';
+import { Home, MessageSquare, Radio, Brain, History, Settings, ChevronLeft, ChevronRight, Plus, FolderKanban, Library, Telescope, ListTodo, MessageSquarePlus } from 'lucide-react';
 import { useApp } from '../lib/store';
 import type { ViewId } from '../lib/types';
 import { cn } from '../lib/cn';
 import { MetaIoidMark, MetaIoidLockup } from './brand';
 
-// Linear-grade sidebar navigation:
-// Clear hierarchy, quiet connection indicator, high contrast, clean typography.
-
 const NAV: { id: ViewId; label: string; icon: typeof Home }[] = [
-  { id: 'home', label: 'Home', icon: Home },
   { id: 'chat', label: 'Chat', icon: MessageSquare },
-  { id: 'live', label: 'Live Camera', icon: Radio },
-  { id: 'memory', label: 'Memory Vault', icon: Brain },
-  { id: 'history', label: 'History', icon: History },
+  { id: 'projects', label: 'Projects', icon: FolderKanban },
+  { id: 'library', label: 'Library', icon: Library },
+  { id: 'tasks', label: 'Tasks', icon: ListTodo },
 ];
 
 export function ConnectionPill({ compact = false }: { compact?: boolean }) {
@@ -44,16 +40,29 @@ export function ConnectionPill({ compact = false }: { compact?: boolean }) {
 }
 
 export function Sidebar() {
-  const { view, setView, settings, status, sidebarCollapsed, setSidebarCollapsed, newConversation, setToolsOpen } = useApp();
+  const {
+    view, setView, sidebarCollapsed, setSidebarCollapsed,
+    newConversation, conversations, selectConversation, activeId,
+  } = useApp();
+
+  const recentChats = conversations.slice(0, 5);
 
   if (sidebarCollapsed) {
     return (
       <aside className="hidden md:flex w-[68px] shrink-0 flex-col items-center py-4 border-r border-[var(--border)] bg-[var(--surface)] text-[var(--fg)]" aria-label="Primary">
-        <button onClick={() => setView('home')} aria-label="MetaIoid home" title="Home" className="hover:scale-105 transition-transform my-1">
+        <button onClick={() => setView('chat')} aria-label="MetaIoid home" title="Home" className="hover:scale-105 transition-transform my-1">
           <MetaIoidMark size={28} />
         </button>
         <div className="mt-3 mb-4"><ConnectionPill compact /></div>
         <nav className="flex flex-col gap-1.5" aria-label="Collapsed navigation">
+          <button
+            title="New Chat"
+            aria-label="New Chat"
+            onClick={() => { newConversation(); setView('chat'); }}
+            className="w-10 h-10 rounded-xl flex items-center justify-center bg-[var(--accent)] text-white shadow-sm hover:opacity-95 transition-all"
+          >
+            <Plus size={18} strokeWidth={2.2} />
+          </button>
           {NAV.map((n) => (
             <button
               key={n.id} title={n.label} aria-label={n.label} onClick={() => setView(n.id)}
@@ -63,10 +72,6 @@ export function Sidebar() {
               <n.icon size={18} strokeWidth={1.8} />
             </button>
           ))}
-          <button title="Agents & tools" aria-label="Agents and tools" onClick={() => setToolsOpen(true)}
-            className="w-10 h-10 rounded-xl flex items-center justify-center text-[var(--fg-muted)] hover:text-[var(--fg)] hover:bg-[var(--surface-hover)]">
-            <Plus size={18} />
-          </button>
         </nav>
         <div className="mt-auto flex flex-col gap-1.5 items-center">
           <button title="Expand sidebar" aria-label="Expand sidebar" onClick={() => setSidebarCollapsed(false)} className="w-10 h-10 rounded-xl flex items-center justify-center text-[var(--fg-muted)] hover:text-[var(--fg)] hover:bg-[var(--surface-hover)]">
@@ -84,8 +89,8 @@ export function Sidebar() {
   }
 
   return (
-    <aside className="hidden md:flex w-[256px] shrink-0 flex-col border-r border-[var(--border)] bg-[var(--surface)] text-[var(--fg)] select-none" aria-label="Primary">
-      <div className="px-5 pt-5 pb-4">
+    <aside className="hidden md:flex w-[260px] shrink-0 flex-col border-r border-[var(--border)] bg-[var(--surface)] text-[var(--fg)] select-none" aria-label="Primary">
+      <div className="px-5 pt-5 pb-3">
         <div className="flex items-center justify-between">
           <MetaIoidLockup variant="full" size="md" />
           <button onClick={() => setSidebarCollapsed(true)} className="icon-btn w-7 h-7" aria-label="Collapse sidebar" title="Collapse">
@@ -93,8 +98,8 @@ export function Sidebar() {
           </button>
         </div>
         <div className="mt-2.5"><ConnectionPill compact /></div>
-        <button onClick={() => { newConversation(); setView('chat'); }} className="btn-primary w-full mt-4 h-9 text-[13px]">
-          <Plus size={15} /> New chat
+        <button onClick={() => { newConversation(); setView('chat'); }} className="btn-primary w-full mt-4 h-9 text-[13px] rounded-xl font-medium inline-flex items-center justify-center gap-2">
+          <Plus size={16} strokeWidth={2} /> New chat
         </button>
       </div>
 
@@ -110,29 +115,55 @@ export function Sidebar() {
               {active && <motion.span layoutId="nav-pill" className="absolute left-0 top-2 bottom-2 w-[2.5px] rounded-full bg-[var(--accent)]" />}
               <n.icon size={16} strokeWidth={active ? 2 : 1.8} />
               {n.label}
-              {n.id === 'live' && (
-                <span className="ml-auto text-[9.5px] font-bold tracking-wider text-[var(--fg-muted)] border border-[var(--border)] rounded px-1.5 py-0.2">CAM</span>
-              )}
             </button>
           );
         })}
-        <button onClick={() => setToolsOpen(true)} className="w-full flex items-center gap-3 px-3 h-9 rounded-xl text-[13.5px] text-[var(--fg-muted)] hover:text-[var(--fg)] hover:bg-[var(--surface-hover)] transition-colors">
-          <Plus size={16} /> Agents & tools
-        </button>
       </nav>
+
+      {/* Recent Chats Section */}
+      {recentChats.length > 0 && (
+        <div className="px-3 mt-4 flex-1 overflow-y-auto">
+          <p className="px-3 pb-1.5 text-[10.5px] font-bold tracking-[0.14em] uppercase text-[var(--fg-muted)]">
+            Recent Chats
+          </p>
+          <div className="space-y-0.5">
+            {recentChats.map((c) => {
+              const isSelected = view === 'chat' && activeId === c.id;
+              return (
+                <button
+                  key={c.id}
+                  onClick={() => {
+                    selectConversation(c.id);
+                    setView('chat');
+                  }}
+                  className={cn(
+                    'w-full text-left px-3 py-1.5 rounded-lg text-xs truncate transition-colors block',
+                    isSelected
+                      ? 'bg-[var(--accent-subtle)] text-[var(--accent)] font-medium'
+                      : 'text-[var(--fg-secondary)] hover:bg-[var(--surface-hover)] hover:text-[var(--fg)]'
+                  )}
+                  title={c.title}
+                >
+                  {c.title || 'Untitled conversation'}
+                </button>
+              );
+            })}
+          </div>
+        </div>
+      )}
 
       <div className="mt-auto px-3 pb-4 space-y-2">
         <button onClick={() => setView('settings')} className={cn('w-full flex items-center gap-3 px-3 h-9 rounded-xl text-[13.5px] transition-colors', view === 'settings' ? 'bg-[var(--surface-elevated)] text-[var(--fg)]' : 'text-[var(--fg-muted)] hover:text-[var(--fg)] hover:bg-[var(--surface-hover)]')}>
           <Settings size={16} /> Settings
         </button>
 
-        {/* Local device status pill */}
-        <div className="rounded-xl border border-[var(--border)] bg-[var(--surface-sunken)] p-3 text-left">
-          <div className="flex items-center justify-between text-[11.5px] text-[var(--fg-muted)]">
-            <span>Local Device Storage</span>
-            <span className="font-mono text-[10.5px] text-[var(--accent)]">Synced</span>
+        {/* Local Persistence Pill */}
+        <div className="rounded-xl border border-[var(--border)] bg-[var(--surface-sunken)] p-2.5 text-left">
+          <div className="flex items-center justify-between text-[11px] text-[var(--fg-muted)] font-medium">
+            <span>MetaIoid Platform</span>
+            <span className="font-mono text-[10px] text-[var(--fg-muted)]">v0.1.0</span>
           </div>
-          <p className="mt-1 text-[11px] text-[var(--fg-subtle)]">Conversations & memories are local</p>
+          <p className="mt-0.5 text-[10.5px] text-[var(--fg-subtle)]">Unified Chat & Workspaces</p>
         </div>
       </div>
     </aside>

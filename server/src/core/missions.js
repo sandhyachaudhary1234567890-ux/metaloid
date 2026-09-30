@@ -9,7 +9,7 @@ import { emit } from './events.js';
 import { executeTool } from './tools.js';
 import { skillBrief } from './skills.js';
 
-const DIR = path.join(path.dirname(fileURLToPath(import.meta.url)), '..', '..', 'data');
+const DIR = process.env.METALOID_DATA_DIR || path.join(path.dirname(fileURLToPath(import.meta.url)), '..', '..', 'data');
 const FILE = path.join(DIR, 'missions.json');
 
 let store = { missions: [] };
@@ -37,7 +37,12 @@ let seq = 0;
 const mid = () => `msn-${Date.now().toString(36)}-${(++seq).toString(36)}`;
 const tid = () => `tsk-${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 6)}`;
 
-export function createMission({ objective, constraints = [], priority = 'normal', tasks = [], skillIds = [] }) {
+function needUser(userId) {
+  if (!userId || typeof userId !== 'string') throw new Error('userId required');
+}
+
+export function createMission({ userId, objective, constraints = [], priority = 'normal', tasks = [], skillIds = [], budgets = null }) {
+  needUser(userId);
   // assign ids first so positional depIdx can resolve to real ids
   const withIds = tasks.map((t) => ({ id: tid(), ...t }));
   withIds.forEach((t, i) => {
@@ -50,6 +55,7 @@ export function createMission({ objective, constraints = [], priority = 'normal'
   });
   const m = {
     id: mid(),
+    userId,
     objective: String(objective).slice(0, 500),
     constraints: constraints.map((c) => String(c).slice(0, 200)),
     priority,
@@ -63,7 +69,10 @@ export function createMission({ objective, constraints = [], priority = 'normal'
     })),
     outputs: {}, decisions: [], errors: [],
     checkpoints: [], timeline: [{ at: new Date().toISOString(), event: 'Created', detail: objective.slice(0, 120) }],
-    budgets: { maxMs: 120000, maxSteps: 25 },
+    budgets: {
+      maxMs: Math.min(Number(budgets?.maxMs) || 120000, 7200000),
+      maxSteps: Math.min(Number(budgets?.maxSteps) || 25, 500),
+    },
     createdAt: new Date().toISOString(), updatedAt: new Date().toISOString(),
     _flags: { paused: false, cancelled: false },
   };
@@ -74,16 +83,23 @@ export function createMission({ objective, constraints = [], priority = 'normal'
   return publicMission(m);
 }
 
-export function getMission(id) {
-  return store.missions.find((m) => m.id === id) || null;
+function owned(m, userId) {
+  return m && m.userId === userId ? m : null;
 }
 
-export function listMissions() {
-  return store.missions.map(publicMission);
+export function getMission(userId, id) {
+  needUser(userId);
+  return owned(store.missions.find((m) => m.id === id), userId);
 }
 
-export function latestActive() {
-  return store.missions.find((m) => ['QUEUED', 'RUNNING', 'PAUSED', 'BLOCKED'].includes(m.status)) || null;
+export function listMissions(userId) {
+  needUser(userId);
+  return store.missions.filter((m) => m.userId === userId).map(publicMission);
+}
+
+export function latestActive(userId) {
+  needUser(userId);
+  return store.missions.find((m) => m.userId === userId && ['QUEUED', 'RUNNING', 'PAUSED', 'BLOCKED'].includes(m.status)) || null;
 }
 
 function publicMission(m) {
@@ -147,8 +163,8 @@ async function runTask(m, t, grants) {
 }
 
 /** Run until done/paused/cancelled/blocked. Resumable via runMission(id). */
-export async function runMission(id, grants = {}) {
-  const m = getMission(id);
+export async function runMission(userId, id, grants = {}) {
+  const m = getMission(userId, id);
   if (!m) return null;
   if (!['QUEUED', 'PAUSED', 'BLOCKED'].includes(m.status)) return publicMission(m);
   m.status = 'RUNNING';
@@ -210,22 +226,52 @@ export async function runMission(id, grants = {}) {
   return publicMission(m);
 }
 
-export function pauseMission(id) {
-  const m = getMission(id);
+/** Append an agent/initiative decision note (persisted, auditable). */
+export function appendDecision(userId, id, text) {
+  const m = getMission(userId, id);
+  if (!m) return null;
+  m.decisions.push(String(text).slice(0, 300));
+  log(m, 'Decision', String(text).slice(0, 160));
+  persist();
+  return publicMission(m);
+}
+
+/** Single-user upgrade: adopt pre-multi-user missions into the first account. */
+export function adoptLegacyMissions(userId) {
+  let n = 0;
+  for (const m of store.missions) {
+    if (!m.userId) {
+      m.userId = userId;
+      n += 1;
+    }
+  }
+  if (n) persist();
+  return n;
+}
+
+export function deleteUserMissions(userId) {
+  const before = store.missions.length;
+  store.missions = store.missions.filter((m) => m.userId !== userId);
+  persist();
+  return before - store.missions.length;
+}
+
+export function pauseMission(userId, id) {
+  const m = getMission(userId, id);
   if (!m) return null;
   m._flags.paused = true;
   return publicMission(m);
 }
 
-export function cancelMission(id) {
-  const m = getMission(id);
+export function cancelMission(userId, id) {
+  const m = getMission(userId, id);
   if (!m) return null;
   m._flags.cancelled = true;
   return publicMission(m);
 }
 
-export function markVerified(id, note = '') {
-  const m = getMission(id);
+export function markVerified(userId, id, note = '') {
+  const m = getMission(userId, id);
   if (!m || m.status !== 'COMPLETED') return null;
   m.status = 'VERIFIED';
   log(m, 'Verified', note || 'Outcome independently checked');
@@ -234,8 +280,8 @@ export function markVerified(id, note = '') {
 }
 
 /** Attach model synthesis + verification to a finished mission. */
-export function attachReport(id, report, verification) {
-  const m = getMission(id);
+export function attachReport(userId, id, report, verification) {
+  const m = getMission(userId, id);
   if (!m) return null;
   m.outputs.report = report;
   m.decisions.push('Synthesis by model over verified task evidence');

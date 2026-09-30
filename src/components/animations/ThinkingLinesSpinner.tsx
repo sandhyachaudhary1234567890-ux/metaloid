@@ -44,7 +44,8 @@ export function ThinkingLinesSpinner({
                 top: -radius,
                 width: '1px',
                 height: radius * 2,
-                backgroundColor: 'rgba(255, 255, 255, 0.15)',
+                backgroundColor: lineColor,
+                opacity: 0.35,
                 transform: `rotate(${angle}deg)`,
                 transformOrigin: 'center',
               }}

@@ -2,7 +2,7 @@ import { useEffect } from 'react';
 import { useApp } from '../lib/store';
 
 export function useKeyboardShortcuts() {
-  const { setPaletteOpen, paletteOpen, closeModal, setVoiceOpen, voiceOpen, newConversation, setView } = useApp();
+  const { setPaletteOpen, paletteOpen, closeModal, setVoiceOpen, voiceOpen, newConversation, setView, setToolsOpen, setMissionsOpen, setOsintOpen, setSkillsOpen } = useApp();
 
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
@@ -16,6 +16,10 @@ export function useKeyboardShortcuts() {
         closeModal();
         setPaletteOpen(false);
         setVoiceOpen(false);
+        setToolsOpen(false);
+        setMissionsOpen(false);
+        setOsintOpen(false);
+        setSkillsOpen(false);
         return;
       }
       if (mod && e.key.toLowerCase() === 'n') {
@@ -34,5 +38,5 @@ export function useKeyboardShortcuts() {
     };
     window.addEventListener('keydown', onKey);
     return () => window.removeEventListener('keydown', onKey);
-  }, [paletteOpen, setPaletteOpen, closeModal, setVoiceOpen, voiceOpen, newConversation, setView]);
+  }, [paletteOpen, setPaletteOpen, closeModal, setVoiceOpen, voiceOpen, newConversation, setView, setToolsOpen, setMissionsOpen, setOsintOpen, setSkillsOpen]);
 }

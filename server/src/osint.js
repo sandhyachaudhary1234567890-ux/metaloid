@@ -155,15 +155,16 @@ function correlate(findings) {
   return byType;
 }
 
-// ---------- jobs ----------
-export function createInvestigation(target, type) {
+// ---------- jobs (user-scoped; in-memory, fresh per boot) ----------
+export function createInvestigation(target, type, userId) {
+  if (!userId || typeof userId !== 'string') throw new Error('userId required');
   if (jobs.size >= MAX_JOBS) {
     const oldest = [...jobs.keys()][0];
     jobs.delete(oldest);
   }
   const id = `inv-${Date.now().toString(36)}-${(++seq).toString(36)}`;
   const job = {
-    id, target, type, status: 'queued', progress: 0,
+    id, target, type, userId, status: 'queued', progress: 0,
     collectors: COLLECTORS.filter((c) => c.available).map((c) => ({ id: c.id, name: c.name, state: 'queued' })),
     findings: [], correlation: {}, timeline: [{ at: new Date().toISOString(), event: 'Investigation created', detail: target }],
     createdAt: new Date().toISOString(),
@@ -174,6 +175,29 @@ export function createInvestigation(target, type) {
 
 export function getInvestigation(id) {
   return jobs.get(id) || null;
+}
+
+/** Ownership gate: returns the job only when owned by this user. */
+export function getInvestigationFor(userId, id) {
+  const job = jobs.get(id);
+  return job && job.userId === userId ? job : null;
+}
+
+export function listInvestigations(userId) {
+  return [...jobs.values()]
+    .filter((j) => j.userId === userId)
+    .map((j) => ({ id: j.id, target: j.target, type: j.type, status: j.status, progress: j.progress, createdAt: j.createdAt }));
+}
+
+export function deleteUserInvestigations(userId) {
+  let n = 0;
+  for (const [id, j] of jobs) {
+    if (j.userId === userId) {
+      jobs.delete(id);
+      n += 1;
+    }
+  }
+  return n;
 }
 
 function log(job, event, detail = '') {

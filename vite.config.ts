@@ -10,7 +10,14 @@ import react from '@vitejs/plugin-react'
 const keyPath = path.resolve(__dirname, 'certs', 'key.pem')
 const certPath = path.resolve(__dirname, 'certs', 'cert.pem')
 const tls = fs.existsSync(keyPath) && fs.existsSync(certPath)
-console.log(`[metaloid] tls=${tls} key=${keyPath}`)
+
+const proxyConfig = {
+  '/api': {
+    target: 'https://127.0.0.1:8787',
+    changeOrigin: true,
+    secure: false,
+  },
+}
 
 export default defineConfig({
   plugins: [react()],
@@ -18,13 +25,13 @@ export default defineConfig({
     port: 5173,
     host: '0.0.0.0',
     https: tls ? { key: fs.readFileSync(keyPath), cert: fs.readFileSync(certPath) } : undefined,
+    proxy: proxyConfig,
   },
-  // production preview for phone testing (no StrictMode, no HMR):
-  // npm run build && npx vite preview --port 4173 --host 0.0.0.0
   preview: {
     port: 4173,
     host: '0.0.0.0',
     https: tls ? { key: fs.readFileSync(keyPath), cert: fs.readFileSync(certPath) } : undefined,
+    proxy: proxyConfig,
   },
   build: { outDir: 'dist' },
 })

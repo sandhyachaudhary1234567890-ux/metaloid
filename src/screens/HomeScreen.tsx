@@ -14,6 +14,7 @@ import { SystemReadyEngine } from '../lib/ready/readyCheck';
 import { MetaIoidNoticedEngine } from '../lib/ready/metaIoidNoticed';
 import { GlobalStopController } from '../lib/ready/globalStop';
 import { MetaIoidLockup, MetaIoidMark, MetaIoidWordmark } from '../components/brand';
+import { LiveActivity } from '../components/LiveActivity';
 
 const BlackHoleStage = lazy(() =>
   import('../components/BlackHoleCanvas').then((m) => ({ default: m.BlackHoleCanvas }))
@@ -26,7 +27,7 @@ const BlackHoleStage = lazy(() =>
 const MODES: ComposerMode[] = [
   { id: 'ask', label: 'Ask', prefix: '', hint: 'Ask anything…', desc: 'Balanced responses for everyday tasks' },
   { id: 'research', label: 'Deep Research', prefix: 'Research deeply: ', hint: 'What should I research?', desc: 'Thorough investigation with sources' },
-  { id: 'image', label: 'Create Image', prefix: 'Create an image of: ', hint: 'Describe the image…', desc: 'Generate visuals from a description' },
+  { id: 'image', label: 'Create Image', prefix: '/imagine ', hint: 'Describe the image…', desc: 'Free AI images via Puter — no key needed' },
   { id: 'analyze', label: 'Analyze', prefix: 'Analyze: ', hint: 'What should I analyze?', desc: 'Break down data, text or ideas' },
   { id: 'code', label: 'Code', prefix: 'Write code for: ', hint: 'Describe what to build…', desc: 'Write and debug code' },
   { id: 'brainstorm', label: 'Brainstorm', prefix: 'Brainstorm ideas for: ', hint: 'What should we brainstorm?', desc: 'Divergent ideas, then converge' },
@@ -38,7 +39,7 @@ export function HomeScreen() {
   const {
     status, statusText, language, setView, setVoiceOpen, conversations,
     selectConversation, connection, status: agentStatus, setToolsOpen, settings,
-    toast,
+    toast, authUser,
   } = useApp();
   const s = getStrings(language === 'hi' ? 'hi' : 'en');
   const greet = greetingFor(new Date(), language);
@@ -164,15 +165,8 @@ export function HomeScreen() {
                   {['THINK', 'CREATE', 'EXPLORE', 'SOLVE', 'TOGETHER'].map((w) => <span key={w}>{w}</span>)}
                   <span className="mt-2 h-px w-16 bg-white/15" />
                 </div>
-                <div className="flex-1" />
-                <div className="hidden md:flex flex-col justify-center pr-8 text-right items-end" aria-hidden="true">
-                  <MetaIoidWordmark height={16} className="invert" />
-                  <p className="mt-3 text-[10.5px] leading-relaxed tracking-[0.30em] text-zinc-500">
-                    HIGHER INTELLIGENCE<br />FOR A BRIGHTER<br />TOMORROW.
-                  </p>
-                </div>
               </div>
-              <div className="pointer-events-none absolute inset-x-0 bottom-4 flex flex-col items-center gap-2">
+              <div className="pointer-events-none absolute inset-x-0 bottom-4 flex flex-col items-center gap-2.5 pb-1">
                 <span
                   className={cn(
                     'inline-flex items-center gap-2 rounded-full border px-3.5 py-1.5 text-[11px] font-semibold tracking-[0.14em] backdrop-blur-md',
@@ -248,7 +242,7 @@ export function HomeScreen() {
           </div>
 
           {/* Primary Action: Talk to MetaIoid & Global Stop */}
-          <div className="mt-4 flex justify-center items-center gap-3">
+          <div className="mt-4 flex justify-center items-center gap-3 pb-8 md:pb-0">
             <button
               onClick={() => setVoiceOpen(true)}
               className="btn-primary text-[13px] px-5 py-2 rounded-full inline-flex items-center gap-2 shadow-md hover:scale-[1.02] active:scale-[0.98] transition-all"
@@ -263,36 +257,11 @@ export function HomeScreen() {
               <StopCircle size={13} /> Stop all
             </button>
           </div>
+          {/* spacer so fixed mobile nav never covers primary actions */}
+          <div className="h-16 md:hidden" aria-hidden="true" />
 
-          {/* LIVE ACTIVITY Quiet HUD */}
-          <div className="mt-6 max-w-[720px] mx-auto rounded-2xl border border-[var(--border)] bg-[var(--surface)] p-4 shadow-sm">
-            <div className="flex items-center justify-between mb-3">
-              <span className="text-[11px] font-bold tracking-[0.16em] text-[var(--fg-muted)] uppercase">Live Activity</span>
-              <span className="text-[11px] text-emerald-400 flex items-center gap-1.5 font-medium">
-                <span className="w-1.5 h-1.5 rounded-full bg-emerald-400 animate-pulse" /> All systems nominal
-              </span>
-            </div>
-            <div className="space-y-2.5 text-[12.5px]">
-              <div className="flex items-center justify-between text-[var(--fg)]">
-                <span className="flex items-center gap-2 text-[var(--fg-muted)]">
-                  <span className="w-1.5 h-1.5 rounded-full bg-emerald-400" /> Voice system
-                </span>
-                <span className="font-medium">Ready</span>
-              </div>
-              <div className="flex items-center justify-between text-[var(--fg)]">
-                <span className="flex items-center gap-2 text-[var(--fg-muted)]">
-                  <span className="w-1.5 h-1.5 rounded-full bg-emerald-400" /> Research engine
-                </span>
-                <span className="font-medium">Standing by</span>
-              </div>
-              <div className="flex items-center justify-between text-[var(--fg)]">
-                <span className="flex items-center gap-2 text-[var(--fg-muted)]">
-                  <span className="w-1.5 h-1.5 rounded-full bg-emerald-400" /> MetaIoid UI & Runtime
-                </span>
-                <span className="font-medium">Autonomous Verified</span>
-              </div>
-            </div>
-          </div>
+          {/* Event-driven only: this remains absent until a real task emits activity. */}
+          <div className="mt-6 max-w-[720px] mx-auto"><LiveActivity /></div>
 
           {/* recent (below xl) */}
           <div className="mt-10 max-w-[720px] mx-auto xl:hidden">
@@ -309,11 +278,11 @@ export function HomeScreen() {
             className="flex items-center gap-3 rounded-2xl border border-[var(--border)] bg-[var(--surface)] px-4 py-3 hover:bg-[var(--surface-hover)] transition-colors text-left"
           >
             <span className="w-10 h-10 rounded-xl bg-[var(--surface-elevated)] border border-[var(--border-strong)] text-[var(--accent)] font-semibold flex items-center justify-center text-[15px]">
-              A
+              {(authUser?.displayName || 'M').slice(0, 1).toUpperCase()}
             </span>
             <span className="flex-1 min-w-0">
               <span className="block text-[12px] text-[var(--fg-muted)]">{greet}</span>
-              <span className="block text-[14px] font-medium text-[var(--fg)] truncate">Aryan</span>
+              <span className="block text-[14px] font-medium text-[var(--fg)] truncate">{authUser?.displayName || 'Your Metaloid'}</span>
             </span>
             <ChevronDown size={15} className="text-[var(--fg-muted)]" />
           </button>

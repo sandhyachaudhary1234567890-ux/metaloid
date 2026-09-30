@@ -1,5 +1,9 @@
 // METALOID gateway — edge/API layer.
-// Auth-less local V1 (binds 127.0.0.1): CORS-locked, rate-limited, timeouts.
+// Multi-user platform: every session resolves to {userId, accountId,
+// sessionId, deviceId} via Bearer token. All user-owned resources are
+// scoped server-side; ownership is enforced at the data-access boundary,
+// never trusted from the frontend. Public surface: / and /api/health and
+// /api/auth/* — everything else requires auth.
 // Keys live ONLY in process.env (server/.env). Nothing secret is logged
 // or ever sent to the frontend.
 
@@ -12,16 +16,48 @@ import express from 'express';
 import cors from 'cors';
 import { listFreeModels, pickModel, pickCandidates, retryableProviderError, classifyTask, streamChat } from './openrouter.js';
 import { streamNvidia, NVIDIA_SMART } from './nvidia.js';
+// Provider Platform imports
+import { listProviders, getProvider, getProviderModels, updateProvider } from './core/providerRegistry.js';
+import { storeUserCredential, getUserCredential, deleteUserCredential, rotateUserCredential, rotateUserCredentialById, listUserCredentialProviders, setCredentialTestStatus, getCredentialTestStatus, getCredentialAuditLog, deleteUserCredentials } from './core/credentialVault.js';
+import { OpenRouterAdapter, NvidiaAdapter, ErrorTypes } from './core/providerAdapter.js';
+import { getAdapter, supportedProviders } from './core/providerAdapters.js';
+import { chatWithProviders } from './core/providerGateway.js';
+import { providerUsageSummary, deleteProviderUsage } from './core/providerMeters.js';
+import { createRoutingEngine } from './core/providerRouter.js';
+import { getHealthManager, getProviderHealth, recordProviderCall } from './core/providerHealth.js';
+import { listModels, getModel, getModelStats, syncModelsFromRegistry } from './core/modelCatalog.js';
 // NVIDIA fallback is OFF unless explicitly enabled: this account's key has
 // no function entitlements (every model 404s "not found for account").
 // Set NVIDIA_ENABLED=true only with an entitled key — otherwise failures
 // would misleadingly report "both providers failed".
 const NV_ON = process.env.NVIDIA_ENABLED === 'true';
 import {
-  COLLECTORS, validateTarget, createInvestigation, getInvestigation,
-  runInvestigation, reportMarkdown, reportCSV,
+  COLLECTORS, validateTarget, createInvestigation, getInvestigationFor, listInvestigations,
+  runInvestigation, reportMarkdown, reportCSV, deleteUserInvestigations,
 } from './osint.js';
 import { renderSystemPrompt, TOOLS_MANIFEST } from './systemPrompt.js';
+// Identity + user layer
+import {
+  createUser, verifyUser, createSession, refreshSession, revokeSession,
+  revokeAllSessions, listSessions, getUser, userCount, deleteUserCascade,
+  requireAuth, requireAdmin,
+} from './core/users.js';
+import { getProfile, updateProfile, completeOnboarding, deleteProfile, personalizationBlock } from './core/profiles.js';
+import { getPlan, planCaps, can, checkBudget, recordUsage, usageSummary, deleteUsage } from './core/entitlements.js';
+import {
+  listWorkspaces, getWorkspace, createWorkspace, updateWorkspace, deleteWorkspace, deleteUserWorkspaces,
+  requestPairing, confirmPairing, listDevices, revokeDevice, authorizeDevice, deleteUserDevices,
+} from './core/workspaces.js';
+import { adoptLegacyRecords, deleteUserMemories, exportMemories } from './core/memory.js';
+import { adoptLegacyMissions, deleteUserMissions } from './core/missions.js';
+import { adoptLegacyWorld, deleteUserWorld } from './core/world.js';
+import { deleteUserApprovals } from './core/permissions.js';
+import {
+  createArtifact, editArtifact, editSlide, validateArtifact, renderArtifact, finalizeArtifact,
+  getArtifact, listArtifacts, visualQA, repairArtifact, deleteArtifact,
+  downloadArtifact, deleteUserArtifacts, detectRenderer, failArtifact, MIME,
+} from './core/artifacts.js';
+import { complete as orComplete } from './openrouter.js';
 // Agent runtime wiring (side-effect imports register skills + tools)
 import './tools/catalog.js';
 import './skills/osintSkill.js';
@@ -29,10 +65,22 @@ import './skills/researchSkill.js';
 import { on as onEvent, recentAudit } from './core/events.js';
 import { listTools, discoverTools, executeTool } from './core/tools.js';
 import { listSkills, discoverSkills, skillBrief } from './core/skills.js';
+import {
+  visibleSkills, getSkillFor, skillCard, listSkillCards, installSkill,
+  updateSkill, rollbackSkill, setSkillStatus, deleteSkill, duplicateSkill,
+  inspectSkill, readSkillFile, skillAudit, registerSystemSkill, deleteUserSkills,
+  diffVersions,
+} from './core/skillStore.js';
+import { adapterStatus } from './core/skillRuntimes.js';
+import { registerSchedule, listSchedules, removeSchedule, runScheduled, deleteUserSchedules } from './core/skillTasks.js';
+import { validatePackage, packageFromFields } from './core/skillPackage.js';
+import { discoverFor, findByCommand, missingDeps } from './core/skillDiscovery.js';
+import { testSkill, invokeSkill } from './core/skillRuntime.js';
 import { grantApproval, pendingApprovals } from './core/permissions.js';
 import { createMission, getMission, listMissions, runMission, pauseMission, cancelMission, markVerified, latestActive } from './core/missions.js';
 import { planMission, startMission, continueMission, criticize, classifyIntent } from './core/agent.js';
-import { remember, recall, forget, stats as memoryStats } from './core/memory.js';
+import { resolveIntentCapability, capabilityCatalog } from './core/intentCapabilityResolver.js';
+import { remember, recall, forget, updateMemory, forgetAll, stats as memoryStats } from './core/memory.js';
 import { upsertEntity, relate, neighbors, findEntities, worldStats, resolveLevel } from './core/world.js';
 import { verify } from './core/verify.js';
 import { track, trackModel, summary as observeSummary } from './core/observe.js';
@@ -41,7 +89,9 @@ import { correlateExtracts } from './skills/researchSkill.js';
 
 // Build Layer 2/9 runtime context from the client's (honest, capped) payload.
 // Missing fields stay missing — the prompt forbids inventing them.
-function buildRuntimeContext(c = {}) {
+// Server-side personalization (user-confirmed profile) is appended by the
+// caller and always wins over client claims about identity/preferences.
+function buildRuntimeContext(c = {}, personalization = '') {
   const mems = Array.isArray(c.memories) ? c.memories.slice(0, 12) : [];
   const fmtMem = (m) => `- [${m.category || 'Personal'}] ${String(m.content || '').slice(0, 200)}`;
   const memText = mems.length ? mems.map(fmtMem).join('\n') : undefined;
@@ -49,6 +99,13 @@ function buildRuntimeContext(c = {}) {
   const prefs = c.preferences && typeof c.preferences === 'object'
     ? Object.entries(c.preferences).filter(([, v]) => v !== undefined && v !== '').map(([k, v]) => `${k}: ${v}`).join('; ') || undefined
     : undefined;
+  // Active skills: auto-discovered for this task (client passes L2 briefs it
+  // explicitly loaded; shape validated here, max 2, instructions capped).
+  const skillCtx = Array.isArray(c.skills) ? c.skills.slice(0, 2).filter((s) => s && typeof s.name === 'string' && typeof s.instructions === 'string') : [];
+  const skillsBlock = skillCtx.length
+    ? '\n\nACTIVE SKILLS (discovered relevant to this task — follow their workflow, then verify per their policy):\n' +
+      skillCtx.map((s) => `### ${s.name.slice(0, 60)}\n${String(s.description || '').slice(0, 300)}\n${s.instructions.slice(0, 2500)}`).join('\n\n')
+    : '';
   return renderSystemPrompt({
     userName: typeof c.userName === 'string' && c.userName.trim() ? c.userName.trim().slice(0, 40) : undefined,
     datetime: new Date().toISOString(),
@@ -58,7 +115,7 @@ function buildRuntimeContext(c = {}) {
     projects: projects.length ? projects.map(fmtMem).join('\n') : undefined,
     goals: undefined,
     operatorNotes: undefined,
-  });
+  }) + (personalization || '') + skillsBlock;
 }
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
@@ -74,9 +131,9 @@ try {
 } catch { /* env optional */ }
 
 const PORT = Number(process.env.PORT || 8787);
-// BIND_HOST=0.0.0.0 exposes the gateway on the LAN (for phone testing).
+// BIND_HOST=0.0.0.0 exposes the gateway on the LAN/web (for phone testing and web hosting).
 // Local-only is the default; LAN mode prints an explicit warning at boot.
-const BIND_HOST = process.env.BIND_HOST || '127.0.0.1';
+const BIND_HOST = process.env.BIND_HOST || '0.0.0.0';
 const ORIGINS = (process.env.ALLOW_ORIGINS || 'http://localhost:5173,http://127.0.0.1:5173,https://localhost:5173,https://127.0.0.1:5173').split(',');
 const OR_KEY = process.env.OPENROUTER_API_KEY || '';
 const NV_KEY = process.env.NVIDIA_API_KEY || '';
@@ -102,11 +159,40 @@ app.use(cors({
     else cb(new Error('CORS blocked'));
   },
 }));
-app.use(express.json({ limit: '256kb' }));
 
-// ---- tiny in-memory rate limiter ----
-const hits = new Map();
+// SECURITY: Content Security Policy headers
+app.use((req, res, next) => {
+  res.setHeader('X-Content-Type-Options', 'nosniff');
+  res.setHeader('X-Frame-Options', 'DENY');
+  res.setHeader('X-XSS-Protection', '1; mode=block');
+  res.setHeader('Referrer-Policy', 'strict-origin-when-cross-origin');
+  res.setHeader('Permissions-Policy', 'geolocation=(), microphone=(), camera=()');
+
+  // Content Security Policy (basic implementation for localStorage-based auth)
+  const csp = [
+    "default-src 'self'",
+    "script-src 'self' 'unsafe-inline' 'unsafe-eval'", // Allow inline scripts for Vite dev
+    "style-src 'self' 'unsafe-inline'",
+    "img-src 'self' data: https:",
+    "font-src 'self' data:",
+    "connect-src 'self' https:",
+    "frame-ancestors 'none'",
+    "base-uri 'self'",
+    "form-action 'self'"
+  ].join('; ');
+
+  res.setHeader('Content-Security-Policy', csp);
+  
+  next();
+});
+
+app.use(express.json({ limit: '3mb' })); // 256kb would 413 skill-ZIP payloads (1.5MB archive cap enforced inside skillZip.js); rate limits still apply per route
+
+// ---- tiny in-memory rate limiter (per-route buckets: every rateLimit()
+// instance owns its map, keyed by IP — a shared map would let mixed
+// activity on one IP trip unrelated routes) ----
 function rateLimit(max, windowMs) {
+  const hits = new Map();
   return (req, res, next) => {
     const ip = req.ip || 'local';
     const now = Date.now();
@@ -149,12 +235,74 @@ app.get('/api/health', async (req, res) => {
     ok: true,
     server: true,
     ai,
+    auth: true, // multi-user: Bearer session required on all /api except health+auth
     voice: false, // STT/TTS providers plug in here (demo on frontend until then)
     vision: ai, // vision-capable free models route through the same chat path
     realtime: true, // SSE streaming live
-    database: false, // V1: browser localStorage; server DB lands in V1.5
+    database: true, // V2: per-user file stores, server-side
     models: { free: models.length },
   });
+});
+
+// ================= AUTH (public) =================
+
+const authLimit = rateLimit(Number(process.env.METALOID_AUTH_LIMIT || 10), 60000);
+
+app.post('/api/auth/signup', authLimit, (req, res) => {
+  const { handle, displayName, passcode, deviceName } = req.body || {};
+  const r = createUser({ handle, displayName, passcode });
+  if (!r.ok) return res.status(400).json({ error: r.error });
+  // single-user upgrade: adopt pre-multi-user records into the first account
+  if (userCount() === 1) {
+    adoptLegacyRecords(r.user.id);
+    adoptLegacyMissions(r.user.id);
+    adoptLegacyWorld(r.user.id);
+  }
+  const s = createSession(r.user.id, { deviceName });
+  res.status(201).json({ user: r.user, profile: getProfile(r.user.id), ...s });
+});
+
+app.post('/api/auth/login', authLimit, (req, res) => {
+  const { handle, passcode, deviceId, deviceName } = req.body || {};
+  const v = verifyUser(handle, passcode);
+  if (!v.ok) return res.status(401).json({ error: v.error });
+  const s = createSession(v.user.id, { deviceId, deviceName });
+  const { passHash, salt, ...pub } = v.user;
+  void passHash; void salt;
+  res.json({ user: pub, profile: getProfile(v.user.id), ...s });
+});
+
+app.post('/api/auth/refresh', authLimit, (req, res) => {
+  const s = refreshSession(req.body?.refresh || '');
+  if (!s) return res.status(401).json({ error: 'Session expired. Sign in again.', code: 'AUTH_REQUIRED' });
+  res.json(s);
+});
+
+app.post('/api/auth/logout', requireAuth, (req, res) => {
+  revokeSession(req.auth.sessionId, req.auth.userId);
+  res.json({ ok: true });
+});
+
+/** Logout everywhere: kills ALL sessions of this user (all devices). */
+app.post('/api/auth/logout-all', requireAuth, (req, res) => {
+  res.json({ ok: true, revoked: revokeAllSessions(req.auth.userId) });
+});
+
+app.get('/api/auth/me', requireAuth, (req, res) => {
+  const u = getUser(req.auth.userId);
+  if (!u) return res.status(401).json({ error: 'Sign in required.', code: 'AUTH_REQUIRED' });
+  const { passHash, salt, ...pub } = u;
+  void passHash; void salt;
+  res.json({ user: pub, profile: getProfile(u.id), session: req.auth, usage: usageSummary(u.id) });
+});
+
+app.get('/api/auth/sessions', requireAuth, (req, res) => {
+  res.json({ sessions: listSessions(req.auth.userId) });
+});
+
+app.delete('/api/auth/sessions/:id', requireAuth, (req, res) => {
+  if (!revokeSession(req.params.id, req.auth.userId)) return res.status(404).json({ error: 'Unknown session.' });
+  res.json({ ok: true });
 });
 
 app.get('/api/models', async (req, res) => {
@@ -162,13 +310,15 @@ app.get('/api/models', async (req, res) => {
   res.json({ models, provider: 'openrouter', free_only: true });
 });
 
-// ---- chat: model router + streaming (SSE) ----
-app.post('/api/chat', rateLimit(30, 60000), async (req, res) => {
+// ---- chat: model router + streaming (SSE), per-user metered ----
+app.post('/api/chat', requireAuth, rateLimit(30, 60000), async (req, res) => {
   const { message, history = [], task } = req.body || {};
   if (typeof message !== 'string' || !message.trim() || message.length > 8000) {
     return res.status(400).json({ error: 'Invalid message.' });
   }
   if (!OR_KEY && !NV_KEY) return res.status(503).json({ error: 'No model provider configured.' });
+  const budget = checkBudget(req.auth.userId, 'chat');
+  if (!budget.ok) return res.status(429).json({ error: budget.error });
 
   const messages = [
     ...history.filter((m) => m && (m.role === 'user' || m.role === 'assistant') && typeof m.content === 'string')
@@ -176,7 +326,11 @@ app.post('/api/chat', rateLimit(30, 60000), async (req, res) => {
     { role: 'user', content: message },
   ];
   const tier = task && ['fast', 'smart', 'vision', 'coding', 'voice'].includes(task) ? task : classifyTask(message);
-  const system = buildRuntimeContext(req.body?.context)
+  // identity comes from the session, not the client: profile name wins.
+  const profile = getProfile(req.auth.userId);
+  const ctx = { ...(req.body?.context || {}) };
+  if (profile.displayName) ctx.userName = profile.displayName;
+  const system = buildRuntimeContext(ctx, personalizationBlock(req.auth.userId))
     + (tier === 'voice'
       ? '\n\nVOICE MODE: this reply will be SPOKEN aloud. Keep it to 1–3 short sentences, conversational, no markdown, no lists, no URLs, no code. Say numbers and units in words. If the full answer needs detail, speak the key point first in one sentence.'
       : '');
@@ -211,6 +365,34 @@ app.post('/api/chat', rateLimit(30, 60000), async (req, res) => {
   let usedModel = '';
   let usedProvider = '';
   let usedTier = tier;
+  void usedTier;
+
+  // BYOK first: the user's own connected providers (ordered by their
+  // routing prefs + health) stream here; platform keys stay as fallback.
+  let byokError = null;
+  try {
+    const prefs = getProfile(req.auth.userId);
+    const out = await chatWithProviders({
+      userId: req.auth.userId, messages, system, prefs,
+      signal: controller.signal,
+      onToken: (full) => send({ token: full }),
+      onAttempt: (a) => send({ meta: { model: a.model, tier, provider: a.providerId, demo: false, byok: true } }),
+    });
+    usedModel = out.model;
+    usedProvider = out.providerId;
+    trackModel({ provider: out.providerId, model: out.model, tier, ms: Date.now() - t0, ok: true });
+    recordUsage(req.auth.userId, 'chat');
+    send({ done: true });
+    clearTimeout(timer);
+    res.end();
+    return;
+  } catch (e) {
+    if (e && e.code === 'NO_CREDENTIALS') {
+      // no BYOK — legacy platform-key path below
+    } else {
+      byokError = e; // tried user providers; platform path is the safety net
+    }
+  }
 
   try {
     const models = await listFreeModels();
@@ -241,6 +423,7 @@ app.post('/api/chat', rateLimit(30, 60000), async (req, res) => {
     }
     if (!streamed) throw lastErr || new Error('openrouter failed');
     trackModel({ provider: 'openrouter', model: usedModel, tier, ms: Date.now() - t0, ok: true });
+    recordUsage(req.auth.userId, 'chat');
     send({ done: true });
   } catch (e) {
     // NVIDIA fallback only when entitled (see NV_ON)
@@ -258,11 +441,11 @@ app.post('/api/chat', rateLimit(30, 60000), async (req, res) => {
         send({ done: true });
       } catch (e2) {
         trackModel({ provider: usedProvider || 'openrouter', model: usedModel, tier, ms: Date.now() - t0, ok: false });
-        send({ error: 'Both providers failed. Retry.' });
+        send({ error: byokError ? String(byokError.message).slice(0, 220) : 'Both providers failed. Retry.' });
       }
     } else {
       trackModel({ provider: 'openrouter', model: usedModel, tier, ms: Date.now() - t0, ok: false });
-      send({ error: 'Model provider failed. Retry.' });
+      send({ error: byokError ? String(byokError.message).slice(0, 220) : 'Model provider failed. Retry.' });
     }
   } finally {
     clearTimeout(timer);
@@ -270,30 +453,37 @@ app.post('/api/chat', rateLimit(30, 60000), async (req, res) => {
   }
 });
 
-// ---- OSINT investigations ----
-app.post('/api/osint/investigations', rateLimit(10, 60000), (req, res) => {
+// ---- OSINT investigations (user-scoped) ----
+app.post('/api/osint/investigations', requireAuth, rateLimit(10, 60000), (req, res) => {
   const v = validateTarget(req.body?.target);
   if (!v.ok) return res.status(400).json({ error: v.error });
-  const job = createInvestigation(v.target, v.type);
+  const budget = checkBudget(req.auth.userId, 'osint');
+  if (!budget.ok) return res.status(429).json({ error: budget.error });
+  const job = createInvestigation(v.target, v.type, req.auth.userId);
+  recordUsage(req.auth.userId, 'osint');
   res.status(201).json({ id: job.id, target: job.target, type: job.type, status: job.status });
 });
 
-app.post('/api/osint/investigations/:id/run', rateLimit(5, 60000), (req, res) => {
-  const job = getInvestigation(req.params.id);
+app.get('/api/osint/investigations', requireAuth, (req, res) => {
+  res.json({ investigations: listInvestigations(req.auth.userId) });
+});
+
+app.post('/api/osint/investigations/:id/run', requireAuth, rateLimit(5, 60000), (req, res) => {
+  const job = getInvestigationFor(req.auth.userId, req.params.id);
   if (!job) return res.status(404).json({ error: 'Unknown investigation.' });
   res.status(202).json({ id: job.id, status: 'collecting' });
   runInvestigation(job.id).catch(() => {});
 });
 
-app.get('/api/osint/investigations/:id', (req, res) => {
-  const job = getInvestigation(req.params.id);
+app.get('/api/osint/investigations/:id', requireAuth, (req, res) => {
+  const job = getInvestigationFor(req.auth.userId, req.params.id);
   if (!job) return res.status(404).json({ error: 'Unknown investigation.' });
   const { findings, ...rest } = job;
   res.json({ ...rest, counts: job.correlation, finding_count: findings.length });
 });
 
-app.get('/api/osint/investigations/:id/findings', (req, res) => {
-  const job = getInvestigation(req.params.id);
+app.get('/api/osint/investigations/:id/findings', requireAuth, (req, res) => {
+  const job = getInvestigationFor(req.auth.userId, req.params.id);
   if (!job) return res.status(404).json({ error: 'Unknown investigation.' });
   let list = job.findings;
   if (req.query.type && req.query.type !== 'all') list = list.filter((f) => f.type === req.query.type);
@@ -301,8 +491,8 @@ app.get('/api/osint/investigations/:id/findings', (req, res) => {
   res.json({ findings: list });
 });
 
-app.get('/api/osint/investigations/:id/report', (req, res) => {
-  const job = getInvestigation(req.params.id);
+app.get('/api/osint/investigations/:id/report', requireAuth, (req, res) => {
+  const job = getInvestigationFor(req.auth.userId, req.params.id);
   if (!job) return res.status(404).json({ error: 'Unknown investigation.' });
   const fmt = req.query.format || 'json';
   if (fmt === 'md') {
@@ -321,139 +511,948 @@ app.get('/api/osint/collectors', (req, res) => {
 // ================= AGENT RUNTIME =================
 
 // Skills
-app.get('/api/skills', (req, res) => res.json({ skills: listSkills() }));
-app.get('/api/skills/discover', (req, res) => {
+// Merged view: code-defined system skills (global) + user packages (scoped).
+// L1 metadata only — instructions/references load on explicit inspect (L2/L3).
+function toolCoverage(declared = []) {
+  const known = new Set(listTools().map((t) => t.name));
+  return {
+    known: declared.filter((t) => known.has(t)),
+    // unknown = not in THIS gateway's tool catalog; plugins/providers resolve
+    // via their own registries (Agent 2 ProviderRouter) — never faked here.
+    unknown: declared.filter((t) => !known.has(t)),
+  };
+}
+function mergedSkills(userId, ctx = {}) {
+  const sys = listSkills().map((s) => ({
+    id: `sys-${s.id}`, name: s.name, description: s.description,
+    version: s.version, author: 'Metaloid', userId: null,
+    scope: 'global', source: 'system', status: 'enabled',
+    types: ['agent'], capabilities: s.capabilities, tools: s.tools,
+    triggers: [], createdAt: null, updatedAt: null, lastUsedAt: null,
+  }));
+  for (const s of listSkills()) registerSystemSkill(s);
+  const seen = new Set(sys.map((s) => s.id));
+  return [...sys, ...listSkillCards(userId, ctx).filter((s) => !seen.has(s.id))];
+}
+app.get('/api/skills', requireAuth, (req, res) => res.json({
+  skills: mergedSkills(req.auth.userId, { workspaceId: req.query.workspaceId, projectId: req.query.projectId }),
+}));
+app.get('/api/skills/discover', requireAuth, (req, res) => {
   const ids = discoverSkills(String(req.query.q || ''));
   res.json({ skills: ids.map(skillBrief).filter(Boolean) });
 });
 
-// Tools (metadata only — execution goes through missions with permission gates)
-app.get('/api/tools', (req, res) => res.json({ tools: listTools() }));
-app.get('/api/tools/discover', (req, res) => res.json({ tools: discoverTools(String(req.query.q || '')) }));
+// ================= UNIVERSAL SKILLS =================
 
-// Approvals (permission engine queue)
-app.get('/api/approvals', (req, res) => res.json({ pending: pendingApprovals() }));
-app.post('/api/approvals/:id', rateLimit(20, 60000), (req, res) => {
-  const a = grantApproval(req.params.id, req.body?.approved === true);
+// Discovery: task → ranked candidates (relevance + missing deps).
+app.post('/api/skills/discover', requireAuth, rateLimit(30, 60000), (req, res) => {
+  const { task, workspaceId, projectId, projectSkills } = req.body || {};
+  if (typeof task !== 'string' || !task.trim()) return res.status(400).json({ error: 'task required.' });
+  res.json({
+    candidates: discoverFor(req.auth.userId, task, {
+      workspaceId: workspaceId || undefined, projectId: projectId || undefined,
+      projectSkills: Array.isArray(projectSkills) ? projectSkills : [],
+    }),
+  });
+});
+
+// Create from instructions (wizard) — same validation pipeline as import.
+app.post('/api/skills', requireAuth, rateLimit(20, 60000), (req, res) => {
+  const { name, description, instructions, types, triggers, tools, command, scope, workspaceId, projectId } = req.body || {};
+  const v = validatePackage(packageFromFields({ name, description, instructions, types, triggers, tools, command }));
+  if (!v.ok) return res.status(400).json({ error: v.errors.join(' '), warnings: v.warnings });
+  const r = installSkill(req.auth.userId, v.package, { scope: scope || 'user', workspaceId, projectId, source: 'created' });
+  if (!r.ok) return res.status(400).json({ error: r.error });
+  res.status(201).json({ skill: r.skill, warnings: v.warnings });
+});
+
+// Import package {skill.md, files} — validated + scanned BEFORE install.
+app.post('/api/skills/import', requireAuth, rateLimit(20, 60000), (req, res) => {
+  const v = validatePackage(req.body || {});
+  if (!v.ok) return res.status(400).json({ error: v.errors.join(' '), warnings: v.warnings, security: v.security });
+  const { scope, workspaceId, projectId } = req.body || {};
+  const r = installSkill(req.auth.userId, v.package, { scope: scope || 'user', workspaceId, projectId, source: 'imported' });
+  if (!r.ok) return res.status(400).json({ error: r.error });
+  res.status(201).json({ skill: r.skill, warnings: v.warnings });
+});
+
+// Validate-only (dry run for the upload UI + pre-install inspector).
+app.post('/api/skills/validate', requireAuth, rateLimit(30, 60000), (req, res) => {
+  const v = validatePackage(req.body || {});
+  const p = v.package;
+  res.json({
+    ok: v.ok, errors: v.errors || [], warnings: v.warnings || [], security: v.security || null,
+    manifest: p?.manifest || null,
+    // pre-install inspection payload (nothing installed by this call)
+    inspect: p ? {
+      name: p.manifest.name, description: p.manifest.description, version: p.manifest.version,
+      author: p.manifest.author, license: p.manifest.license,
+      files: Object.keys(p.files || {}),
+      scripts: Object.keys(p.scripts || {}),
+      references: Object.keys(p.references || {}),
+      tools: p.manifest.tools, plugins: p.manifest.dependencies.plugins,
+      providers: p.manifest.dependencies.providers,
+      permissions: p.manifest.permissions, dependencies: p.manifest.dependencies,
+      toolCoverage: toolCoverage(p.manifest.tools || []),
+    } : null,
+  });
+});
+
+// Runtime adapters: what can execute here (JS live, others declared-unavailable).
+// NOTE: registered BEFORE /:id — express matches in order, single-segment
+// literal would otherwise be swallowed by the param route.
+app.get('/api/skills/runtimes', requireAuth, (req, res) => {
+  res.json({ runtimes: adapterStatus() });
+});
+
+app.get('/api/skills/:id', requireAuth, (req, res) => {
+  const s = inspectSkill(req.auth.userId, req.params.id);
+  if (!s) {
+    // system skill? metadata-only card
+    const sys = listSkills().find((x) => `sys-${x.id}` === req.params.id);
+    if (sys) return res.json({ skill: { ...(skillBrief(sys.id) || {}), source: 'system', status: 'enabled', scope: 'global' } });
+    return res.status(404).json({ error: 'Unknown skill.' });
+  }
+  res.json({ skill: s });
+});
+
+app.get('/api/skills/:id/file', requireAuth, (req, res) => {
+  const f = readSkillFile(req.auth.userId, req.params.id, req.query.kind === 'script' ? 'script' : 'reference', String(req.query.name || ''));
+  if (!f) return res.status(404).json({ error: 'Unknown skill or file.' });
+  res.json(f);
+});
+
+app.put('/api/skills/:id', requireAuth, rateLimit(20, 60000), (req, res) => {
+  const v = validatePackage(req.body || {});
+  if (!v.ok) return res.status(400).json({ error: v.errors.join(' '), warnings: v.warnings, security: v.security });
+  const r = updateSkill(req.auth.userId, req.params.id, v.package, req.body?.note || '');
+  if (!r.ok) return res.status(404).json({ error: r.error });
+  res.json({ skill: r.skill, warnings: v.warnings });
+});
+
+app.post('/api/skills/:id/rollback/:version', requireAuth, rateLimit(10, 60000), (req, res) => {
+  const r = rollbackSkill(req.auth.userId, req.params.id, req.params.version);
+  if (!r.ok) return res.status(404).json({ error: r.error });
+  res.json({ skill: r.skill });
+});
+
+app.post('/api/skills/:id/enable', requireAuth, (req, res) => {
+  const r = setSkillStatus(req.auth.userId, req.params.id, true);
+  if (!r.ok) return res.status(404).json({ error: r.error });
+  res.json({ skill: r.skill });
+});
+
+app.post('/api/skills/:id/disable', requireAuth, (req, res) => {
+  const r = setSkillStatus(req.auth.userId, req.params.id, false);
+  if (!r.ok) return res.status(404).json({ error: r.error });
+  res.json({ skill: r.skill });
+});
+
+app.post('/api/skills/:id/duplicate', requireAuth, rateLimit(10, 60000), (req, res) => {
+  const r = duplicateSkill(req.auth.userId, req.params.id);
+  if (!r.ok) return res.status(404).json({ error: r.error });
+  res.status(201).json({ skill: r.skill });
+});
+
+app.delete('/api/skills/:id', requireAuth, (req, res) => {
+  if (!deleteSkill(req.auth.userId, req.params.id)) return res.status(404).json({ error: 'Unknown skill.' });
+  res.json({ ok: true });
+});
+
+// Test mode → PASS / FAIL / WARN.
+app.post('/api/skills/:id/test', requireAuth, rateLimit(20, 60000), (req, res) => {
+  const r = testSkill(req.auth.userId, req.params.id, { input: req.body?.input || {} });
+  if (!r.ok) return res.status(404).json({ error: r.error });
+  res.json(r);
+});
+
+// Invoke: explicit (/command) or discovery-driven. Dep-checked, audited.
+app.post('/api/skills/:id/invoke', requireAuth, rateLimit(20, 60000), (req, res) => {
+  const r = invokeSkill(req.auth.userId, req.params.id, {
+    input: req.body?.input || {},
+    available: req.body?.available || {},
+    reason: req.body?.reason || '',
+  });
+  if (!r.ok && !r.missing) return res.status(404).json({ error: r.error });
+  if (!r.ok) return res.status(409).json(r); // missing deps + hint
+  res.json(r);
+});
+
+// Explicit /command invocation.
+app.post('/api/skills/invoke-command', requireAuth, rateLimit(20, 60000), (req, res) => {
+  const s = findByCommand(req.auth.userId, req.body?.command);
+  if (!s) return res.status(404).json({ error: 'Unknown skill command.' });
+  const r = invokeSkill(req.auth.userId, s.id, { input: req.body?.input || {}, available: req.body?.available || {}, reason: `/${s.command}` });
+  if (!r.ok && !r.missing) return res.status(400).json({ error: r.error });
+  if (!r.ok) return res.status(409).json(r);
+  res.json(r);
+});
+
+app.get('/api/skills/:id/audit', requireAuth, (req, res) => {
+  const a = skillAudit(req.auth.userId, req.params.id);
+  if (!a) return res.status(404).json({ error: 'Unknown skill.' });
+  res.json({ audit: a });
+});
+
+// Update diff: instructions/files/permissions/tools/deps changes between versions.
+app.get('/api/skills/:id/diff', requireAuth, (req, res) => {
+  const d = diffVersions(req.auth.userId, req.params.id, String(req.query.from || ''), req.query.to ? String(req.query.to) : null);
+  if (!d) return res.status(404).json({ error: 'Unknown skill.' });
+  if (d.ok === false) return res.status(404).json({ error: d.error });
+  res.json(d);
+});
+
+// TaskEngine contract: schedules (no daemon yet — register now, fire explicitly).
+app.get('/api/skill-schedules', requireAuth, (req, res) => {
+  res.json({ schedules: listSchedules(req.auth.userId) });
+});
+app.post('/api/skill-schedules', requireAuth, rateLimit(10, 60000), (req, res) => {
+  const r = registerSchedule(req.auth.userId, req.body || {});
+  if (!r.ok) return res.status(400).json({ error: r.error });
+  res.status(201).json({ schedule: r.schedule, note: 'Registered. No scheduler daemon runs yet — fire via run-now or a future TaskEngine.' });
+});
+app.post('/api/skill-schedules/:id/run', requireAuth, rateLimit(5, 60000), (req, res) => {
+  Promise.resolve(runScheduled({ invokeSkill, checkBudget }, req.auth.userId, req.params.id))
+    .then((r) => {
+      if (!r.ok) return res.status(400).json({ error: r.error });
+      res.json(r);
+    })
+    .catch(() => res.status(500).json({ error: 'Schedule run failed.' }));
+});
+app.delete('/api/skill-schedules/:id', requireAuth, (req, res) => {
+  if (!removeSchedule(req.auth.userId, req.params.id)) return res.status(404).json({ error: 'Unknown schedule.' });
+  res.json({ ok: true });
+});
+
+// ================= ARTIFACTS (user-scoped real files) =================
+
+app.get('/api/artifacts', requireAuth, (req, res) => {
+  res.json({
+    artifacts: listArtifacts(req.auth.userId, {
+      projectId: req.query.projectId || undefined,
+      workspaceId: req.query.workspaceId || undefined,
+    }),
+  });
+});
+
+app.post('/api/artifacts', requireAuth, rateLimit(10, 60000), (req, res) => {
+  const { kind, name, spec, projectId, workspaceId, taskId, conversationId } = req.body || {};
+  const r = createArtifact({ userId: req.auth.userId, kind, name, spec, projectId, workspaceId, taskId, conversationId });
+  if (!r.ok) return res.status(400).json({ error: r.error, artifact: r.artifact || null });
+  res.status(201).json({ artifact: r.artifact });
+});
+
+app.get('/api/artifacts/:id', requireAuth, (req, res) => {
+  const a = getArtifact(req.auth.userId, req.params.id);
+  if (!a) return res.status(404).json({ error: 'Unknown artifact.' });
+  res.json({ artifact: { ...a, downloadUrl: `/api/artifacts/${a.id}/download` } });
+});
+
+app.get('/api/artifacts/:id/download', requireAuth, (req, res) => {
+  const r = downloadArtifact(req.auth.userId, req.params.id);
+  if (!r) return res.status(404).json({ error: 'Unknown artifact.' });
+  res.setHeader('Content-Type', MIME[r.artifact.kind] || 'application/octet-stream');
+  res.setHeader('Content-Disposition', `attachment; filename="${r.artifact.name.replace(/"/g, '')}"`);
+  res.send(r.bytes);
+});
+
+app.post('/api/artifacts/:id/validate', requireAuth, rateLimit(20, 60000), (req, res) => {
+  const r = validateArtifact(req.auth.userId, req.params.id);
+  if (!r.ok) return res.status(404).json({ error: r.error });
+  res.json({ verification: r.verification });
+});
+
+app.post('/api/artifacts/:id/render', requireAuth, rateLimit(10, 60000), async (req, res) => {
+  const r = await renderArtifact(req.auth.userId, req.params.id);
+  if (!r.ok) return res.status(404).json({ error: r.error });
+  res.json(r);
+});
+
+app.get('/api/artifacts/renderer/status', requireAuth, async (req, res) => {
+  res.json(await detectRenderer());
+});
+
+app.post('/api/artifacts/:id/qa', requireAuth, rateLimit(20, 60000), (req, res) => {
+  const r = visualQA(req.auth.userId, req.params.id);
+  if (!r.ok) return res.status(404).json({ error: r.error });
+  res.json(r);
+});
+
+app.post('/api/artifacts/:id/repair', requireAuth, rateLimit(10, 60000), (req, res) => {
+  const r = repairArtifact(req.auth.userId, req.params.id);
+  if (!r.ok) return res.status(400).json({ error: r.error });
+  res.json(r);
+});
+
+app.post('/api/artifacts/:id/finalize', requireAuth, rateLimit(20, 60000), (req, res) => {
+  const r = finalizeArtifact(req.auth.userId, req.params.id, req.body?.projectId || null);
+  if (!r.ok) return res.status(400).json({ error: r.error });
+  res.json({ artifact: r.artifact });
+});
+
+app.put('/api/artifacts/:id', requireAuth, rateLimit(20, 60000), (req, res) => {
+  const r = editArtifact(req.auth.userId, req.params.id, req.body?.spec, req.body?.note || '');
+  if (!r.ok) return res.status(400).json({ error: r.error });
+  res.json({ artifact: r.artifact });
+});
+
+app.post('/api/artifacts/:id/edit-slide', requireAuth, rateLimit(20, 60000), (req, res) => {
+  const r = editSlide(req.auth.userId, req.params.id, req.body?.slide, { title: req.body?.title, bullets: req.body?.bullets });
+  if (!r.ok) return res.status(400).json({ error: r.error });
+  res.json({ artifact: r.artifact });
+});
+
+app.delete('/api/artifacts/:id', requireAuth, (req, res) => {
+  if (!deleteArtifact(req.auth.userId, req.params.id)) return res.status(404).json({ error: 'Unknown artifact.' });
+  res.json({ ok: true });
+});
+
+// ---- agent artifact pipeline: skill → tools → real file → validate →
+// render → QA → repair → finalize. Streams activity events, never fake ones.
+app.post('/api/agent/artifact', requireAuth, rateLimit(10, 60000), async (req, res) => {
+  let { kind, topic, slides, slidesCount, detail, projectId, conversationId } = req.body || {};
+  const resolution = resolveIntentCapability(String(req.body?.requestText || ''));
+  if (!kind && resolution.kind === 'artifact') kind = resolution.artifactKind;
+  if (!topic && resolution.topic) topic = resolution.topic;
+  if (!slidesCount && resolution.count) slidesCount = resolution.count;
+  if (!['pptx', 'docx'].includes(kind)) {
+    const message = resolution.kind === 'unavailable_artifact'
+      ? `${resolution.format} is understood, but no verified ${resolution.format} writer is installed.`
+      : 'No verified artifact format could be resolved. Supported writers: PPTX and DOCX.';
+    return res.status(400).json({ error: message, resolution });
+  }
+  const cleanTopic = String(topic || '').trim().slice(0, 150);
+  if (!cleanTopic && !slides) return res.status(400).json({ error: 'topic or explicit slides required.' });
+
+  res.writeHead(200, { 'Content-Type': 'text/event-stream', 'Cache-Control': 'no-cache', Connection: 'keep-alive' });
+  const send = (obj) => {
+    try {
+      res.write(`data: ${JSON.stringify(obj)}\n\n`);
+    } catch { /* client gone */ }
+  };
+  const act = (phase, status, label, detailText = '') =>
+    send({ activity: { taskId: `art-${Date.now().toString(36)}`, timestamp: Date.now(), phase, status, label, detail: detailText } });
+  const controller = new AbortController();
+  res.on('close', () => controller.abort());
+  let artifactId = null;
+
+  try {
+    act('UNDERSTAND', 'running', `Understanding request: ${kind.toUpperCase()} about ${cleanTopic.slice(0, 60)}`, resolution.reason || 'explicit artifact request');
+    const n = Math.min(Math.max(Number(slidesCount) || 8, 3), 15);
+    act('PLAN', 'done', `Planning ${kind === 'pptx' ? `${n}-slide deck` : 'document'}`, `${n} sections, school-friendly structure`);
+    if (controller.signal.aborted) throw Object.assign(new Error('Stopped by user.'), { code: 'ABORTED' });
+
+    // gather content: explicit slides (tests/deterministic) or model outline
+    let deckSlides = Array.isArray(slides) ? slides : null;
+    let docBlocks = null;
+    if (!deckSlides && kind === 'docx' && Array.isArray(req.body?.blocks)) {
+      docBlocks = req.body.blocks;
+    }
+    if (!deckSlides && !docBlocks) {
+      act('RETRIEVE', 'running', 'Gathering content', 'drafting outline with the model');
+      if (!OR_KEY) throw new Error('Model provider not configured — outline drafting unavailable.');
+      const models = await import('./openrouter.js').then((m) => m.listFreeModels().catch(() => []));
+      const model = (await import('./openrouter.js').then((m) => m.pickModel(models, 'smart')));
+      const schema = kind === 'pptx'
+        ? `JSON: {"slides":[{"title":"...","bullets":["..."]}]} — exactly ${n} slides, ≤5 bullets each, concise school-friendly wording.`
+        : `JSON: {"blocks":[{"h":1,"text":"..."},{"p":"..."},{"bullets":["..."]}]} — headings, paragraphs, bullet lists.`;
+      const { text } = await orComplete({
+        apiKey: OR_KEY, model,
+        system: 'You draft factual, neutral content outlines. Reply with ONLY the requested JSON, no markdown fences.',
+        messages: [{ role: 'user', content: `Outline for a ${kind} about "${cleanTopic}". ${detail ? 'Focus: ' + String(detail).slice(0, 300) : ''} ${schema}` }],
+      });
+      let parsed = null;
+      try {
+        parsed = JSON.parse(text.replace(/```json|```/g, '').trim().match(/\{[\s\S]*\}/)?.[0] || 'null');
+      } catch { /* fall through */ }
+      if (kind === 'pptx' && (!parsed || !Array.isArray(parsed.slides) || !parsed.slides.length)) {
+        throw new Error('Outline drafting failed — the model did not return usable slides. Try again or provide an outline.');
+      }
+      if (kind === 'docx' && (!parsed || !Array.isArray(parsed.blocks) || !parsed.blocks.length)) {
+        throw new Error('Outline drafting failed — the model did not return usable sections. Try again.');
+      }
+      if (kind === 'pptx') deckSlides = parsed.slides.slice(0, n);
+      else docBlocks = parsed.blocks;
+      act('RETRIEVE', 'done', 'Content gathered', `${kind === 'pptx' ? deckSlides.length + ' slides' : docBlocks.length + ' sections'} drafted`);
+    } else {
+      act('RETRIEVE', 'done', 'Content provided', 'using explicit outline');
+    }
+    if (controller.signal.aborted) throw Object.assign(new Error('Stopped by user.'), { code: 'ABORTED' });
+
+    act('EXECUTE', 'running', kind === 'pptx' ? 'Creating slides' : 'Writing document', 'presentation.create / document.create');
+    const spec = kind === 'pptx'
+      ? { title: cleanTopic, slides: deckSlides, accent: '1F6B3A' }
+      : { title: cleanTopic, blocks: docBlocks };
+    const created = createArtifact({
+      userId: req.auth.userId, kind, name: cleanTopic, spec,
+      projectId: projectId || null, conversationId: conversationId || null, taskId: `agent-${Date.now().toString(36)}`,
+    });
+    if (!created.ok) throw new Error(created.error);
+    const id = created.artifact.id;
+    artifactId = id;
+    act('EXECUTE', 'done', 'File built', `${created.artifact.name} (${(created.artifact.versions?.[0]?.bytes || 0)} bytes)`);
+
+    act('CHECK', 'running', `Opening generated ${kind === 'pptx' ? 'PowerPoint package' : 'Word document'}`, 'reading ZIP directory, XML parts, and relationships');
+    const v = validateArtifact(req.auth.userId, id);
+    if (!v.ok) throw new Error(v.error);
+    if (!v.verification.passed) {
+      act('CHECK', 'error', 'Validation failed', v.verification.issues.join('; '));
+      send({ done: false, error: 'Validation failed: ' + v.verification.issues.join('; '), artifact: v.artifact });
+      res.end();
+      return;
+    }
+    act('CHECK', 'done', 'Reopened and structurally validated', v.verification.checks.join(', '));
+
+    const r = await renderArtifact(req.auth.userId, id);
+    if (r.rendered) {
+      act('CHECK', 'done', 'Rendered for visual review', `${r.previews} page previews`);
+    } else {
+      act('CHECK', 'done', 'Render skipped', r.message);
+    }
+
+    let qa = visualQA(req.auth.userId, id);
+    if (qa.ok && !qa.allPassed && kind === 'pptx') {
+      act('REPAIR', 'running', `Fixing ${qa.issues.length} layout issue(s)`, qa.issues[0]?.reason || '');
+      const rep = repairArtifact(req.auth.userId, id);
+      if (rep.ok) {
+        act('REPAIR', 'done', 'Repaired and re-validated', `v${rep.artifact.version}`);
+        qa = visualQA(req.auth.userId, id);
+      } else {
+        act('REPAIR', 'error', 'Repair unavailable', rep.error);
+        throw new Error(`Presentation could not be verified after layout checks: ${rep.error}`);
+      }
+    }
+
+    if (!qa.ok || !qa.allPassed) {
+      const reasons = qa.issues?.map((x) => x.reason).join('; ') || 'visual/structural quality checks did not pass';
+      act('CHECK', 'error', 'Verification did not pass', reasons);
+      throw new Error(`Artifact was not finalized because verification did not pass: ${reasons}`);
+    }
+
+    const f = finalizeArtifact(req.auth.userId, id, projectId || null);
+    if (!f.ok) throw new Error(f.error);
+    act('FINALIZE', 'done', `${kind.toUpperCase()} created and verified`, f.artifact.name);
+    send({ done: true, artifact: f.artifact });
+  } catch (e) {
+    if (e && e.code === 'ABORTED') {
+      send({ activity: { taskId: 'art', timestamp: Date.now(), phase: 'FINALIZE', status: 'error', label: 'Stopped by user', detail: '' } });
+      send({ done: false, error: 'Stopped by user.' });
+    } else {
+      const msg = String((e && e.message) || e).slice(0, 220);
+      if (artifactId) failArtifact(req.auth.userId, artifactId, msg);
+      send({ activity: { taskId: 'art', timestamp: Date.now(), phase: 'CHECK', status: 'error', label: 'Failed', detail: msg } });
+      send({ done: false, error: msg });
+    }
+  } finally {
+    res.end();
+  }
+});
+
+// Tools (metadata only — execution goes through missions with permission gates)
+app.get('/api/tools', requireAuth, (req, res) => res.json({ tools: listTools() }));
+app.get('/api/tools/discover', requireAuth, (req, res) => res.json({ tools: discoverTools(String(req.query.q || '')) }));
+
+// Approvals (permission engine queue — own approvals only)
+app.get('/api/approvals', requireAuth, (req, res) => res.json({ pending: pendingApprovals(req.auth.userId) }));
+app.post('/api/approvals/:id', requireAuth, rateLimit(20, 60000), (req, res) => {
+  const a = grantApproval(req.params.id, req.body?.approved === true, req.auth.userId, req.auth.userId);
   if (!a) return res.status(404).json({ error: 'Unknown or decided approval.' });
   res.json({ approval: a });
 });
 
-// Missions
-app.post('/api/missions', rateLimit(10, 60000), (req, res) => {
+// Missions (user-scoped, metered)
+app.post('/api/missions', requireAuth, rateLimit(10, 60000), (req, res) => {
   const { objective, constraints, skillIds } = req.body || {};
   if (typeof objective !== 'string' || !objective.trim()) return res.status(400).json({ error: 'Objective required.' });
-  const tasks = planMission(objective, Array.isArray(skillIds) && skillIds.length ? skillIds : discoverSkills(objective));
-  const m = createMission({ objective, constraints, tasks, skillIds: discoverSkills(objective) });
+  const budget = checkBudget(req.auth.userId, 'missions');
+  if (!budget.ok) return res.status(429).json({ error: budget.error });
+  const caps = planCaps(req.auth.userId);
+  const codeSkills = Array.isArray(skillIds) && skillIds.length ? skillIds : discoverSkills(objective);
+  // user-skill discovery: project/user packages join code skills in planning
+  const discovered = discoverFor(req.auth.userId, objective, { workspaceId: req.body?.workspaceId, projectId: req.body?.projectId }).map((c) => c.skillId);
+  const allSkills = [...codeSkills, ...discovered.filter((id) => !codeSkills.includes(id))].slice(0, 8);
+  const tasks = planMission(objective, codeSkills);
+  const m = createMission({
+    userId: req.auth.userId, objective, constraints, tasks, skillIds: allSkills,
+    budgets: { maxMs: caps.maxMissionMs, maxSteps: caps.maxMissionSteps },
+  });
+  recordUsage(req.auth.userId, 'missions');
   res.status(201).json({ mission: m });
 });
-app.get('/api/missions', (req, res) => res.json({ missions: listMissions() }));
-app.get('/api/missions/active', (req, res) => {
-  res.json({ mission: latestActive() });
+app.get('/api/missions', requireAuth, (req, res) => res.json({ missions: listMissions(req.auth.userId) }));
+app.get('/api/missions/active', requireAuth, (req, res) => {
+  res.json({ mission: latestActive(req.auth.userId) });
 });
-app.get('/api/missions/:id', (req, res) => {
-  const m = getMission(req.params.id);
+app.get('/api/missions/:id', requireAuth, (req, res) => {
+  const m = getMission(req.auth.userId, req.params.id);
   if (!m) return res.status(404).json({ error: 'Unknown mission.' });
   res.json({ mission: m });
 });
-app.post('/api/missions/:id/run', rateLimit(10, 60000), (req, res) => {
-  const m = getMission(req.params.id);
+app.post('/api/missions/:id/run', requireAuth, rateLimit(10, 60000), (req, res) => {
+  const m = getMission(req.auth.userId, req.params.id);
   if (!m) return res.status(404).json({ error: 'Unknown mission.' });
   res.status(202).json({ id: m.id, status: 'RUNNING' });
-  runMission(m.id, {}).catch(() => {});
+  runMission(req.auth.userId, m.id, { userId: req.auth.userId }).catch(() => {});
 });
-app.post('/api/missions/:id/pause', (req, res) => {
-  const m = pauseMission(req.params.id);
+app.post('/api/missions/:id/pause', requireAuth, (req, res) => {
+  const m = pauseMission(req.auth.userId, req.params.id);
   if (!m) return res.status(404).json({ error: 'Unknown mission.' });
   res.json({ mission: m });
 });
-app.post('/api/missions/:id/cancel', (req, res) => {
-  const m = cancelMission(req.params.id);
+app.post('/api/missions/:id/cancel', requireAuth, (req, res) => {
+  const m = cancelMission(req.auth.userId, req.params.id);
   if (!m) return res.status(404).json({ error: 'Unknown mission.' });
   res.json({ mission: m });
 });
-app.post('/api/missions/:id/verify', (req, res) => {
-  const m = markVerified(req.params.id, req.body?.note || '');
+app.post('/api/missions/:id/verify', requireAuth, (req, res) => {
+  const m = markVerified(req.auth.userId, req.params.id, req.body?.note || '');
   if (!m) return res.status(404).json({ error: 'Only COMPLETED missions can be verified.' });
   res.json({ mission: m });
 });
 
 // Agent: natural-language mission ops (continue / criticize / intent)
-app.post('/api/agent/mission', rateLimit(10, 60000), async (req, res) => {
+app.post('/api/agent/mission', requireAuth, rateLimit(10, 60000), async (req, res) => {
   const { objective, constraints } = req.body || {};
   if (typeof objective !== 'string' || !objective.trim()) return res.status(400).json({ error: 'Objective required.' });
+  const budget = checkBudget(req.auth.userId, 'missions');
+  if (!budget.ok) return res.status(429).json({ error: budget.error });
   const models = await listFreeModels().catch(() => []);
   const model = pickModel(models, 'smart');
-  const m = await startMission({ objective, constraints, apiKey: OR_KEY, model });
+  const profile = getProfile(req.auth.userId);
+  const m = await startMission({ userId: req.auth.userId, objective, constraints, apiKey: OR_KEY, model, userName: profile.displayName });
+  recordUsage(req.auth.userId, 'missions');
   res.status(201).json({ mission: m });
 });
-app.post('/api/agent/continue', rateLimit(10, 60000), async (req, res) => {
-  res.json(await continueMission());
+app.post('/api/agent/continue', requireAuth, rateLimit(10, 60000), async (req, res) => {
+  res.json(await continueMission(req.auth.userId));
 });
-app.post('/api/agent/criticize', rateLimit(20, 60000), async (req, res) => {
+app.post('/api/agent/criticize', requireAuth, rateLimit(20, 60000), async (req, res) => {
   res.json(await criticize(req.body?.draft ?? ''));
 });
-app.get('/api/agent/intent', (req, res) => {
-  res.json(classifyIntent(String(req.query.q || '')));
+app.get('/api/agent/intent', requireAuth, (req, res) => {
+  const q = String(req.query.q || '');
+  res.json({ ...classifyIntent(q), resolution: resolveIntentCapability(q), catalog: capabilityCatalog });
 });
 
-// Memory (server-side classes; frontend memory stays local-first)
-app.post('/api/memory', rateLimit(30, 60000), (req, res) => {
-  const r = remember({ cls: req.body?.class, content: req.body?.content, source: 'api', confidence: req.body?.confidence });
+// Memory (user-scoped; full user control: view/edit/delete/forget-all/export)
+app.post('/api/memory', requireAuth, rateLimit(30, 60000), (req, res) => {
+  const r = remember({ userId: req.auth.userId, cls: req.body?.class, content: req.body?.content, source: 'api', confidence: req.body?.confidence, workspaceId: req.body?.workspaceId });
   if (!r.ok) return res.status(400).json({ error: r.error });
   res.status(201).json({ record: r.record });
 });
-app.get('/api/memory', (req, res) => {
-  res.json({ records: recall({ cls: req.query.class, query: String(req.query.q || '') }), stats: memoryStats() });
+app.get('/api/memory', requireAuth, (req, res) => {
+  res.json({
+    records: recall(req.auth.userId, { cls: req.query.class, query: String(req.query.q || ''), workspaceId: req.query.workspaceId }),
+    stats: memoryStats(req.auth.userId),
+  });
 });
-app.delete('/api/memory/:id', (req, res) => {
-  const r = forget(req.params.id);
+app.put('/api/memory/:id', requireAuth, rateLimit(30, 60000), (req, res) => {
+  const r = updateMemory(req.auth.userId, req.params.id, { content: req.body?.content, confidence: req.body?.confidence });
+  if (!r.ok) return res.status(404).json({ error: r.error });
+  res.json({ record: r.record });
+});
+app.delete('/api/memory/:id', requireAuth, (req, res) => {
+  const r = forget(req.auth.userId, req.params.id);
   if (!r.ok) return res.status(404).json({ error: r.error });
   res.json({ ok: true });
 });
+/** Forget everything this user is remembered as. */
+app.delete('/api/memory', requireAuth, (req, res) => {
+  if (req.body?.all !== true) return res.status(400).json({ error: 'Pass {all:true} to forget everything.' });
+  res.json(forgetAll(req.auth.userId));
+});
 
-// World model
-app.post('/api/world/entities', rateLimit(30, 60000), (req, res) => {
+// World model (user-scoped knowledge graph)
+app.post('/api/world/entities', requireAuth, rateLimit(30, 60000), (req, res) => {
   const { type, name, aliases } = req.body || {};
   if (!type || !name) return res.status(400).json({ error: 'type + name required.' });
-  res.status(201).json({ entity: upsertEntity({ type, name, aliases, source: 'api' }) });
+  res.status(201).json({ entity: upsertEntity({ userId: req.auth.userId, type, name, aliases, source: 'api' }) });
 });
-app.get('/api/world/entities', (req, res) => {
-  res.json({ entities: findEntities(String(req.query.q || ''), req.query.type) });
+app.get('/api/world/entities', requireAuth, (req, res) => {
+  res.json({ entities: findEntities(req.auth.userId, String(req.query.q || ''), req.query.type) });
 });
-app.post('/api/world/relate', rateLimit(30, 60000), (req, res) => {
-  const r = relate(req.body?.from, req.body?.to, req.body?.rel, { source: 'api', evidence: req.body?.evidence });
+app.post('/api/world/relate', requireAuth, rateLimit(30, 60000), (req, res) => {
+  const r = relate(req.auth.userId, req.body?.from, req.body?.to, req.body?.rel, { source: 'api', evidence: req.body?.evidence });
   if (!r.ok) return res.status(400).json({ error: r.error });
   res.status(201).json({ edge: r.edge });
 });
-app.get('/api/world/graph', (req, res) => {
-  if (!req.query.id) return res.json({ stats: worldStats() });
-  res.json(neighbors(String(req.query.id), Math.min(Number(req.query.depth || 1), 3)));
+app.get('/api/world/graph', requireAuth, (req, res) => {
+  if (!req.query.id) return res.json({ stats: worldStats(req.auth.userId) });
+  res.json(neighbors(req.auth.userId, String(req.query.id), Math.min(Number(req.query.depth || 1), 3)));
 });
-app.get('/api/world/resolve', (req, res) => {
+app.get('/api/world/resolve', requireAuth, (req, res) => {
   res.json({ level: resolveLevel(String(req.query.a || ''), String(req.query.b || '')) });
 });
 
 // Verification
-app.post('/api/verify', rateLimit(30, 60000), async (req, res) => {
+app.post('/api/verify', requireAuth, rateLimit(30, 60000), async (req, res) => {
   res.json(await verify(req.body?.value ?? null, req.body?.checks || ['nonempty']));
 });
 
 // Research helpers (deterministic correlation)
-app.post('/api/research/correlate', rateLimit(30, 60000), (req, res) => {
+app.post('/api/research/correlate', requireAuth, rateLimit(30, 60000), (req, res) => {
   res.json(correlateExtracts(req.body?.a || '', req.body?.b || ''));
 });
 
-// OSINT → world ingestion
-app.post('/api/osint/investigations/:id/ingest', rateLimit(10, 60000), (req, res) => {
-  const job = getInvestigation(req.params.id);
+// OSINT → world ingestion (own investigation only)
+app.post('/api/osint/investigations/:id/ingest', requireAuth, rateLimit(10, 60000), (req, res) => {
+  const job = getInvestigationFor(req.auth.userId, req.params.id);
   if (!job) return res.status(404).json({ error: 'Unknown investigation.' });
-  res.json(ingestFindings(job.target, job.findings));
+  res.json(ingestFindings(req.auth.userId, job.target, job.findings));
 });
 
-// Observability (debug surface — not user UI)
-app.get('/api/debug/summary', (req, res) => {
-  res.json({ ...observeSummary(), world: worldStats(), memory: memoryStats(), audit: recentAudit(30) });
+// Observability (admin only — aggregates are not per-user safe to expose)
+app.get('/api/debug/summary', requireAuth, requireAdmin, (req, res) => {
+  res.json({ ...observeSummary(), audit: recentAudit(30) });
+});
+
+// ================= USER LAYER =================
+
+// Profile + preferences (user-confirmed; inferred stays in memory w/ confidence)
+app.get('/api/profile', requireAuth, (req, res) => {
+  res.json({ profile: getProfile(req.auth.userId), plan: getPlan(req.auth.userId) });
+});
+app.put('/api/profile', requireAuth, rateLimit(30, 60000), (req, res) => {
+  res.json({ profile: updateProfile(req.auth.userId, req.body || {}) });
+});
+/** Premium first-run: name, language, style, voice, proactivity. Nothing more. */
+app.post('/api/onboarding', requireAuth, rateLimit(10, 60000), (req, res) => {
+  res.json({ profile: completeOnboarding(req.auth.userId, req.body || {}) });
+});
+
+// Usage + entitlements (read-only for users)
+app.get('/api/usage', requireAuth, (req, res) => {
+  res.json(usageSummary(req.auth.userId));
+});
+
+// Workspaces (isolated contexts; no automatic cross-workspace leakage)
+app.get('/api/workspaces', requireAuth, (req, res) => {
+  res.json({ workspaces: listWorkspaces(req.auth.userId) });
+});
+app.post('/api/workspaces', requireAuth, rateLimit(20, 60000), (req, res) => {
+  const r = createWorkspace(req.auth.userId, req.body || {});
+  if (!r.ok) return res.status(400).json({ error: r.error });
+  res.status(201).json({ workspace: r.workspace });
+});
+app.put('/api/workspaces/:id', requireAuth, rateLimit(20, 60000), (req, res) => {
+  const w = updateWorkspace(req.auth.userId, req.params.id, req.body || {});
+  if (!w) return res.status(404).json({ error: 'Unknown workspace.' });
+  res.json({ workspace: w });
+});
+app.delete('/api/workspaces/:id', requireAuth, (req, res) => {
+  if (!deleteWorkspace(req.auth.userId, req.params.id)) return res.status(404).json({ error: 'Unknown workspace.' });
+  res.json({ ok: true });
+});
+
+// Devices (explicit pairing; per-(user, device, capability) authorization)
+app.get('/api/devices', requireAuth, (req, res) => {
+  res.json({ devices: listDevices(req.auth.userId) });
+});
+app.post('/api/devices/pair', requireAuth, rateLimit(10, 60000), (req, res) => {
+  res.json(requestPairing(req.auth.userId, req.body || {}));
+});
+app.post('/api/devices/confirm', requireAuth, rateLimit(10, 60000), (req, res) => {
+  const r = confirmPairing(req.auth.userId, req.body?.code, { deviceId: req.body?.deviceId });
+  if (!r.ok) return res.status(400).json({ error: r.error });
+  res.json({ device: r.device });
+});
+app.delete('/api/devices/:id', requireAuth, (req, res) => {
+  if (!revokeDevice(req.auth.userId, req.params.id)) return res.status(404).json({ error: 'Unknown device.' });
+  res.json({ ok: true });
+});
+
+// ============================================================
+// PROVIDER PLATFORM - Provider Management Endpoints
+// ============================================================
+
+// Provider Registry
+app.get('/api/providers', requireAuth, (req, res) => {
+  const category = req.query.category;
+  const withAdapters = new Set(supportedProviders());
+  res.json({
+    providers: listProviders(category).map((p) => ({ ...p, adapter: withAdapters.has(p.providerId) })),
+  });
+});
+
+// NOTE: single-segment param route /:providerId lives at the END of this
+// block — express matches in order and it would otherwise swallow
+// /credentials, /health, /routing, /usage literals.
+
+app.get('/api/providers/:providerId/models', requireAuth, (req, res) => {
+  const models = getProviderModels(req.params.providerId);
+  res.json({ models });
+});
+
+// Credential Management
+app.post('/api/providers/credentials', requireAuth, rateLimit(10, 60000), (req, res) => {
+  const { providerId, credential, metadata } = req.body || {};
+  if (!providerId || !credential) {
+    return res.status(400).json({ error: 'providerId and credential required.' });
+  }
+  
+  try {
+    const result = storeUserCredential(req.auth.userId, providerId, credential, metadata);
+    res.status(201).json(result);
+  } catch (error) {
+    res.status(400).json({ error: error.message });
+  }
+});
+
+app.get('/api/providers/credentials', requireAuth, (req, res) => {
+  const credentials = listUserCredentialProviders(req.auth.userId);
+  res.json({ credentials });
+});
+
+app.get('/api/providers/credentials/:credentialId', requireAuth, (req, res) => {
+  // Only return metadata, never the actual credential
+  const credentials = listUserCredentialProviders(req.auth.userId);
+  const credential = credentials.find(c => c.id === req.params.credentialId);
+  if (!credential) return res.status(404).json({ error: 'Credential not found.' });
+  res.json({ credential });
+});
+
+app.post('/api/providers/credentials/:credentialId/test', requireAuth, rateLimit(20, 60000), async (req, res) => {
+  const credentials = listUserCredentialProviders(req.auth.userId);
+  const credential = credentials.find(c => c.id === req.params.credentialId);
+  if (!credential) return res.status(404).json({ error: 'Credential not found.' });
+
+  // REAL test: live health check through the provider's own adapter.
+  // Result stored via setCredentialTestStatus; never echoes the secret.
+  try {
+    const adapter = getAdapter(credential.providerId);
+    if (!adapter) return res.status(400).json({ error: 'No adapter installed for this provider yet.' });
+    const h = await adapter.healthCheck(req.auth.userId);
+    setCredentialTestStatus(req.auth.userId, credential.providerId, h.status === 'healthy' ? 'valid' : 'invalid', {
+      adapter: adapter.constructor.name,
+      latencyMs: h.latency,
+      status: h.status,
+      timestamp: new Date().toISOString(),
+    });
+    recordProviderCall(credential.providerId, req.auth.userId, credential.id, h.status === 'healthy', h.latency, h.error || null);
+    res.json({ ok: h.status === 'healthy', status: h.status, latencyMs: h.latency, error: h.error || null });
+  } catch (error) {
+    res.status(400).json({ error: String(error.message || error).slice(0, 200) });
+  }
+});
+
+app.put('/api/providers/credentials/:credentialId', requireAuth, rateLimit(10, 60000), (req, res) => {
+  const { credential } = req.body || {};
+  if (!credential) {
+    return res.status(400).json({ error: 'credential required.' });
+  }
+  
+  const credentials = listUserCredentialProviders(req.auth.userId);
+  const credRecord = credentials.find(c => c.id === req.params.credentialId);
+  if (!credRecord) return res.status(404).json({ error: 'Credential not found.' });
+  
+  try {
+    const result = rotateUserCredentialById(req.auth.userId, req.params.credentialId, credential);
+    if (!result.ok) return res.status(400).json({ error: result.error });
+    res.json(result);
+  } catch (error) {
+    res.status(400).json({ error: error.message });
+  }
+});
+
+app.delete('/api/providers/credentials/:credentialId', requireAuth, (req, res) => {
+  const credentials = listUserCredentialProviders(req.auth.userId);
+  const credRecord = credentials.find(c => c.id === req.params.credentialId);
+  if (!credRecord) return res.status(404).json({ error: 'Credential not found.' });
+  
+  const result = deleteUserCredential(req.auth.userId, credRecord.providerId);
+  if (!result.ok) return res.status(400).json({ error: result.error });
+  res.json({ ok: true });
+});
+
+app.get('/api/providers/credentials/:credentialId/audit', requireAuth, (req, res) => {
+  const credentials = listUserCredentialProviders(req.auth.userId);
+  const credRecord = credentials.find(c => c.id === req.params.credentialId);
+  if (!credRecord) return res.status(404).json({ error: 'Credential not found.' });
+  
+  const auditLog = getCredentialAuditLog(req.auth.userId, credRecord.providerId);
+  res.json({ auditLog });
+});
+
+// Model Catalog
+app.get('/api/models/catalog', requireAuth, (req, res) => {
+  const criteria = {
+    providerId: req.query.providerId,
+    capability: req.query.capability,
+    availability: req.query.availability,
+    modality: req.query.modality
+  };
+  res.json({ models: listModels(criteria) });
+});
+
+app.get('/api/models/catalog/:providerId/:modelId', requireAuth, (req, res) => {
+  const model = getModel(req.params.providerId, req.params.modelId);
+  if (!model) return res.status(404).json({ error: 'Model not found.' });
+  res.json({ model });
+});
+
+app.get('/api/models/stats', requireAuth, (req, res) => {
+  res.json(getModelStats());
+});
+
+// Provider Health
+app.get('/api/providers/health', requireAuth, (req, res) => {
+  const healthManager = getHealthManager();
+  const allHealth = healthManager.getAllHealthStatuses();
+  res.json({ health: allHealth });
+});
+
+app.get('/api/providers/:providerId/health', requireAuth, (req, res) => {
+  const health = getProviderHealth(req.params.providerId);
+  res.json({ health });
+});
+
+app.get('/api/providers/health/user', requireAuth, (req, res) => {
+  const healthManager = getHealthManager();
+  const userHealth = healthManager.getUserHealthStatuses(req.auth.userId);
+  res.json({ health: userHealth });
+});
+
+// Routing prefs: default provider, ordered fallbacks, favorite models.
+// Normal users leave everything Auto; advanced users pin providers/models.
+app.get('/api/providers/routing', requireAuth, (req, res) => {
+  const p = getProfile(req.auth.userId);
+  res.json({
+    routing: {
+      defaultProvider: p.defaultProvider || null,
+      fallbackProviders: p.fallbackProviders || [],
+      favoriteModels: p.favoriteModels || [],
+      defaultModel: p.defaultModel || 'auto',
+    },
+  });
+});
+
+app.put('/api/providers/routing', requireAuth, rateLimit(20, 60000), (req, res) => {
+  const { defaultProvider, fallbackProviders, favoriteModels, defaultModel } = req.body || {};
+  if (defaultProvider !== undefined && defaultProvider !== null && !getProvider(defaultProvider)) {
+    return res.status(400).json({ error: 'Unknown provider.' });
+  }
+  if (fallbackProviders !== undefined && !Array.isArray(fallbackProviders)) {
+    return res.status(400).json({ error: 'fallbackProviders must be an array.' });
+  }
+  if (fallbackProviders && fallbackProviders.some((p) => !getProvider(p))) {
+    return res.status(400).json({ error: 'Unknown provider in fallbacks.' });
+  }
+  const profile = updateProfile(req.auth.userId, {
+    ...(defaultProvider !== undefined ? { defaultProvider } : {}),
+    ...(fallbackProviders !== undefined ? { fallbackProviders } : {}),
+    ...(favoriteModels !== undefined ? { favoriteModels } : {}),
+    ...(defaultModel !== undefined ? { defaultModel } : {}),
+  });
+  res.json({
+    routing: {
+      defaultProvider: profile.defaultProvider || null,
+      fallbackProviders: profile.fallbackProviders || [],
+      favoriteModels: profile.favoriteModels || [],
+      defaultModel: profile.defaultModel || 'auto',
+    },
+  });
+});
+
+// Usage: adapter-reported tokens/latency/counts. Cost only when reported.
+app.get('/api/providers/usage', requireAuth, (req, res) => {
+  res.json({ usage: providerUsageSummary(req.auth.userId) });
+});
+
+// Catalog sync: live model list → registry → catalog. Search/filter next.
+app.post('/api/providers/:providerId/models/refresh', requireAuth, rateLimit(10, 60000), async (req, res) => {
+  const manifest = getProvider(req.params.providerId);
+  if (!manifest) return res.status(404).json({ error: 'Provider not found.' });
+  const adapter = getAdapter(req.params.providerId);
+  if (!adapter) return res.status(400).json({ error: 'No adapter installed for this provider yet.' });
+  try {
+    const models = await adapter.listModels(req.auth.userId);
+    updateProvider(req.params.providerId, {
+      models: models.map((m) => ({
+        modelId: m.modelId,
+        displayName: m.displayName || m.modelId,
+        capabilities: Object.entries(m.capabilities || {}).filter(([, v]) => v).map(([k]) => k),
+        contextLimit: m.contextLimit || null,
+        streaming: m.streaming !== false,
+        async: m.async || false,
+        availability: m.availability || 'public',
+      })),
+    });
+    syncModelsFromRegistry({ listProviders, getProviderModels });
+    res.json({ ok: true, count: models.length, live: models.some((m) => m.live) });
+  } catch (e) {
+    res.status(400).json({ error: String((e && e.message) || e).slice(0, 200) });
+  }
+});
+
+// Help: official key/docs URLs from the registry manifest. Never invented.
+const KEY_URLS = {
+  openai: 'https://platform.openai.com/api-keys',
+  anthropic: 'https://console.anthropic.com/settings/keys',
+  gemini: 'https://aistudio.google.com/apikey',
+  openrouter: 'https://openrouter.ai/keys',
+  nvidia: 'https://build.nvidia.com/account/api-keys',
+};
+app.get('/api/providers/:providerId/help', requireAuth, (req, res) => {
+  const manifest = getProvider(req.params.providerId);
+  if (!manifest) return res.status(404).json({ error: 'Provider not found.' });
+  res.json({
+    providerId: manifest.providerId,
+    name: manifest.name,
+    keyUrl: KEY_URLS[manifest.providerId] || null,
+    docsUrl: manifest.documentationUrl || null,
+    pricingUrl: manifest.pricingUrl || null,
+    steps: ['Open Get API key', 'Create a key', 'Paste it below', 'Press Test — ready when healthy'],
+  });
+});
+
+// Single-segment detail route LAST (see note above).
+app.get('/api/providers/:providerId', requireAuth, (req, res) => {
+  const provider = getProvider(req.params.providerId);
+  if (!provider) return res.status(404).json({ error: 'Provider not found.' });
+  res.json({ provider });
+});
+
+// Account: export everything, then delete everything (documented cascade)
+app.get('/api/account/export', requireAuth, (req, res) => {
+  const u = getUser(req.auth.userId);
+  const { passHash, salt, ...pub } = u || {};
+  void passHash; void salt;
+  res.json({
+    exportedAt: new Date().toISOString(),
+    user: pub || null,
+    profile: getProfile(req.auth.userId),
+    plan: getPlan(req.auth.userId),
+    usage: usageSummary(req.auth.userId),
+    memories: exportMemories(req.auth.userId),
+    missions: listMissions(req.auth.userId),
+    investigations: listInvestigations(req.auth.userId),
+    workspaces: listWorkspaces(req.auth.userId),
+    devices: listDevices(req.auth.userId),
+    sessions: listSessions(req.auth.userId),
+  });
+});
+app.delete('/api/account', requireAuth, rateLimit(5, 60000), (req, res) => {
+  if (req.body?.confirm !== 'DELETE') return res.status(400).json({ error: 'Pass {confirm:"DELETE"} to delete the account.' });
+  const uid = req.auth.userId;
+  deleteUserMemories(uid);
+  deleteUserMissions(uid);
+  deleteUserWorld(uid);
+  deleteUserInvestigations(uid);
+  deleteUserApprovals(uid);
+  deleteUserSkills(uid);
+  deleteUserSchedules(uid);
+  deleteUserArtifacts(uid);
+  try {
+    deleteUserCredentials(uid);
+  } catch { /* none stored */ }
+  deleteProviderUsage(uid);
+  deleteUserWorkspaces(uid);
+  deleteUserDevices(uid);
+  deleteUserCredentials(uid); // Delete provider credentials
+  deleteUsage(uid);
+  deleteProfile(uid);
+  deleteUserCascade(uid);
+  res.json({ ok: true, deleted: uid });
 });
 
 // TLS when LAN certs exist (server/../certs from certs-gen.mjs) — required

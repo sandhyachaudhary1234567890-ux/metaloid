@@ -1,6 +1,7 @@
 import { AnimatePresence, motion } from 'framer-motion';
-import { Home, MessageSquare, Radio, Brain, Mic, History, Settings, Plus, X } from 'lucide-react';
+import { Home, MessageSquare, FolderKanban, Library, Mic, History, Settings, Plus, ListTodo } from 'lucide-react';
 import { useApp } from '../lib/store';
+import type { ViewId } from '../lib/types';
 import { cn } from '../lib/cn';
 
 // Mobile navigation with 48px+ touch targets, semantic theme tokens,
@@ -11,8 +12,8 @@ export function BottomNav({ onMore }: { onMore: () => void }) {
   const items = [
     { id: 'home' as const, label: 'Home', icon: Home },
     { id: 'chat' as const, label: 'Chat', icon: MessageSquare },
-    { id: 'live' as const, label: 'Live', icon: Radio },
-    { id: 'memory' as const, label: 'Memory', icon: Brain },
+    { id: 'projects' as const, label: 'Projects', icon: FolderKanban },
+    { id: 'library' as const, label: 'Library', icon: Library },
   ];
   return (
     <nav
@@ -55,8 +56,8 @@ function NavBtn({ active, label, Icon, onClick }: { active: boolean; label: stri
 }
 
 export function MobileMoreSheet({ open, onClose }: { open: boolean; onClose: () => void }) {
-  const { setView, newConversation, setVoiceOpen } = useApp();
-  const go = (v: 'history' | 'settings' | 'chat', fresh = false) => {
+  const { setView, newConversation } = useApp();
+  const go = (v: ViewId, fresh = false) => {
     if (fresh) newConversation();
     setView(v);
     onClose();
@@ -78,6 +79,9 @@ export function MobileMoreSheet({ open, onClose }: { open: boolean; onClose: () 
               </button>
               <button onClick={() => go('history')} className="w-full flex items-center gap-3 px-4 h-12 rounded-xl text-[14px] font-medium hover:bg-[var(--surface-hover)]">
                 <History size={18} /> History & past turns
+              </button>
+              <button onClick={() => go('tasks')} className="w-full flex items-center gap-3 px-4 h-12 rounded-xl text-[14px] font-medium hover:bg-[var(--surface-hover)]">
+                <ListTodo size={18} /> Tasks
               </button>
               <button onClick={() => go('settings')} className="w-full flex items-center gap-3 px-4 h-12 rounded-xl text-[14px] font-medium hover:bg-[var(--surface-hover)]">
                 <Settings size={18} /> Settings

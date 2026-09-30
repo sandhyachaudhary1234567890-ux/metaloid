@@ -18,15 +18,16 @@ export function classify(tool) {
  * Returns {allowed:true} | {allowed:false, approvalId} | {allowed:false, error}
  * Pure function of (tool, args, grants). Model output never reaches here
  * except as validated args against the tool schema.
+ * Approvals are user-scoped: only the owning user can see/decide them.
  */
-export function authorize(tool, args, grants = {}) {
+export function authorize(tool, args, grants = {}, userId = null) {
   const risk = classify(tool);
   if (risk <= RISK.reversible) return { allowed: true };
   if (risk === RISK.external && grants.external) return { allowed: true };
   if (risk === RISK.irreversible && grants.irreversible) return { allowed: true };
   const id = `apr-${Date.now().toString(36)}-${(++seq).toString(36)}`;
   approvals.set(id, {
-    id, tool: tool.name, args: sanitizeArgs(args),
+    id, userId, tool: tool.name, args: sanitizeArgs(args),
     risk: tool.risk, status: 'pending', at: new Date().toISOString(),
   });
   emit('security.approval_requested', { id, tool: tool.name, risk: tool.risk });
@@ -41,17 +42,30 @@ function sanitizeArgs(args) {
   return out;
 }
 
-export function grantApproval(id, approved, by = 'user') {
+export function grantApproval(id, approved, by = 'user', userId = null) {
   const a = approvals.get(id);
   if (!a || a.status !== 'pending') return null;
+  if (userId && a.userId !== userId) return null; // not yours — indistinguishable from missing
   a.status = approved ? 'granted' : 'denied';
   a.by = by;
   emit('security.approval_decided', { id, tool: a.tool, status: a.status, by });
   return a;
 }
 
-export function pendingApprovals() {
-  return [...approvals.values()].filter((a) => a.status === 'pending');
+export function pendingApprovals(userId = null) {
+  return [...approvals.values()]
+    .filter((a) => a.status === 'pending' && (!userId || a.userId === userId));
+}
+
+export function deleteUserApprovals(userId) {
+  let n = 0;
+  for (const [id, a] of approvals) {
+    if (a.userId === userId) {
+      approvals.delete(id);
+      n += 1;
+    }
+  }
+  return n;
 }
 
 export function checkApproval(id) {

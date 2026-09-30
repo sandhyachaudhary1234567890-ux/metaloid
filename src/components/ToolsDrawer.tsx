@@ -1,27 +1,21 @@
 import { AnimatePresence, motion } from 'framer-motion';
-import { X, Search, Calculator, StickyNote, CloudSun, Globe2, Eye, Mic, Calendar, FolderOpen, Radar, Rocket } from 'lucide-react';
+import { X, Eye, Mic, Radar, Rocket, Blocks } from 'lucide-react';
 import { useApp } from '../lib/store';
 import { cn } from '../lib/cn';
 
-// Agents & tools as a CONTEXTUAL drawer (§20, §24) — never a route.
-// Every entry does something: demo tools run in chat, providers explain.
+// Agents & tools is a contextual launcher. Every entry maps to a real UI
+// backed by a runtime; unconnected catalog entries are intentionally absent.
 
-const TOOLS: { id: string; name: string; desc: string; icon: typeof Search; run: string | null; live?: boolean; voice?: boolean; osint?: boolean; missions?: boolean }[] = [
-  { id: 'osint', name: 'OSINT investigation', desc: 'Domains, usernames, repos — cited', icon: Radar, run: null, osint: true },
-  { id: 'missions', name: 'Mission Control', desc: 'Multi-step agent missions', icon: Rocket, run: null, missions: true },
-  { id: 'search', name: 'Web Search', desc: 'Answer with live sources', icon: Search, run: 'Search the web for personal AI agents' },
-  { id: 'calc', name: 'Calculator', desc: 'Instant math, works in demo', icon: Calculator, run: 'Calculate 46 × 83' },
-  { id: 'weather', name: 'Weather', desc: 'Current conditions snapshot', icon: CloudSun, run: 'Check the weather' },
-  { id: 'notes', name: 'Notes', desc: 'Capture to memory', icon: StickyNote, run: null as string | null },
-  { id: 'browser', name: 'Browser', desc: 'Open and summarize pages', icon: Globe2, run: null },
-  { id: 'calendar', name: 'Calendar', desc: 'Events and reminders', icon: Calendar, run: null },
-  { id: 'files', name: 'Files', desc: 'Local context', icon: FolderOpen, run: null },
-  { id: 'vision', name: 'Vision', desc: 'Camera understanding', icon: Eye, run: null, live: true },
-  { id: 'voice', name: 'Voice', desc: 'Speak instead of typing', icon: Mic, run: null, voice: true },
+const TOOLS: { id: string; name: string; desc: string; icon: typeof Eye; live?: boolean; voice?: boolean; osint?: boolean; missions?: boolean; skills?: boolean }[] = [
+  { id: 'osint', name: 'Research investigation', desc: 'Domains, usernames, and repositories with recorded findings', icon: Radar, osint: true },
+  { id: 'missions', name: 'Task runtime', desc: 'Multi-step work with checkpoints and verification', icon: Rocket, missions: true },
+  { id: 'vision', name: 'Live camera', desc: 'Camera preview with permission-based capture', icon: Eye, live: true },
+  { id: 'voice', name: 'Voice conversation', desc: 'Real-time spoken dialogue in this workspace', icon: Mic, voice: true },
+  { id: 'skills', name: 'Skills', desc: 'Installed skill registry, inspection, and test mode', icon: Blocks, skills: true },
 ];
 
 export function ToolsDrawer() {
-  const { toolsOpen, setToolsOpen, sendMessage, setView, setVoiceOpen, setOsintOpen, setOsintTarget, setMissionsOpen, setMissionDraft, toast, connection } = useApp();
+  const { toolsOpen, setToolsOpen, setView, setVoiceOpen, setOsintOpen, setOsintTarget, setMissionsOpen, setMissionDraft, setSkillsOpen, connection } = useApp();
   const offline = connection !== 'online';
 
   const run = (t: (typeof TOOLS)[number]) => {
@@ -30,8 +24,7 @@ export function ToolsDrawer() {
     if (t.missions) { setMissionDraft(''); setMissionsOpen(true); return; }
     if (t.live) { setView('live'); return; }
     if (t.voice) { setVoiceOpen(true); return; }
-    if (t.run) { setView('chat'); sendMessage(t.run); return; }
-    toast({ title: `${t.name} connects with the backend`, desc: 'This prototype keeps it as a placeholder' });
+    if (t.skills) { setSkillsOpen(true); }
   };
 
   return (
@@ -68,10 +61,8 @@ export function ToolsDrawer() {
                     <span className="block text-[12.5px] text-zinc-500 truncate">{t.desc}</span>
                   </span>
                   <span className={cn('text-[10.5px] font-bold tracking-widest rounded-full px-2 py-1 border shrink-0',
-                    t.run || t.live || t.voice || t.osint || t.missions
-                      ? 'text-cyan-200 border-cyan-200/25 bg-cyan-300/[0.06]'
-                      : 'text-zinc-500 border-white/10')}>
-                    {t.run || t.live || t.voice || t.osint || t.missions ? 'TRY' : 'SOON'}
+                    'text-cyan-200 border-cyan-200/25 bg-cyan-300/[0.06]')}>
+                    OPEN
                   </span>
                 </button>
               ))}

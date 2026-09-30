@@ -52,7 +52,7 @@ function validateInputs(tool, args) {
 export async function executeTool(name, args = {}, grants = {}) {
   const tool = registry.get(name);
   if (!tool) return { ok: false, error: `Unknown tool: ${name}` };
-  const gate = authorize(tool, args, grants);
+  const gate = authorize(tool, args, grants, grants.userId || null);
   if (!gate.allowed) {
     emit('tool.denied', { tool: name, reason: gate.error });
     return { ok: false, error: gate.error, approvalId: gate.approvalId };
@@ -63,7 +63,7 @@ export async function executeTool(name, args = {}, grants = {}) {
   const t0 = Date.now();
   try {
     const result = await Promise.race([
-      tool.handler(args),
+      tool.handler(args, grants), // grants 2nd: scoped handlers read grants.userId (ignored by pure handlers)
       new Promise((_, rej) => setTimeout(() => rej(new Error(`timeout:${tool.timeoutMs}ms`)), tool.timeoutMs)),
     ]);
     const ms = Date.now() - t0;
