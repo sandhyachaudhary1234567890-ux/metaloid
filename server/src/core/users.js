@@ -202,6 +202,15 @@ export function requireAuth(req, res, next) {
   next();
 }
 
+/** Attaches req.auth from Bearer token if valid, otherwise falls back to guest context. */
+export function optionalAuth(req, res, next) {
+  const h = req.headers.authorization || '';
+  const m = h.match(/^Bearer\s+(.+)$/i);
+  const auth = m ? validateAccess(m[1].trim()) : null;
+  req.auth = auth || { userId: 'guest', role: 'guest', sessionId: 'guest' };
+  next();
+}
+
 /** Admin-only (first account / explicitly promoted). Debug surfaces only. */
 export function requireAdmin(req, res, next) {
   const u = getUser(req.auth.userId);

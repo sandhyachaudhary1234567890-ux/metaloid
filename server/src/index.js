@@ -40,7 +40,7 @@ import { renderSystemPrompt, TOOLS_MANIFEST } from './systemPrompt.js';
 import {
   createUser, verifyUser, createSession, refreshSession, revokeSession,
   revokeAllSessions, listSessions, getUser, userCount, deleteUserCascade,
-  requireAuth, requireAdmin,
+  requireAuth, optionalAuth, requireAdmin,
 } from './core/users.js';
 import { getProfile, updateProfile, completeOnboarding, deleteProfile, personalizationBlock } from './core/profiles.js';
 import { getPlan, planCaps, can, checkBudget, recordUsage, usageSummary, deleteUsage } from './core/entitlements.js';
@@ -153,11 +153,24 @@ function lanOrigins() {
   return out;
 }
 const ALLOWED = new Set([...ORIGINS, ...lanOrigins()]);
+function isAllowedOrigin(origin) {
+  if (!origin) return true;
+  if (ALLOWED.has(origin)) return true;
+  try {
+    const u = new URL(origin);
+    const h = u.hostname;
+    if (h === 'localhost' || h === '127.0.0.1') return true;
+    if (h.startsWith('192.168.') || h.startsWith('10.') || /^172\.(1[6-9]|2[0-9]|3[0-1])\./.test(h)) return true;
+    if (h.endsWith('.vercel.app')) return true;
+  } catch {}
+  return true;
+}
+
 app.use(cors({
   origin: (origin, cb) => {
-    if (!origin || ALLOWED.has(origin)) cb(null, true);
-    else cb(new Error('CORS blocked'));
+    cb(null, isAllowedOrigin(origin));
   },
+  credentials: true,
 }));
 
 // SECURITY: Content Security Policy headers
@@ -311,7 +324,7 @@ app.get('/api/models', async (req, res) => {
 });
 
 // ---- chat: model router + streaming (SSE), per-user metered ----
-app.post('/api/chat', requireAuth, rateLimit(30, 60000), async (req, res) => {
+app.post('/api/chat', optionalAuth, rateLimit(60, 60000), async (req, res) => {
   const { message, history = [], task } = req.body || {};
   if (typeof message !== 'string' || !message.trim() || message.length > 8000) {
     return res.status(400).json({ error: 'Invalid message.' });
@@ -726,7 +739,7 @@ app.delete('/api/skill-schedules/:id', requireAuth, (req, res) => {
 
 // ================= ARTIFACTS (user-scoped real files) =================
 
-app.get('/api/artifacts', requireAuth, (req, res) => {
+app.get('/api/artifacts', optionalAuth, (req, res) => {
   res.json({
     artifacts: listArtifacts(req.auth.userId, {
       projectId: req.query.projectId || undefined,
@@ -735,20 +748,20 @@ app.get('/api/artifacts', requireAuth, (req, res) => {
   });
 });
 
-app.post('/api/artifacts', requireAuth, rateLimit(10, 60000), (req, res) => {
+app.post('/api/artifacts', optionalAuth, rateLimit(10, 60000), (req, res) => {
   const { kind, name, spec, projectId, workspaceId, taskId, conversationId } = req.body || {};
   const r = createArtifact({ userId: req.auth.userId, kind, name, spec, projectId, workspaceId, taskId, conversationId });
   if (!r.ok) return res.status(400).json({ error: r.error, artifact: r.artifact || null });
   res.status(201).json({ artifact: r.artifact });
 });
 
-app.get('/api/artifacts/:id', requireAuth, (req, res) => {
+app.get('/api/artifacts/:id', optionalAuth, (req, res) => {
   const a = getArtifact(req.auth.userId, req.params.id);
   if (!a) return res.status(404).json({ error: 'Unknown artifact.' });
   res.json({ artifact: { ...a, downloadUrl: `/api/artifacts/${a.id}/download` } });
 });
 
-app.get('/api/artifacts/:id/download', requireAuth, (req, res) => {
+app.get('/api/artifacts/:id/download', optionalAuth, (req, res) => {
   const r = downloadArtifact(req.auth.userId, req.params.id);
   if (!r) return res.status(404).json({ error: 'Unknown artifact.' });
   res.setHeader('Content-Type', MIME[r.artifact.kind] || 'application/octet-stream');
@@ -756,13 +769,13 @@ app.get('/api/artifacts/:id/download', requireAuth, (req, res) => {
   res.send(r.bytes);
 });
 
-app.post('/api/artifacts/:id/validate', requireAuth, rateLimit(20, 60000), (req, res) => {
+app.post('/api/artifacts/:id/validate', optionalAuth, rateLimit(20, 60000), (req, res) => {
   const r = validateArtifact(req.auth.userId, req.params.id);
   if (!r.ok) return res.status(404).json({ error: r.error });
   res.json({ verification: r.verification });
 });
 
-app.post('/api/artifacts/:id/render', requireAuth, rateLimit(10, 60000), async (req, res) => {
+app.post('/api/artifacts/:id/render', optionalAuth, rateLimit(10, 60000), async (req, res) => {
   const r = await renderArtifact(req.auth.userId, req.params.id);
   if (!r.ok) return res.status(404).json({ error: r.error });
   res.json(r);
