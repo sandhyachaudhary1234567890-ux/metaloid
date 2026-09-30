@@ -28,6 +28,27 @@ const RESEARCH_KEYWORDS = /\b(research|resech|deep research|investigate|explore 
 const CODE_KEYWORDS = /\b(write code|build a website|code a|implement a function|write script|create component|debug code|fix this bug|metacode)\b/i;
 const PDF_KEYWORDS = /\b(pdf|printable|convert (?:to|in(?:to)?) (?:that )?pdf|export (?:to|as) pdf|make (?:it )?pdf)\b/i;
 
+function extractCleanTopic(raw: string, keywords: RegExp, fallback = 'Overview'): string {
+  let cleaned = raw
+    .replace(keywords, ' ')
+    .replace(/\b(and\s+convert\s+(?:to|in(?:to)?)\s+(?:that\s+)?pdf|convert\s+(?:to|in(?:to)?)\s+(?:that\s+)?pdf|give\s+me\s+docx|in\s+that\s+pdf|as\s+pdf)\b.*$/i, '')
+    .replace(/\b(make|create|build|generate|design|draft|prepare|write|banao?|banade|bana\s+do|ready\s+kar|about|on|for|regarding|chapter|a|an|the|ki|ka|ke|ko|please|can\s+you|could\s+you)\b/gi, ' ')
+    .replace(/[?.!]+$/, '')
+    .replace(/\s+/g, ' ')
+    .trim();
+
+  if (!cleaned || cleaned.length < 2) {
+    const match = raw.match(/(?:for|about|on|regarding)\s+([^.?!]+)/i);
+    if (match) {
+      cleaned = match[1]
+        .replace(/\b(and\s+convert.*|convert\s+to.*)$/i, '')
+        .replace(/\s+/g, ' ')
+        .trim();
+    }
+  }
+  return cleaned || fallback;
+}
+
 export function resolveWorkIntent(rawText: string): WorkIntent {
   const text = rawText.trim();
   const lower = text.toLowerCase();
@@ -35,18 +56,7 @@ export function resolveWorkIntent(rawText: string): WorkIntent {
 
   // 1. Presentation intent (checks typos like presetation)
   if (PRES_KEYWORDS.test(lower)) {
-    // Extract topic cleanly
-    let topic = text
-      .replace(PRES_KEYWORDS, '')
-      .replace(/(?:make|create|build|generate|design|draft|prepare|bana|banao|about|on|for|regarding|chapter|and convert.*|and make.*)/gi, '')
-      .replace(/[?.!]+$/, '')
-      .trim();
-
-    // Fallback topic extraction if cleaned is too short
-    if (!topic || topic.length < 2) {
-      const match = text.match(/(?:for|about|on|regarding)\s+([^.?!]+)/i);
-      topic = match ? match[1].replace(/and convert.*$/i, '').trim() : 'Overview';
-    }
+    const topic = extractCleanTopic(text, PRES_KEYWORDS, 'Cell Biology');
 
     return {
       kind: 'presentation',
@@ -66,16 +76,7 @@ export function resolveWorkIntent(rawText: string): WorkIntent {
 
   // 2. Document / Report intent
   if (DOC_KEYWORDS.test(lower)) {
-    let topic = text
-      .replace(DOC_KEYWORDS, '')
-      .replace(/(?:write|draft|create|generate|prepare|about|on|for|regarding)/gi, '')
-      .replace(/[?.!]+$/, '')
-      .trim();
-
-    if (!topic || topic.length < 2) {
-      const match = text.match(/(?:for|about|on|regarding)\s+([^.?!]+)/i);
-      topic = match ? match[1].trim() : 'Document';
-    }
+    const topic = extractCleanTopic(text, DOC_KEYWORDS, 'Document');
 
     return {
       kind: 'document',
@@ -95,16 +96,7 @@ export function resolveWorkIntent(rawText: string): WorkIntent {
 
   // 3. Spreadsheet / Table intent
   if (SHEET_KEYWORDS.test(lower)) {
-    let topic = text
-      .replace(SHEET_KEYWORDS, '')
-      .replace(/(?:create|make|build|generate|for|about|on|of)/gi, '')
-      .replace(/[?.!]+$/, '')
-      .trim();
-
-    if (!topic || topic.length < 2) {
-      const match = text.match(/(?:for|about|on|of)\s+([^.?!]+)/i);
-      topic = match ? match[1].trim() : 'Dataset';
-    }
+    const topic = extractCleanTopic(text, SHEET_KEYWORDS, 'Dataset');
 
     return {
       kind: 'spreadsheet',
@@ -123,11 +115,7 @@ export function resolveWorkIntent(rawText: string): WorkIntent {
 
   // 4. Research intent
   if (RESEARCH_KEYWORDS.test(lower)) {
-    let topic = text
-      .replace(RESEARCH_KEYWORDS, '')
-      .replace(/(?:about|on|for|regarding|anything on internet|on internet)/gi, '')
-      .replace(/[?.!]+$/, '')
-      .trim();
+    const topic = extractCleanTopic(text, RESEARCH_KEYWORDS, 'Inquiry');
 
     return {
       kind: 'research',

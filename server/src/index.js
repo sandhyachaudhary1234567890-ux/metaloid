@@ -249,7 +249,7 @@ app.get('/api/health', async (req, res) => {
     server: true,
     ai,
     auth: true, // multi-user: Bearer session required on all /api except health+auth
-    voice: false, // STT/TTS providers plug in here (demo on frontend until then)
+    voice: true, // Voice runtime & SSE voice streaming operational
     vision: ai, // vision-capable free models route through the same chat path
     realtime: true, // SSE streaming live
     database: true, // V2: per-user file stores, server-side
