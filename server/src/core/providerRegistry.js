@@ -437,6 +437,99 @@ export function initializeDefaultProviders() {
       adapterVersion: '1.0.0',
       documentationUrl: 'https://ai.google.dev/gemini-api/docs',
       pricingUrl: 'https://ai.google.dev/pricing'
+  }
+
+  // Groq
+  if (!providers['groq']) {
+    registerProvider({
+      providerId: 'groq',
+      name: 'Groq Cloud',
+      category: ProviderCategories.LLM,
+      authSchema: { type: AuthSchemaTypes.API_KEY, credentialType: 'string', documentationUrl: 'https://console.groq.com/docs/quickstart' },
+      capabilities: { streaming: true, async: false, webhooks: false, contextLimit: 128000, maxOutputTokens: 8192, supportedModalities: ['text'] },
+      models: [
+        { modelId: 'llama-3.3-70b-versatile', displayName: 'Llama 3.3 70B Versatile', capabilities: ['text', 'tool-use', 'streaming'], contextLimit: 128000 },
+        { modelId: 'llama-3.1-8b-instant', displayName: 'Llama 3.1 8B Instant', capabilities: ['text', 'tool-use', 'streaming'], contextLimit: 128000 }
+      ],
+      healthCheck: { endpoint: 'https://api.groq.com/openai/v1/models', method: 'GET', timeout: 5000, healthyStatus: [200] },
+      adapterVersion: '1.0.0',
+      documentationUrl: 'https://console.groq.com/docs/quickstart',
+      pricingUrl: 'https://groq.com/pricing'
+    });
+  }
+
+  // DeepSeek
+  if (!providers['deepseek']) {
+    registerProvider({
+      providerId: 'deepseek',
+      name: 'DeepSeek',
+      category: ProviderCategories.LLM,
+      authSchema: { type: AuthSchemaTypes.API_KEY, credentialType: 'string', documentationUrl: 'https://platform.deepseek.com/api-docs' },
+      capabilities: { streaming: true, async: false, webhooks: false, contextLimit: 64000, maxOutputTokens: 8192, supportedModalities: ['text'] },
+      models: [
+        { modelId: 'deepseek-chat', displayName: 'DeepSeek-V3', capabilities: ['text', 'tool-use', 'streaming'], contextLimit: 64000 },
+        { modelId: 'deepseek-reasoner', displayName: 'DeepSeek-R1', capabilities: ['text', 'reasoning', 'streaming'], contextLimit: 64000 }
+      ],
+      healthCheck: { endpoint: 'https://api.deepseek.com/v1/models', method: 'GET', timeout: 5000, healthyStatus: [200] },
+      adapterVersion: '1.0.0',
+      documentationUrl: 'https://platform.deepseek.com/api-docs',
+      pricingUrl: 'https://platform.deepseek.com/pricing'
+    });
+  }
+
+  // Mistral
+  if (!providers['mistral']) {
+    registerProvider({
+      providerId: 'mistral',
+      name: 'Mistral AI',
+      category: ProviderCategories.LLM,
+      authSchema: { type: AuthSchemaTypes.API_KEY, credentialType: 'string', documentationUrl: 'https://docs.mistral.ai' },
+      capabilities: { streaming: true, async: false, webhooks: false, contextLimit: 128000, maxOutputTokens: 8192, supportedModalities: ['text', 'vision'] },
+      models: [
+        { modelId: 'mistral-small-latest', displayName: 'Mistral Small', capabilities: ['text', 'tool-use', 'streaming'], contextLimit: 32768 },
+        { modelId: 'codestral-latest', displayName: 'Codestral', capabilities: ['text', 'code', 'streaming'], contextLimit: 32768 }
+      ],
+      healthCheck: { endpoint: 'https://api.mistral.ai/v1/models', method: 'GET', timeout: 5000, healthyStatus: [200] },
+      adapterVersion: '1.0.0',
+      documentationUrl: 'https://docs.mistral.ai',
+      pricingUrl: 'https://mistral.ai/pricing'
+    });
+  }
+
+  // Ollama (Local)
+  if (!providers['ollama']) {
+    registerProvider({
+      providerId: 'ollama',
+      name: 'Ollama (Local)',
+      category: ProviderCategories.LLM,
+      authSchema: { type: AuthSchemaTypes.CUSTOM, credentialType: 'string', documentationUrl: 'https://ollama.com' },
+      capabilities: { streaming: true, async: false, webhooks: false, contextLimit: 128000, maxOutputTokens: 8192, supportedModalities: ['text', 'vision'] },
+      models: [
+        { modelId: 'llama3.2', displayName: 'Llama 3.2 (Local)', capabilities: ['text', 'streaming'], contextLimit: 128000 },
+        { modelId: 'mistral', displayName: 'Mistral (Local)', capabilities: ['text', 'streaming'], contextLimit: 32768 }
+      ],
+      healthCheck: { endpoint: 'http://localhost:11434/v1/models', method: 'GET', timeout: 3000, healthyStatus: [200] },
+      adapterVersion: '1.0.0',
+      documentationUrl: 'https://ollama.com',
+      pricingUrl: 'https://ollama.com'
+    });
+  }
+
+  // LM Studio (Local)
+  if (!providers['lmstudio']) {
+    registerProvider({
+      providerId: 'lmstudio',
+      name: 'LM Studio (Local)',
+      category: ProviderCategories.LLM,
+      authSchema: { type: AuthSchemaTypes.CUSTOM, credentialType: 'string', documentationUrl: 'https://lmstudio.ai' },
+      capabilities: { streaming: true, async: false, webhooks: false, contextLimit: 32768, maxOutputTokens: 4096, supportedModalities: ['text'] },
+      models: [
+        { modelId: 'loaded-model', displayName: 'Loaded Model', capabilities: ['text', 'streaming'], contextLimit: 32768 }
+      ],
+      healthCheck: { endpoint: 'http://localhost:1234/v1/models', method: 'GET', timeout: 3000, healthyStatus: [200] },
+      adapterVersion: '1.0.0',
+      documentationUrl: 'https://lmstudio.ai',
+      pricingUrl: 'https://lmstudio.ai'
     });
   }
 }

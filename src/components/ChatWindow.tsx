@@ -12,6 +12,7 @@ import { ArtifactCard } from './ArtifactCard';
 import { MinimalActivity } from './MinimalActivity';
 import type { PlatformArtifactPayload } from '../lib/artifacts/artifactGenerator';
 import { cn } from '../lib/cn';
+import { AiSetupModal } from './setup/AiSetupModal';
 
 // Editorial conversation surface: user turns are clean elevated prompt blocks,
 // assistant turns are pure editorial typography. Intelligent autoscroll,
@@ -132,13 +133,15 @@ const AssistantBubble = memo(function AssistantBubble({
   isLast,
   interactive = true,
   onOpenWorkspace,
+  onOpenSetup,
 }: {
   msg: ChatMessage;
   isLast: boolean;
   interactive?: boolean;
   onOpenWorkspace?: (payload: PlatformArtifactPayload) => void;
+  onOpenSetup?: () => void;
 }) {
-  const { toast, regenerate, setFeedback, setVersionIndex, retryFailed, isGenerating } = useApp();
+  const { toast, regenerate, setFeedback, setVersionIndex, retryFailed, isGenerating, setView } = useApp();
   const versions = msg.versions ?? [];
   const shown = msg.versionIndex !== undefined && msg.versionIndex >= 0 ? versions[msg.versionIndex] ?? msg.content : msg.content;
   const hasTool = (msg.toolActivity?.length ?? 0) > 0 && (msg.versionIndex === undefined || msg.versionIndex < 0);
@@ -146,12 +149,28 @@ const AssistantBubble = memo(function AssistantBubble({
   if (msg.error && !msg.content) {
     return (
       <motion.div initial={{ opacity: 0, y: 8 }} animate={{ opacity: 1, y: 0 }} className="flex justify-start">
-        <div className="rounded-xl border border-red-500/25 bg-red-500/[0.06] px-4 py-3 max-w-[94%] sm:max-w-[84%]">
-          <p className="text-[13.5px] font-medium text-red-400">Response could not be completed.</p>
-          <p className="text-[12.5px] text-[var(--fg-muted)] mt-1">The request was interrupted. Your input is preserved above.</p>
-          <button onClick={() => retryFailed(msg.id)} className="btn-ghost h-8 px-3 text-[12.5px] mt-2.5">
-            <RotateCcw size={12} /> Retry
-          </button>
+        <div className="rounded-xl border border-red-500/25 bg-red-500/[0.06] p-4 max-w-[94%] sm:max-w-[84%]">
+          <p className="text-[13.5px] font-semibold text-red-300">Connect an AI model to continue.</p>
+          <p className="text-[12.5px] text-[var(--fg-muted)] mt-1 leading-relaxed">
+            MetaIoid needs an active AI connection to generate responses. Connect a free model or your own API key.
+          </p>
+          <div className="flex flex-wrap items-center gap-2 mt-3">
+            <button
+              onClick={() => onOpenSetup?.()}
+              className="btn-primary h-8 px-3 text-[12px] font-semibold"
+            >
+              Set Up AI
+            </button>
+            <button
+              onClick={() => setView('settings')}
+              className="btn-ghost h-8 px-3 text-[12px]"
+            >
+              Choose Provider
+            </button>
+            <button onClick={() => retryFailed(msg.id)} className="btn-ghost h-8 px-3 text-[12px]">
+              <RotateCcw size={12} /> Retry
+            </button>
+          </div>
         </div>
       </motion.div>
     );

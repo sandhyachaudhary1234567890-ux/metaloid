@@ -20,6 +20,7 @@ export function ChatScreen() {
     activeConv, status, isGenerating, stopGenerating, detectedLang,
     newConversation, setView, openModal, renameConversation, language,
     connection, sidebarCollapsed, setSidebarCollapsed, setMobileSidebarOpen,
+    authUser,
   } = useApp();
   const messages = activeConv?.messages ?? [];
   const [moreOpen, setMoreOpen] = useState(false);
@@ -145,35 +146,36 @@ export function ChatScreen() {
             <div className="min-h-full flex flex-col justify-center max-w-[640px] w-full mx-auto px-6 py-10">
               <motion.div initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }} transition={{ duration: 0.35 }}>
                 <h1 className="font-bold tracking-tight text-[28px] sm:text-[34px] text-[var(--fg)]">
-                  {greet}, Aryan.
+                  {authUser?.displayName?.trim() ? `${greet}, ${authUser.displayName.trim()}.` : 'MetaIoid'}
                   <br />
                   <span className="text-[var(--fg-muted)] font-normal text-[22px] sm:text-[26px]">What are we working on?</span>
                 </h1>
-                <p className="mt-3 text-[14px] text-[var(--fg-muted)]">
-                  Select a prompt below or type your inquiry to begin.
+                <p className="mt-2 text-[14px] text-[var(--fg-muted)]">
+                  Ask a question, investigate a topic, or work through complex code.
                 </p>
-                <div className="mt-6 grid sm:grid-cols-3 gap-2.5">
+                <div className="mt-6 grid sm:grid-cols-2 gap-2.5">
                   {[
-                    'Make a presentation about afforestation',
-                    'Write a report on renewable energy solutions',
-                    'Create a spreadsheet for quarterly budget matrix',
-                  ].map((prompt, i) => (
+                    { label: 'Ask anything', prompt: 'Explain the core principles of quantum error correction simply' },
+                    { label: 'Research deeply', prompt: 'Research recent breakthroughs in solid-state battery technology' },
+                    { label: 'Work with code', prompt: 'Write a high-performance TypeScript debounce function with tests' },
+                    { label: 'Think through a problem', prompt: 'Help me break down and design a scalable event-driven architecture' },
+                  ].map((item, i) => (
                     <motion.button
-                      key={prompt}
-                      initial={{ opacity: 0, y: 8 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.1 + i * 0.06 }}
+                      key={item.label}
+                      initial={{ opacity: 0, y: 8 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.08 + i * 0.05 }}
                       onClick={() => {
                         draftN.current += 1;
-                        setDraft({ text: prompt, n: draftN.current });
+                        setDraft({ text: item.prompt, n: draftN.current });
                       }}
-                      className="group relative rounded-xl border border-[var(--border)] bg-[var(--surface)] p-3.5 pr-8 text-left text-[13px] leading-snug text-[var(--fg)] transition-all hover:bg-[var(--surface-hover)] hover:border-[var(--border-strong)] min-h-[80px]"
+                      className="group relative rounded-xl border border-[var(--border)] bg-[var(--surface)] p-3.5 pr-8 text-left transition-all hover:bg-[var(--surface-hover)] hover:border-[var(--border-strong)] min-h-[72px]"
                     >
-                      {prompt}
+                      <span className="block text-[13.5px] font-semibold text-[var(--fg)]">{item.label}</span>
+                      <span className="block text-[12px] text-[var(--fg-muted)] mt-0.5 line-clamp-1">{item.prompt}</span>
                       <ArrowRight
                         size={14}
                         aria-hidden
-                        className="absolute right-3 bottom-3 text-[var(--accent)] opacity-0 -translate-x-1.5 transition-all group-hover:opacity-100 group-hover:translate-x-0 group-focus-within:opacity-100 group-focus-within:translate-x-0"
+                        className="absolute right-3 top-1/2 -translate-y-1/2 text-[var(--accent)] opacity-0 -translate-x-1.5 transition-all group-hover:opacity-100 group-hover:translate-x-0"
                       />
-                      <span className="sr-only">Fill composer with suggestion</span>
                     </motion.button>
                   ))}
                 </div>

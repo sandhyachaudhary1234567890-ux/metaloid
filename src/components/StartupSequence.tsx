@@ -1,9 +1,9 @@
-import { MetalCubeStartup } from './animations/MetalCubeStartup';
+import { MetaIoidBoot } from './animations/MetaIoidBoot';
 
 /**
- * StartupSequence — Flagship 4-Second Metal Cube Awakening
- * Type 1: 3D Reflection Metal Cube rotating 360° for 4 seconds with engraved
- * METALOID branding, reflection floor, and precision loading progress bar.
+ * StartupSequence — Flagship MetaIoid Awakening
+ * 5-stage progressive reveal: Dark canvas -> Brand mark -> Real capability checks
+ * -> LIVE state ("METAIOID | ● LIVE", "Ready · Listening for you") -> Seamless handoff.
  */
 export function StartupSequence({
   onDone,
@@ -11,5 +11,5 @@ export function StartupSequence({
   frameSrcs?: string[];
   onDone: () => void;
 }) {
-  return <MetalCubeStartup onDone={onDone} />;
+  return <MetaIoidBoot onDone={onDone} />;
 }

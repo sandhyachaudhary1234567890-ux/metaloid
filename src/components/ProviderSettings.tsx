@@ -9,6 +9,9 @@ import {
 } from '../lib/transport';
 import { cn } from '../lib/cn';
 
+import { AiSetupModal } from './setup/AiSetupModal';
+import { Sparkles, Plus } from 'lucide-react';
+
 // Settings → AI Providers: connect keys, test health, default/fallback
 // routing, rotate/disconnect, usage. Raw secrets never render — the API
 // only returns redacted identities.
@@ -26,6 +29,7 @@ export function ProviderSettings() {
   const [keyInput, setKeyInput] = useState('');
   const [busy, setBusy] = useState('');
   const [testing, setTesting] = useState<Record<string, { ok: boolean; status: string; latencyMs: number }>>({});
+  const [showDiscovery, setShowDiscovery] = useState(false);
 
   const load = useCallback(async () => {
     if (!online) return;
@@ -151,6 +155,33 @@ export function ProviderSettings() {
 
   return (
     <div>
+      <div className="mb-4 flex items-center justify-between">
+        <div>
+          <h3 className="text-[15px] font-semibold text-[var(--fg)]">AI Connections</h3>
+          <p className="text-[12.5px] text-[var(--fg-muted)]">Configure verified free models, cloud frontier APIs, or local AI.</p>
+        </div>
+        <button
+          onClick={() => setShowDiscovery(true)}
+          className="btn-primary h-9 px-3.5 text-[12.5px] flex items-center gap-1.5 shrink-0"
+        >
+          <Sparkles size={14} /> Discover 50+ Providers & Free AI
+        </button>
+      </div>
+
+      {showDiscovery && (
+        <div className="fixed inset-0 z-50 bg-black/70 backdrop-blur-sm flex items-center justify-center p-4">
+          <div className="w-full max-w-[620px] max-h-[92vh] overflow-y-auto">
+            <AiSetupModal
+              canSkip={true}
+              onComplete={() => {
+                setShowDiscovery(false);
+                load();
+              }}
+            />
+          </div>
+        </div>
+      )}
+
       <SettingsRow
         label="Routing"
         hint="Auto uses your default, then fallbacks, then any healthy provider"

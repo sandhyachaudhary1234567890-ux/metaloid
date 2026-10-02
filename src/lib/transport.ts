@@ -146,25 +146,27 @@ export async function streamChat(
   onToken: (partial: string) => void
 ): Promise<StreamResult> {
   const plan = planResponse(prompt);
-  // reachability with the same scheme fallback as checkBackend, so a stale
-  // stored URL (http vs https) never silently forces demo mode
-  const base = baseOf(opts.configuredUrl);
+  // reachability check: test candidates (resolved, same-origin reverse proxy, primary, alt)
+  const currentOrigin = typeof window !== 'undefined' && window.location ? window.location.origin : '';
+  const candidates: string[] = [];
+  if (resolved && !candidates.includes(resolved)) candidates.push(resolved);
+  if (currentOrigin && !candidates.includes(currentOrigin)) candidates.push(currentOrigin);
+  const primary = rawBase(opts.configuredUrl);
+  if (primary && !candidates.includes(primary)) candidates.push(primary);
+  const alt = altOf(primary);
+  if (alt && !candidates.includes(alt)) candidates.push(alt);
 
   let reachableBase: string | null = null;
-  try {
-    const h = await fetchTimeout(`${base}/api/health`, 4000);
-    if (h.ok) reachableBase = base;
-  } catch { /* try alt below */ }
-  if (!reachableBase) {
-    const alt = altOf(base);
-    if (alt) {
-      try {
-        const h = await fetchTimeout(`${alt}/api/health`, 4000);
-        if (h.ok) {
-          reachableBase = alt;
-          resolved = alt;
-        }
-      } catch { /* demo path */ }
+  for (const cand of candidates) {
+    try {
+      const h = await fetchTimeout(`${cand}/api/health`, 4000);
+      if (h.ok) {
+        reachableBase = cand;
+        resolved = cand;
+        break;
+      }
+    } catch {
+      /* try next candidate */
     }
   }
 

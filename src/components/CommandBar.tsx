@@ -66,13 +66,32 @@ export function CommandBar({
   injected?: { text: string; n: number } | null;
 }) {
   const { sendMessage, isGenerating, stopGenerating, setVoiceOpen, setView, setPaletteOpen, toast, connection, model, setModel } = useApp();
-  const [value, setValue] = useState('');
+  const [value, setValue] = useState(() => {
+    try {
+      return sessionStorage.getItem('metaloid_composer_draft') || '';
+    } catch {
+      return '';
+    }
+  });
   const [focused, setFocused] = useState(false);
   const [atts, setAtts] = useState<Attachment[]>([]);
   const [dragging, setDragging] = useState(false);
   const [toolsOpen, setToolsOpen] = useState(false);
   const [modeOpen, setModeOpen] = useState(false);
   const taRef = useRef<HTMLTextAreaElement>(null);
+
+  // Sync draft to sessionStorage
+  useEffect(() => {
+    try {
+      if (value.trim()) {
+        sessionStorage.setItem('metaloid_composer_draft', value);
+      } else {
+        sessionStorage.removeItem('metaloid_composer_draft');
+      }
+    } catch {
+      // ignore
+    }
+  }, [value]);
   const fileRef = useRef<HTMLInputElement>(null);
   const offline = connection !== 'online';
   const menuModes = availableModes ?? DEFAULT_MODES;
@@ -159,6 +178,7 @@ export function CommandBar({
     const files = atts;
     setValue('');
     setAtts([]);
+    try { sessionStorage.removeItem('metaloid_composer_draft'); } catch { /* ignore */ }
     if (taRef.current) taRef.current.style.height = 'auto';
     sendMessage(v, { attachments: files });
     setView('chat');

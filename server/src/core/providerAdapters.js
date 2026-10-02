@@ -661,9 +661,47 @@ export class GeminiAdapter extends ProviderAdapter {
   }
 }
 
+// ---------------- Generic OpenAI-Compatible Adapter ----------------
+
+export class OpenAICompatibleGenericAdapter extends OpenAIAdapter {
+  constructor(providerId, baseUrl, vault = credentialVault) {
+    super(vault);
+    this.providerId = providerId;
+    this.baseUrl = baseUrl;
+    this.provider = getProvider(providerId) || { providerId, name: providerId };
+  }
+
+  async validateCredential(credential) {
+    if (this.providerId === 'ollama' || this.providerId === 'lmstudio' || this.providerId === 'vllm') {
+      return { valid: true };
+    }
+    if (typeof credential !== 'string' || credential.trim().length < 4) {
+      return { valid: false, error: 'API key required.' };
+    }
+    return { valid: true };
+  }
+}
+
 // ---------------- factory ----------------
 
 import { OpenRouterAdapter, NvidiaAdapter } from './providerAdapter.js';
+import { getProvider } from './providerRegistry.js';
+
+const GENERIC_ENDPOINTS = {
+  groq: 'https://api.groq.com/openai/v1',
+  cerebras: 'https://api.cerebras.ai/v1',
+  mistral: 'https://api.mistral.ai/v1',
+  deepseek: 'https://api.deepseek.com/v1',
+  sambanova: 'https://api.sambanova.ai/v1',
+  together: 'https://api.together.xyz/v1',
+  fireworks: 'https://api.fireworks.ai/inference/v1',
+  cohere: 'https://api.cohere.ai/v1',
+  deepinfra: 'https://api.deepinfra.com/v1/openai',
+  github_models: 'https://models.inference.ai.azure.com',
+  ollama: 'http://localhost:11434/v1',
+  lmstudio: 'http://localhost:1234/v1',
+  vllm: 'http://localhost:8000/v1',
+};
 
 const CLASSES = {
   openai: OpenAIAdapter,
@@ -674,12 +712,15 @@ const CLASSES = {
 };
 
 export function supportedProviders() {
-  return Object.keys(CLASSES);
+  return [...Object.keys(CLASSES), ...Object.keys(GENERIC_ENDPOINTS)];
 }
 
 /** Adapter instance bound to the (server-side) credential vault facade. */
 export function getAdapter(providerId) {
   const Cls = CLASSES[providerId];
-  if (!Cls) return null;
-  return new Cls(credentialVault);
+  if (Cls) return new Cls(credentialVault);
+  if (GENERIC_ENDPOINTS[providerId]) {
+    return new OpenAICompatibleGenericAdapter(providerId, GENERIC_ENDPOINTS[providerId], credentialVault);
+  }
+  return null;
 }
