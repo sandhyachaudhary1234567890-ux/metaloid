@@ -265,6 +265,7 @@ export function ChatWindow({
   const scrollRef = useRef<HTMLDivElement>(null);
   const [stick, setStick] = useState(true);
   const [showJump, setShowJump] = useState(false);
+  const [setupOpen, setSetupOpen] = useState(false);
   const { status, statusText } = useApp();
   const stickRef = useRef(true);
   stickRef.current = stick;
@@ -329,6 +330,7 @@ export function ChatWindow({
                   isLast={i === lastAsstIdx}
                   interactive={!live}
                   onOpenWorkspace={onOpenWorkspace}
+                  onOpenSetup={() => setSetupOpen(true)}
                 />
               )
             )}
@@ -350,6 +352,17 @@ export function ChatWindow({
           </motion.button>
         )}
       </AnimatePresence>
+
+      {setupOpen && (
+        <div className="fixed inset-0 z-50 bg-black/75 backdrop-blur-sm flex items-center justify-center p-4">
+          <div className="w-full max-w-[620px] max-h-[92vh] overflow-y-auto">
+            <AiSetupModal
+              canSkip={true}
+              onComplete={() => setSetupOpen(false)}
+            />
+          </div>
+        </div>
+      )}
     </div>
   );
 }

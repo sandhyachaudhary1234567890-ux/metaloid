@@ -92,7 +92,7 @@ export function MetaIoidBoot({ onDone }: { onDone: () => void }) {
       let voiceOk = false;
       let micPermitted = false;
       try {
-        if ('mediaDevices' in navigator && navigator.mediaDevices.getUserMedia) {
+        if ('mediaDevices' in navigator && typeof navigator.mediaDevices.getUserMedia === 'function') {
           voiceOk = true;
           if (navigator.permissions && navigator.permissions.query) {
             const p = await navigator.permissions.query({ name: 'microphone' as PermissionName }).catch(() => null);

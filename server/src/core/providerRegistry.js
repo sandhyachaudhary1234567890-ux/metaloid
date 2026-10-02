@@ -437,6 +437,7 @@ export function initializeDefaultProviders() {
       adapterVersion: '1.0.0',
       documentationUrl: 'https://ai.google.dev/gemini-api/docs',
       pricingUrl: 'https://ai.google.dev/pricing'
+    });
   }
 
   // Groq
