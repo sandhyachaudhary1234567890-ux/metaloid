@@ -130,15 +130,23 @@ function buildRuntimeContext(c = {}, personalization = '') {
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 // minimal .env loader (no dependency)
-try {
-  const envPath = path.join(__dirname, '..', '.env');
-  if (fs.existsSync(envPath)) {
-    for (const line of fs.readFileSync(envPath, 'utf8').split('\n')) {
-      const m = line.match(/^\s*([A-Z_]+)\s*=\s*(.*)\s*$/);
-      if (m && !process.env[m[1]]) process.env[m[1]] = m[2].trim();
+//
+// Skipped when METALOID_NO_DOTENV is set. Tests spawn this file with an
+// explicit environment and must be hermetic: without the escape hatch, a
+// developer's real `server/.env` silently changes what they are testing — a
+// live Supabase URL leaking in once turned a self-contained suite into one
+// that sat for five minutes trying to fetch a JWKS over a blocked network.
+if (!process.env.METALOID_NO_DOTENV) {
+  try {
+    const envPath = path.join(__dirname, '..', '.env');
+    if (fs.existsSync(envPath)) {
+      for (const line of fs.readFileSync(envPath, 'utf8').split('\n')) {
+        const m = line.match(/^\s*([A-Z_]+)\s*=\s*(.*)\s*$/);
+        if (m && !process.env[m[1]]) process.env[m[1]] = m[2].trim();
+      }
     }
-  }
-} catch { /* env optional */ }
+  } catch { /* env optional */ }
+}
 
 const PORT = Number(process.env.PORT || 8787);
 const DATA_DIR = process.env.METALOID_DATA_DIR || path.join(__dirname, '..', 'data');
@@ -303,6 +311,35 @@ process.on('unhandledRejection', (e) => {
 process.on('uncaughtException', (e) => {
   console.error('[uncaughtException]', String((e && e.stack) || e).slice(0, 500));
   process.exitCode = 1;
+});
+
+// ---- no request may hang unanswered ----
+// Express 4 does not catch a rejected async handler. The promise rejects, the
+// process logs [unhandledRejection], and no response is ever written — so the
+// client waits indefinitely and the user sees a permanent "Thinking…" with no
+// error and nothing to retry. That is exactly the state the product is not
+// allowed to reach, and it was reachable: POST /api/missions awaited nothing
+// and called .map on a promise, so it could never answer a single request.
+//
+// A bug must surface as an error rather than as silence. This is a backstop,
+// not a licence to be slow: the cap sits under the platform's own function
+// limit so our message wins the race. Streaming routes are untouched — they
+// send headers immediately, and this only fires when nothing has been written.
+const RESPONSE_TIMEOUT_MS = Number(process.env.METALOID_RESPONSE_TIMEOUT_MS || 50_000);
+app.use((req, res, next) => {
+  const timer = setTimeout(() => {
+    if (res.headersSent || res.writableEnded) return;
+    console.error(`[timeout] ${req.method} ${req.originalUrl} produced no response in ${RESPONSE_TIMEOUT_MS}ms`);
+    res.status(504).json({
+      error: 'The request took too long and was stopped. Please try again.',
+      code: 'upstream_timeout',
+    });
+  }, RESPONSE_TIMEOUT_MS);
+  if (typeof timer.unref === 'function') timer.unref();
+  const done = () => clearTimeout(timer);
+  res.on('finish', done);
+  res.on('close', done);
+  next();
 });
 
 // Root: friendly status instead of "Cannot GET /" when opened in a browser.
@@ -1181,10 +1218,13 @@ app.post('/api/missions', requireAuth, rateLimit(10, 60000), async (req, res) =>
   const caps = planCaps(req.auth.userId);
   const codeSkills = Array.isArray(skillIds) && skillIds.length ? skillIds : discoverSkills(objective);
   // user-skill discovery: project/user packages join code skills in planning
-  const discovered = discoverFor(req.auth.userId, objective, { workspaceId: req.body?.workspaceId, projectId: req.body?.projectId }).map((c) => c.skillId);
+    const discovered = (await discoverFor(req.auth.userId, objective, { workspaceId: req.body?.workspaceId, projectId: req.body?.projectId })).map((c) => c.skillId);
   const allSkills = [...codeSkills, ...discovered.filter((id) => !codeSkills.includes(id))].slice(0, 8);
   const tasks = planMission(objective, codeSkills);
-  const m = createMission({
+  // `createMission` is async — it writes the mission through the data layer.
+  // Without the await this returned a Promise, which serialised to `{}`, so
+  // every created mission came back as an empty object with a 201.
+  const m = await createMission({
     userId: req.auth.userId, objective, constraints, tasks, skillIds: allSkills,
     budgets: { maxMs: caps.maxMissionMs, maxSteps: caps.maxMissionSteps },
   });

@@ -84,12 +84,12 @@ async function boot(opts = {}) {
   const dataDir = fs.mkdtempSync(path.join('/tmp', 'metaloid-test-'));
   const env = {
     ...process.env,
+      METALOID_NO_DOTENV: '1',
     PORT: String(gatewayPort),
     BIND_HOST: '127.0.0.1',
     OPENROUTER_API_KEY: 'test-key-0123456789',
     OPENROUTER_BASE: 'http://127.0.0.1:1/api/v1', // catalogue unreachable → deterministic
     NVIDIA_ENABLED: 'false',
-    METALOID_DATA_DRIVER: 'local',
     METALOID_DATA_DIR: dataDir,
     SUPABASE_JWT_PUBLIC_KEY: PUBLIC_PEM,
     SUPABASE_JWT_AUDIENCE: 'authenticated',

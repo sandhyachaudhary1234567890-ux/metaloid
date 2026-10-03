@@ -38,6 +38,74 @@ be re-runnable.
 
 Never edit an applied migration. Every change is a new numbered file.
 
+### Applying them without the CLI
+
+Nine files is nine paste operations, and the one you forget is the one that
+matters. `bootstrap.sql` is all of them concatenated in order, so a fresh
+project is one paste:
+
+```bash
+node supabase/build-bootstrap.mjs        # regenerate after editing a migration
+node supabase/build-bootstrap.mjs --check # exit 1 if bootstrap.sql is stale
+```
+
+Open the project → **SQL Editor** → New query → paste `supabase/bootstrap.sql`
+→ **Run**. It is idempotent: run it again after a later migration is added and
+it applies only what is new.
+
+`bootstrap.sql` is generated. Editing it directly is a change that the next
+regeneration deletes, and `--check` exists so that cannot go unnoticed —
+`supabase/tests/bootstrap.pglite.mjs` fails the suite when the bundle and the
+migrations disagree, and also applies the bundle to a real PostgreSQL engine to
+confirm every table, column, bucket and policy the gateway queries actually
+exists.
+
+## Connecting a real project, end to end
+
+1. **Create the project**, then apply the schema with one of the two routes
+   above (`supabase db push`, or paste `bootstrap.sql`).
+2. **Connect it to the gateway.** Copy the values into `server/.env` (gitignored
+   — never into a file that is committed, and never into anything the browser
+   loads):
+
+   | From the dashboard | Into |
+   | --- | --- |
+   | Project Settings → API → Project URL | `SUPABASE_URL` |
+   | Project Settings → API → anon / publishable key | `SUPABASE_ANON_KEY` *(browser only, via `.env.local`)* |
+   | Project Settings → API → service_role / secret key | `SUPABASE_SERVICE_ROLE_KEY` *(server only)* |
+   | Project Settings → API → JWT Settings → JWKS URL | `SUPABASE_JWKS_URL` |
+   | Connect → Transaction pooler | `SUPABASE_DB_POOL_URL` |
+
+   The pooler string looks like
+   `postgresql://postgres.<ref>:[YOUR-PASSWORD]@aws-0-<region>.pooler.supabase.com:6543/postgres`.
+   `[YOUR-PASSWORD]` is the database password you set when the project was
+   created; it is not shown again and is not the same as any API key. If it is
+   lost, reset it under Project Settings → Database.
+3. **Generate the encryption key** and put it in `METALOID_ENCRYPTION_KEYS`:
+
+   ```bash
+   openssl rand -base64 32
+   ```
+
+   Production must use the same value, or keys saved in one environment cannot
+   be decrypted in the other.
+4. **Check the configuration before deploying**, without contacting anything:
+
+   ```bash
+   node server/tools/preflight.mjs --env server/.env --production
+   ```
+
+   It exits non-zero on anything that would silently lose data or serve the
+   wrong thing, and separates blockers (`✖`) from warnings (`!`).
+5. **Verify against the live project:**
+
+   ```bash
+   node server/tests/supabase-mode.cjs
+   ```
+
+   This is the one matrix that uses the real database; it skips with an
+   explanation until `SUPABASE_DB_POOL_URL` is set.
+
 ## Verify it, don't trust it
 
 Both checks run the real migrations against a real PostgreSQL engine and try to

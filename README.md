@@ -209,7 +209,7 @@ are encrypted with `METALOID_ENCRYPTION_KEYS`, and are never returned —
 | `SUPABASE_SERVICE_ROLE_KEY` | **server-only** | bypasses RLS; used for signing private objects, storage cleanup and account deletion |
 | `SUPABASE_JWKS_URL` (+ `_ISSUER`, `_AUDIENCE`) | server-only | verifies user JWTs without a shared secret |
 | `METALOID_ENCRYPTION_KEYS`, `_ACTIVE` | **server-only** | encrypts stored provider keys (`openssl rand -base64 32`) |
-| `METALOID_DATA_DRIVER`, `METALOID_DATA_DIR` | server-only | `supabase` in production, `local` for the demo |
+| `SUPABASE_DB`, `SUPABASE_DB_POOL_URL`, `METALOID_DATA_DIR` | server-only | `SUPABASE_DB=supabase` selects Postgres; anything else is the local JSON store under `METALOID_DATA_DIR` |
 | `ALLOW_ORIGINS`, `BIND_HOST`, `PORT` | server-only | CORS allow-list and listen address |
 
 The full matrix — every variable classified PUBLIC / SERVER-ONLY / OPTIONAL /
@@ -385,7 +385,7 @@ in-memory missions, OSINT jobs, long SSE streams — it cannot be serverless):
 | `SUPABASE_SERVICE_ROLE_KEY` | **server-only** — object signing, deletion |
 | `SUPABASE_JWKS_URL` (+ `_ISSUER`, `_AUDIENCE`) | verifies user JWTs |
 | `METALOID_ENCRYPTION_KEYS` / `_ACTIVE` | `openssl rand -base64 32`, rotation-friendly |
-| `METALOID_DATA_DRIVER` | `supabase` in production, `local` for the demo |
+| `SUPABASE_DB` + `SUPABASE_DB_POOL_URL` | selects and reaches Postgres; without both the gateway falls back to the local JSON store |
 
 Health check: `GET /api/health` reports `database`, `auth`, `provider_configured`,
 `provider_healthy` and `storage` as separate observed facts — an unset variable

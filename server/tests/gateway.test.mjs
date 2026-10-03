@@ -65,6 +65,7 @@ async function boot({ scenario = 'ok', failFirst = 1, key = 'test-key-0123456789
     stdio: ['ignore', 'pipe', 'pipe'],
     env: {
       ...process.env,
+      METALOID_NO_DOTENV: '1',
       PORT: String(gatewayPort),
       BIND_HOST: '127.0.0.1',
       OPENROUTER_BASE: `http://127.0.0.1:${providerPort}/api/v1`,

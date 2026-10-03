@@ -27,6 +27,8 @@ voicetest/*.wav
 # …but the templates document every variable, so they do ship
 !.env.example
 !server/.env.example
+# Tests must not inherit a developer's Supabase project (see the file itself).
+!.env.test
 
 # editor
 .vscode/
@@ -42,3 +44,5 @@ tsconfig.tsbuildinfo
 
 # TypeScript incremental build output
 .tsbuild-temp/
+# the dog still image is a workspace deliverable, not a repo asset (6.7 MB)
+/dog.png

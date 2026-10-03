@@ -92,6 +92,7 @@ async function boot() {
     stdio: ['ignore', 'pipe', 'pipe'],
     env: {
       ...process.env,
+      METALOID_NO_DOTENV: '1',
       PORT: String(gatewayPort),
       BIND_HOST: '127.0.0.1',
       METALOID_DATA_DIR: dataDir,

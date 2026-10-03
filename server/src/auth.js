@@ -41,8 +41,32 @@ const PUBLIC_KEY_PEM = (process.env.SUPABASE_JWT_PUBLIC_KEY || '').trim().replac
 
 let jwks = null;
 function getJwks() {
-  if (!jwks && JWKS_URL) jwks = createRemoteJWKSet(new URL(JWKS_URL));
+  if (!jwks && JWKS_URL) {
+    jwks = createRemoteJWKSet(new URL(JWKS_URL), {
+      // jose's defaults are tens of seconds with retries. Every protected route
+      // waits on this, so an unreachable identity provider would stall the whole
+      // app and surface as a spinner. Fail fast instead, and let the caller
+      // retry once the network recovers.
+      timeoutDuration: Number(process.env.METALOID_JWKS_TIMEOUT_MS || 5000),
+      cooldownDuration: 30_000,
+    });
+  }
   return jwks;
+}
+
+/**
+ * Did verification fail because we could not reach the signing keys, or because
+ * the token itself is bad? The two need different answers: one is retryable and
+ * is our problem, the other is not and is the caller's. Reporting an outage as
+ * "session expired" sends the user to re-authenticate for nothing.
+ */
+function isKeyFetchFailure(e) {
+  if (!e) return false;
+  const fingerprint = `${e.code || ''} ${e.name || ''} ${e.message || ''} ${e.cause?.code || ''} ${e.cause?.message || ''}`;
+  if (/ERR_JWKS_NO_MATCHING_KEY|ERR_JWT_|JWTClaimValidationFailed|JWSInvalid|JWSSignatureVerificationFailed/i.test(fingerprint)) {
+    return false; // we reached the keys and the token was the problem
+  }
+  return /ERR_JWKS_TIMEOUT|ERR_JWKS_INVALID|fetch failed|ENOTFOUND|ECONNREFUSED|ETIMEDOUT|ECONNRESET|EAI_AGAIN|socket hang up|UND_ERR|TimeoutError|network/i.test(fingerprint);
 }
 
 let secretKey = null;
@@ -116,6 +140,13 @@ export async function verifyToken(token) {
     };
   } catch (e) {
     if (e && e.metaloid) throw e; // already ours
+    if (isKeyFetchFailure(e)) {
+      throw gatewayError(
+        'Cannot reach the identity provider to verify your session. Try again in a moment.',
+        'auth_unavailable',
+        503
+      );
+    }
     const fingerprint = `${e && e.code || ''} ${e && e.name || ''} ${e && e.message || ''}`;
     const expired = /exp/i.test(fingerprint);
     throw gatewayError(

@@ -59,6 +59,11 @@ function port() {
 // reads to know it must not open a listening socket of its own; the data
 // directory stands in for the read-only bundle plus /tmp.
 const dataDir = fs.mkdtempSync(path.join(os.tmpdir(), 'metaloid-deploy-'));
+// Reproduce the platform's environment, not the developer's. Without this the
+// entry reads server/.env as well, and a real Supabase project in there would
+// change what is being tested — a live JWKS URL once sent this file to a
+// blocked host mid-suite.
+process.env.METALOID_NO_DOTENV = '1';
 process.env.VERCEL = '1';
 process.env.METALOID_DATA_DIR = dataDir;
 process.env.SUPABASE_JWT_PUBLIC_KEY = PUBLIC_PEM;

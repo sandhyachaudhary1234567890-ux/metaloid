@@ -8,7 +8,8 @@
   const os = await import('node:os');
   const path = await import('node:path');
   const { spawn } = await import('node:child_process');
-  const B = 'https://127.0.0.1:8892';
+  const { base } = require('./_scheme.cjs');
+  const B = base(8892);
   const tmp = fs.mkdtempSync(path.join(os.tmpdir(), 'metaloid-sbmode-'));
   let pass = 0;
   const ok = (n, c, extra = '') => {
@@ -20,7 +21,7 @@
       console.log('PASS', n);
     }
   };
-  const env = { ...process.env, PORT: '8892', METALOID_DATA_DIR: tmp, METALOID_AUTH_LIMIT: '1000', SUPABASE_DB: 'supabase' };
+  const env = { ...process.env, METALOID_NO_DOTENV: '1', PORT: '8892', METALOID_DATA_DIR: tmp, METALOID_AUTH_LIMIT: '1000', SUPABASE_DB: 'supabase' };
   // inherit server/.env Supabase vars
   try {
     const dotenv = fs.readFileSync(path.join(process.cwd(), 'server', '.env'), 'utf8');
@@ -29,6 +30,19 @@
       if (m && !env[m[1]]) env[m[1]] = m[2].trim();
     }
   } catch {}
+
+  // This matrix is the only one that talks to the real project, so it can only
+  // run where one is reachable. Without a connection string the gateway would
+  // quietly fall back to the local store and every assertion below would be
+  // testing the wrong driver — and the requests would hang rather than fail,
+  // which is how this script used to stall the whole chain. Say so and leave.
+  if (!String(env.SUPABASE_DB_POOL_URL || '').trim()) {
+    console.log('SKIP supabase-mode: SUPABASE_DB_POOL_URL is not set.');
+    console.log('     Paste the Transaction pooler URL (dashboard → Connect) into server/.env,');
+    console.log('     then apply supabase/bootstrap.sql in the SQL editor and re-run.');
+    return;
+  }
+
   const gw = spawn(process.execPath, ['server/src/index.js'], { cwd: require('node:path').resolve(__dirname, '..', '..'), env, stdio: 'ignore' });
   const j = async (r) => r.json().catch(() => ({}));
   const api = async (method, p, token, body) => {
