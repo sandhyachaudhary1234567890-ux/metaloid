@@ -189,6 +189,12 @@ function main() {
   const args = process.argv.slice(2);
   const envIdx = args.indexOf('--env');
   const requireProduction = args.includes('--production');
+  const explicitEnv = envIdx >= 0 ? args[envIdx + 1] : null;
+
+  if (envIdx >= 0 && (!explicitEnv || explicitEnv.startsWith('--'))) {
+    console.error('preflight: --env requires a file path');
+    process.exit(1);
+  }
 
   let env = { ...process.env };
   let source = 'the ambient environment';
@@ -199,7 +205,7 @@ function main() {
   // is to tell you what is missing.
   const defaultFile = path.join(process.cwd(), 'server', '.env');
   const fallbackFile = path.join(process.cwd(), '.env');
-  const chosen = args[envIdx + 1]
+  const chosen = explicitEnv
     || (fs.existsSync(defaultFile) ? defaultFile : fs.existsSync(fallbackFile) ? fallbackFile : null);
   if (chosen) {
     const file = path.resolve(process.cwd(), chosen);
