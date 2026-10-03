@@ -331,10 +331,14 @@ const bDelObj = await other(`delete from storage.objects where id = '${OBJ_A}' r
 check("another user cannot delete the owner's object", blocked(bDelObj), `${(bDelObj.rows || []).length} row(s)`);
 const oDelObj = await owner(`delete from storage.objects where id = '${OBJ_A}' returning id`);
 check('owner can delete their own object', visible(oDelObj), oDelObj.error || `${(oDelObj.rows || []).length} row(s)`);
-check('all three buckets are private',
+check('every bucket is private',
   Number((await rootQuery(`select count(*)::int as c from storage.buckets where public`)).rows[0].c) === 0);
-check('the three expected buckets exist',
-  Number((await rootQuery(`select count(*)::int as c from storage.buckets`)).rows[0].c) === 3);
+// The merged feature set declares four private buckets: three for the account
+// surfaces (attachments, generated, avatars) and one for artifacts created by
+// agent work. Exactly these — a bucket nobody declared would fail here.
+check('exactly the expected buckets exist',
+  Number((await rootQuery(`select count(*)::int as c from storage.buckets`)).rows[0].c) === 4
+  && Number((await rootQuery(`select count(*)::int as c from storage.buckets where id in ('attachments','generated','avatars','artifacts')`)).rows[0].c) === 4);
 
 // ── 8. account deletion really cascades ─────────────────────────────────
 await asRoot(`insert into auth.users (id, email) values ('${C}', 'c@example.test')`);

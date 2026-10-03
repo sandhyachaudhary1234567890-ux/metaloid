@@ -3,24 +3,24 @@
 @tailwind utilities;
 
 :root {
-  /* Default dark tokens (Obsidian) */
-  --bg: #09090b;
-  --bg-subtle: #111114;
-  --surface: #161619;
-  --surface-hover: #1f1f23;
-  --surface-active: #26262b;
-  --surface-elevated: #1a1a1e;
-  --surface-sunken: #0c0c0e;
-  --border: rgba(255, 255, 255, 0.08);
-  --border-subtle: rgba(255, 255, 255, 0.04);
-  --border-strong: rgba(255, 255, 255, 0.16);
-  --fg: #f4f4f5;
-  --fg-secondary: #a1a1aa;
-  --fg-muted: #71717a;
-  --fg-subtle: #52525b;
-  --accent: #0ea5e9;
-  --accent-subtle: rgba(14, 165, 233, 0.12);
-  --accent-glow: rgba(14, 165, 233, 0.2);
+  /* Default dark tokens (Warm Obsidian) */
+  --bg: #121211;
+  --bg-subtle: #181816;
+  --surface: #1c1c1a;
+  --surface-hover: #262623;
+  --surface-active: #2f2f2b;
+  --surface-elevated: #222220;
+  --surface-sunken: #0d0d0c;
+  --border: rgba(245, 240, 230, 0.08);
+  --border-subtle: rgba(245, 240, 230, 0.04);
+  --border-strong: rgba(245, 240, 230, 0.16);
+  --fg: #f4f1ea;
+  --fg-secondary: #aba598;
+  --fg-muted: #7d786d;
+  --fg-subtle: #57534b;
+  --accent: #2d5a47;
+  --accent-subtle: rgba(45, 90, 71, 0.16);
+  --accent-glow: rgba(45, 90, 71, 0.25);
   --radius-sm: 6px;
   --radius-md: 10px;
   --radius-lg: 14px;
@@ -29,23 +29,24 @@
 }
 
 html.light {
-  --bg: #f8fafc;
-  --bg-subtle: #f1f5f9;
+  /* Warm Paper aesthetic — high-end editorial clarity, not yellow, not sterile */
+  --bg: #fbf9f5;
+  --bg-subtle: #f4efe6;
   --surface: #ffffff;
-  --surface-hover: #f1f5f9;
-  --surface-active: #e2e8f0;
+  --surface-hover: #f5f0e6;
+  --surface-active: #ede6d8;
   --surface-elevated: #ffffff;
-  --surface-sunken: #eef2f6;
-  --border: rgba(15, 23, 42, 0.09);
-  --border-subtle: rgba(15, 23, 42, 0.04);
-  --border-strong: rgba(15, 23, 42, 0.18);
-  --fg: #0f172a;
-  --fg-secondary: #334155;
-  --fg-muted: #64748b;
-  --fg-subtle: #94a3b8;
-  --accent: #0ea5e9;
-  --accent-subtle: rgba(14, 165, 233, 0.1);
-  --accent-glow: rgba(14, 165, 233, 0.16);
+  --surface-sunken: #f0ebe0;
+  --border: rgba(40, 32, 20, 0.08);
+  --border-subtle: rgba(40, 32, 20, 0.04);
+  --border-strong: rgba(40, 32, 20, 0.16);
+  --fg: #1c1a17;
+  --fg-secondary: #454038;
+  --fg-muted: #736d62;
+  --fg-subtle: #9c9588;
+  --accent: #1e3a2f;
+  --accent-subtle: rgba(30, 58, 47, 0.08);
+  --accent-glow: rgba(30, 58, 47, 0.16);
   color-scheme: light;
 }
 

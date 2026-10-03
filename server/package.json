@@ -10,13 +10,19 @@
     "test": "node --test --test-concurrency=1 \"tests/*.test.mjs\"",
     "test:watch": "node --test --watch \"tests/*.test.mjs\"",
     "fake:provider": "node tests/fake-provider.mjs --port 9911 --scenario ok",
-    "loadtest": "node tools/loadtest.mjs"
+    "loadtest": "node tools/loadtest.mjs",
+    "test:matrices": "node tests/core-isolation.mjs && node tests/artifacts-matrix.mjs && node tests/skills-matrix.mjs && node tests/skills-v2.mjs && node tests/intent-artifact-matrix.mjs",
+    "test:matrices:network": "node tests/providers-matrix.mjs && node tests/providers-http.cjs && node tests/http-matrix.cjs && node tests/load.cjs && node tests/supabase-mode.cjs"
   },
   "dependencies": {
-    "@supabase/supabase-js": "^2.117.2",
+    "bcrypt": "^6.0.0",
     "cors": "^2.8.5",
     "express": "^4.21.2",
-    "jose": "^6.2.12",
-    "selfsigned": "^5.5.0"
-  }
+    "jsonwebtoken": "^9.0.3",
+    "pg": "^8.23.1",
+    "selfsigned": "^5.5.0",
+    "@supabase/supabase-js": "^2.117.2",
+    "jose": "^6.2.12"
+  },
+  "devDependencies": {}
 }

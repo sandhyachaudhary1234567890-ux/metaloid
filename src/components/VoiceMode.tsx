@@ -259,7 +259,32 @@ export function VoiceMode() {
         </div>
       ) : (
         <div className="flex-1 flex flex-col items-center justify-center px-6 text-center overflow-y-auto py-6">
-          <MetaloidCore status={orb} size={180} />
+          <button
+            onClick={() => {
+              if (vState === 'MODEL_SPEAKING') {
+                stop();
+              } else if (vState === 'PROCESSING') {
+                runRef.current.stopVoiceTurn();
+                sessionRef.current?.stopSpeaking();
+                setVState('IDLE');
+              } else if (muted) {
+                toggleMute();
+              }
+            }}
+            className="focus:outline-none transition-transform active:scale-95 cursor-pointer rounded-full p-2"
+            title={
+              vState === 'MODEL_SPEAKING'
+                ? 'Tap to interrupt speech'
+                : vState === 'PROCESSING'
+                ? 'Tap to cancel request'
+                : muted
+                ? 'Tap to unmute microphone'
+                : 'Listening for your voice'
+            }
+            aria-label="Voice orb"
+          >
+            <MetaloidCore status={orb} size={180} />
+          </button>
           <h2 className="mt-5 text-[22px] font-bold tracking-tight text-[var(--fg)]" aria-live="polite">{muted ? 'Muted' : label}</h2>
           <p className="text-[13px] text-[var(--fg-muted)] mt-1.5">
             {settings.defaultLanguage === 'hi' ? 'बोलिए — बीच में रोक सकते हैं' : 'Speak — interrupt me any time'}

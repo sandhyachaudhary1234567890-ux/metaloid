@@ -20,6 +20,16 @@ export interface SpeakOpts {
 
 export type SpeakOutcome = 'done' | 'cancelled' | 'stale' | 'unsupported';
 
+// Pre-warm voices immediately
+if (typeof window !== 'undefined' && 'speechSynthesis' in window) {
+  try {
+    window.speechSynthesis.getVoices();
+    window.speechSynthesis.onvoiceschanged = () => {
+      window.speechSynthesis.getVoices();
+    };
+  } catch { /* ignore */ }
+}
+
 export class SpeechSynthesisTTS {
   capabilities: TtsCapabilities = TTS_CAPS;
   private lastCancelAt = 0;
@@ -156,9 +166,11 @@ export class SpeechSynthesisTTS {
                 done('stale');
                 return;
               }
+              try { window.speechSynthesis.resume(); } catch { /* ignore */ }
               window.speechSynthesis.speak(u);
             }, Math.min(plan.pauseBeforeMs, 220));
           } else {
+            try { window.speechSynthesis.resume(); } catch { /* ignore */ }
             window.speechSynthesis.speak(u);
           }
         }, wait);

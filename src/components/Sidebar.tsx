@@ -1,5 +1,5 @@
 import { motion } from 'framer-motion';
-import { MessageSquare, History, Telescope, Settings, ChevronLeft, ChevronRight, Plus } from 'lucide-react';
+import { MessageSquare, History, Telescope, Settings, ChevronLeft, ChevronRight, Plus, Archive, Library, CheckCircle2, Sparkles } from 'lucide-react';
 import { useApp } from '../lib/store';
 import { useAuth } from '../lib/auth';
 import { cn } from '../lib/cn';
@@ -19,6 +19,14 @@ const NAV: { id: NavId; label: string; icon: typeof MessageSquare }[] = [
   { id: 'chat', label: 'Chat', icon: MessageSquare },
   { id: 'history', label: 'History', icon: History },
   { id: 'research', label: 'Research', icon: Telescope },
+];
+
+// Master-line surfaces (workspaces, artifacts, tasks) stay reachable from the
+// same shell instead of living in parallel navigation.
+const WORKSPACE: { id: 'projects' | 'library' | 'tasks'; label: string; icon: typeof MessageSquare }[] = [
+  { id: 'projects', label: 'Projects', icon: Archive },
+  { id: 'library', label: 'Library', icon: Library },
+  { id: 'tasks', label: 'Tasks', icon: CheckCircle2 },
 ];
 
 /** Quiet, honest connection state. Never says ONLINE because a variable is set. */
@@ -94,7 +102,7 @@ function StorageLine() {
 }
 
 export function Sidebar() {
-  const { view, setView, sidebarCollapsed, setSidebarCollapsed, newConversation, osintOpen, setOsintOpen } = useApp();
+  const { view, setView, sidebarCollapsed, setSidebarCollapsed, newConversation, osintOpen, setOsintOpen, setSkillsOpen } = useApp();
 
   const go = (id: NavId) => {
     if (id === 'research') { setOsintOpen(true); return; }
@@ -123,6 +131,10 @@ export function Sidebar() {
           <button title="New chat" aria-label="New chat" onClick={() => { newConversation(); setView('chat'); }}
             className="w-10 h-10 rounded-xl flex items-center justify-center text-[var(--fg-muted)] hover:text-[var(--accent)] hover:bg-[var(--surface-hover)]">
             <Plus size={18} />
+          </button>
+          <button title="Skills" aria-label="Skills" onClick={() => setSkillsOpen(true)}
+            className="w-10 h-10 rounded-xl flex items-center justify-center text-[var(--fg-muted)] hover:text-[var(--fg)] hover:bg-[var(--surface-hover)]">
+            <Sparkles size={17} />
           </button>
           <button title="Settings" aria-label="Settings" onClick={() => setView('settings')}
             className={cn('w-10 h-10 rounded-xl flex items-center justify-center transition-colors',
@@ -171,6 +183,31 @@ export function Sidebar() {
             </button>
           );
         })}
+      </nav>
+
+      <nav className="px-3 mt-4" aria-label="Workspace" hidden={false}>
+        <p className="px-3 pb-1 text-[10.5px] font-semibold uppercase tracking-wider text-[var(--fg-faint)]">Workspace</p>
+        <div className="space-y-0.5">
+          {WORKSPACE.map((n) => {
+            const on = view === n.id;
+            return (
+              <button
+                key={n.id} onClick={() => setView(n.id)} aria-current={on ? 'page' : undefined}
+                className={cn('w-full flex items-center gap-3 px-3 h-9 rounded-xl text-[13px] transition-colors',
+                  on ? 'bg-[var(--surface-elevated)] text-[var(--fg)]' : 'text-[var(--fg-muted)] hover:text-[var(--fg)] hover:bg-[var(--surface-hover)]')}
+              >
+                <n.icon size={15} strokeWidth={on ? 2 : 1.8} />
+                {n.label}
+              </button>
+            );
+          })}
+          <button
+            onClick={() => setSkillsOpen(true)}
+            className="w-full flex items-center gap-3 px-3 h-9 rounded-xl text-[13px] text-[var(--fg-muted)] hover:text-[var(--fg)] hover:bg-[var(--surface-hover)]"
+          >
+            <Sparkles size={15} strokeWidth={1.8} /> Skills
+          </button>
+        </div>
       </nav>
 
       <div className="mt-auto px-3 pb-4 space-y-2">

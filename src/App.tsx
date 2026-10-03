@@ -11,6 +11,7 @@ import { ToolsDrawer } from './components/ToolsDrawer';
 import { OsintPanel } from './components/OsintPanel';
 import { MissionsPanel } from './components/MissionsPanel';
 import { SkillForgePanel } from './components/developer/SkillForgePanel';
+import { SkillsPanel } from './components/SkillsPanel';
 import { Toasts, ModalRoot } from './components/Overlays';
 import { StartupSequence } from './components/StartupSequence';
 import { ChatScreen } from './screens/ChatScreen';
@@ -18,23 +19,87 @@ import { LiveScreen } from './screens/LiveScreen';
 import { MemoryScreen } from './screens/MemoryScreen';
 import { HistoryScreen } from './screens/HistoryScreen';
 import { SettingsScreen } from './screens/SettingsScreen';
-import { WifiOff } from 'lucide-react';
+import { HomeScreen } from './screens/HomeScreen';
+import { WorkspaceScreen } from './screens/WorkspaceScreen';
+import { WifiOff, X, Archive, Library, Telescope, CheckCircle2 } from 'lucide-react';
 
 import { MetaIoidLockup, MetaIoidFavicon } from './components/brand';
 import { AuthScreen } from './screens/AuthScreen';
 import { useAuth } from './lib/auth';
 import { SyncProvider } from './lib/sync';
 
-function MobileTopBar() {
+function MobileTopBar({ onMore, moreOpen }: { onMore: () => void; moreOpen: boolean }) {
   return (
     <div className="md:hidden sticky top-0 z-30 border-b border-[var(--border)] bg-[var(--surface)]/90 backdrop-blur-md">
       <div className="px-4 h-[52px] flex items-center gap-2.5">
+        <button onClick={() => onMore()} aria-label={moreOpen ? 'Close menu' : 'More'} aria-expanded={moreOpen}
+          className="w-9 h-9 -ml-1 rounded-lg flex items-center justify-center text-[var(--fg-muted)] hover:text-[var(--fg)]">
+          {moreOpen ? <X size={18} /> : (
+            <span className="flex flex-col gap-[3px]" aria-hidden>
+              <span className="block w-[15px] h-[1.5px] bg-current rounded" />
+              <span className="block w-[15px] h-[1.5px] bg-current rounded" />
+              <span className="block w-[15px] h-[1.5px] bg-current rounded" />
+            </span>
+          )}
+        </button>
         <button onClick={() => document.getElementById('main')?.scrollTo({ top: 0 })} aria-label="MetaIoid">
           <MetaIoidLockup variant="compact" size="sm" />
         </button>
         <span className="ml-auto"><ConnectionPill compact /></span>
       </div>
     </div>
+  );
+}
+
+const WORKSPACE_ITEMS = [
+  { id: 'projects' as const, label: 'Projects', hint: 'Workspaces and their instructions', icon: Archive },
+  { id: 'library' as const, label: 'Library', hint: 'Files MetaIoid has created', icon: Library },
+  { id: 'research' as const, label: 'Research', hint: 'Cited investigations', icon: Telescope },
+  { id: 'tasks' as const, label: 'Tasks', hint: 'Long-running agent work', icon: CheckCircle2 },
+];
+
+/** Secondary destinations on phones: workspaces plus the skills panel. */
+function MobileMoreSheet({ open, onClose }: { open: boolean; onClose: () => void }) {
+  const { setView, setSkillsOpen } = useApp();
+  const go = (id: (typeof WORKSPACE_ITEMS)[number]['id']) => { setView(id); onClose(); };
+  return (
+    <AnimatePresence>
+      {open && (
+        <>
+          <motion.button
+            key="scrim" initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }}
+            onClick={onClose} aria-label="Close menu"
+            className="md:hidden fixed inset-0 z-40 bg-black/40 backdrop-blur-[2px]"
+          />
+          <motion.div
+            key="sheet" initial={{ y: 24, opacity: 0 }} animate={{ y: 0, opacity: 1 }} exit={{ y: 24, opacity: 0 }}
+            transition={{ duration: 0.18, ease: 'easeOut' }}
+            className="md:hidden fixed inset-x-0 bottom-0 z-50 rounded-t-2xl border-t border-[var(--border)] bg-[var(--surface)] p-4 pb-8"
+            style={{ paddingBottom: 'max(2rem, env(safe-area-inset-bottom))' }}
+          >
+            <p className="text-[11px] font-semibold uppercase tracking-wider text-[var(--fg-faint)]">Workspace</p>
+            <div className="mt-2 grid grid-cols-2 gap-2">
+              {WORKSPACE_ITEMS.map((w) => (
+                <button key={w.id} onClick={() => go(w.id)}
+                  className="flex items-start gap-2.5 rounded-xl border border-[var(--border)] bg-[var(--surface-sunken)] p-3 text-left">
+                  <w.icon size={16} className="mt-0.5 text-[var(--accent)]" />
+                  <span className="min-w-0">
+                    <span className="block text-[13.5px] font-medium text-[var(--fg)]">{w.label}</span>
+                    <span className="block text-[11.5px] text-[var(--fg-muted)]">{w.hint}</span>
+                  </span>
+                </button>
+              ))}
+            </div>
+            <button
+              onClick={() => { setSkillsOpen(true); onClose(); }}
+              className="mt-3 w-full h-11 rounded-xl border border-[var(--border)] text-[13.5px] font-medium text-[var(--fg)]"
+            >
+              Skills
+            </button>
+          </motion.div>
+        </>
+      )}
+    </AnimatePresence>
   );
 }
 
@@ -49,7 +114,10 @@ function AppShell() {
     view, newConversation, setView, status, setStatus, voiceOpen,
     settings, connection, missionsOpen, setMissionsOpen, missionDraft,
     skillForgeOpen, setSkillForgeOpen,
+    skillsOpen, setSkillsOpen,
   } = useApp();
+
+  const [moreOpen, setMoreOpen] = useState(false);
 
   const prevViewRef = useRef(view);
   const [intro, setIntro] = useState(
@@ -64,16 +132,22 @@ function AppShell() {
   useEffect(() => {
     if (prevViewRef.current !== view) {
       prevViewRef.current = view;
-      MetaIoidFavicon.setDocumentTitle(view === 'chat' ? undefined : view.charAt(0).toUpperCase() + view.slice(1));
+      MetaIoidFavicon.setDocumentTitle(view === 'chat' || view === 'home' ? undefined : view.charAt(0).toUpperCase() + view.slice(1));
     }
   }, [view]);
 
   const meta: Record<string, { title: string; sub: string }> = {
+    home: { title: 'Home', sub: 'Start here' },
     live: { title: 'Live', sub: 'Camera vision feed' },
     memory: { title: 'Memory Vault', sub: 'Personal durable context' },
     history: { title: 'History', sub: 'Past conversations' },
     settings: { title: 'Settings', sub: 'Configuration' },
+    projects: { title: 'Projects', sub: 'Persistent workspaces' },
+    library: { title: 'Library', sub: 'Files MetaIoid created' },
+    research: { title: 'Research', sub: 'Cited investigations' },
+    tasks: { title: 'Tasks', sub: 'Resumable agent work' },
   };
+  const head = meta[view] || { title: 'MetaIoid', sub: '' };
 
   if (gate) {
     if (auth.status === 'loading') {
@@ -94,16 +168,16 @@ function AppShell() {
       <Sidebar />
 
       <div className="flex-1 flex flex-col min-w-0 min-h-0">
-        <MobileTopBar />
+        <MobileTopBar onMore={() => setMoreOpen(true)} moreOpen={moreOpen} />
         {view !== 'chat' && (
           <div className="hidden md:block">
-            <Header title={meta[view].title} subtitle={meta[view].sub} />
+            <Header title={head.title} subtitle={head.sub} />
           </div>
         )}
         {view !== 'chat' && (
           <div className="md:hidden px-4 pt-4">
-            <h1 className="text-[20px] font-bold tracking-tight text-[var(--fg)]">{meta[view].title}</h1>
-            <p className="text-[12.5px] text-[var(--fg-muted)]">{meta[view].sub}</p>
+            <h1 className="text-[20px] font-bold tracking-tight text-[var(--fg)]">{head.title}</h1>
+            <p className="text-[12.5px] text-[var(--fg-muted)]">{head.sub}</p>
           </div>
         )}
 
@@ -130,7 +204,12 @@ function AppShell() {
               transition={{ duration: 0.16, ease: 'easeOut' }}
               className={view === 'chat' ? 'h-full flex flex-col' : ''}
             >
+              {view === 'home' && <HomeScreen />}
               {view === 'chat' && <ChatScreen />}
+              {view === 'projects' && <WorkspaceScreen kind="projects" />}
+              {view === 'library' && <WorkspaceScreen kind="library" />}
+              {view === 'research' && <WorkspaceScreen kind="research" />}
+              {view === 'tasks' && <WorkspaceScreen kind="tasks" />}
               {view === 'live' && <LiveScreen />}
               {view === 'memory' && <MemoryScreen />}
               {view === 'history' && <HistoryScreen />}
@@ -147,6 +226,8 @@ function AppShell() {
       <OsintPanel />
       <MissionsPanel open={missionsOpen} onClose={() => setMissionsOpen(false)} initialObjective={missionDraft} />
       <SkillForgePanel open={skillForgeOpen} onClose={() => setSkillForgeOpen(false)} />
+      <SkillsPanel open={skillsOpen} onClose={() => setSkillsOpen(false)} />
+      <MobileMoreSheet open={moreOpen} onClose={() => setMoreOpen(false)} />
       <CommandPalette />
       <ModalRoot />
       <Toasts />

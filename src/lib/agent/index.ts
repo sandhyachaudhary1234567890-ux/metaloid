@@ -3,7 +3,6 @@ export * from './types';
 export * from './checkpoint';
 export * from './capabilityRouter';
 export * from './docIntelligence';
-export * from './pptxPackager';
 export * from './verificationEngine';
 export * from './executionPolicy';
 export * from './longDuration';

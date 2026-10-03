@@ -2,7 +2,6 @@
 // Research -> Official Verification -> Slide Synthesis -> Visual QA -> Self-Correction -> Deliverable Artifact.
 
 import type { PresentationDeck, SlideContent, TaskArtifact } from './types';
-import { PptxBinaryGenerator } from './pptxPackager';
 
 export class DocumentIntelligenceEngine {
   /**
@@ -212,7 +211,7 @@ export class DocumentIntelligenceEngine {
       })
       .join('\n\n---\n\n');
 
-    const mdContent = `# ${deck.title}\n*${deck.subtitle}*\n\n**Author:** ${deck.author}\n**Visual QA Status:** Verified (Zero Clipping / Balanced Layout)\n\n---\n\n${mdSlides}\n\n---\n\n### Official References\n${deck.sourceReferences.map((r) => `- ${r}`).join('\n')}`;
+    const mdContent = `# ${deck.title}\n*${deck.subtitle}*\n\n**Author:** ${deck.author}\n\n---\n\n${mdSlides}\n\n---\n\n### Official References\n${deck.sourceReferences.map((r) => `- ${r}`).join('\n')}`;
 
     const cleanTitle = deck.title.toLowerCase().replace(/[^a-z0-9_]+/g, '_').slice(0, 40);
 
@@ -223,41 +222,19 @@ export class DocumentIntelligenceEngine {
       format: 'md',
       content: mdContent,
       createdAt: Date.now(),
-      verified: true,
+      // This is a planning export, not a server-finalized file artifact.
+      verified: false,
       metadata: {
         totalSlides: deck.totalSlides,
         visualQAPassed: deck.visualQAPassed,
       },
     };
 
-    // 2. Real Binary OpenXML .pptx Package (opens in PowerPoint / LibreOffice)
-    const pptxBinary = PptxBinaryGenerator.buildPptxBinary(deck);
-    let binaryBase64 = '';
-    if (typeof Buffer !== 'undefined') {
-      binaryBase64 = Buffer.from(pptxBinary).toString('base64');
-    } else {
-      let binaryStr = '';
-      for (let i = 0; i < pptxBinary.length; i++) binaryStr += String.fromCharCode(pptxBinary[i]);
-      binaryBase64 = btoa(binaryStr);
-    }
-
-    const pptxBinaryArtifact: TaskArtifact = {
-      id: `art_pptx_bin_${Date.now()}`,
-      name: `${cleanTitle}_presentation.pptx`,
-      type: 'presentation',
-      format: 'pptx',
-      content: binaryBase64,
-      createdAt: Date.now(),
-      verified: true,
-      metadata: {
-        totalSlides: deck.totalSlides,
-        visualQAPassed: deck.visualQAPassed,
-        binarySizeBytes: pptxBinary.length,
-        isBinaryPackage: true,
-      },
-    };
-
-    // 3. PPTX XML/JSON Specification
+    // PPTX creation is intentionally delegated to the server-side
+    // ArtifactService. This client-side intelligence layer exports only a
+    // plan/spec and must never present an unverified browser-built package as
+    // an openable PowerPoint file.
+    // 2. PPTX XML/JSON Specification
     const pptxJsonArtifact: TaskArtifact = {
       id: `art_pptx_${Date.now()}`,
       name: `${cleanTitle}_presentation.pptx.json`,
@@ -268,6 +245,6 @@ export class DocumentIntelligenceEngine {
       verified: true,
     };
 
-    return [presentationArtifact, pptxBinaryArtifact, pptxJsonArtifact];
+    return [presentationArtifact, pptxJsonArtifact];
   }
 }

@@ -10,6 +10,127 @@ import React, { createContext, useCallback, useContext, useEffect, useMemo, useS
 import type { Session, User } from '@supabase/supabase-js';
 import { getSupabase, supabaseConfigured } from './supabase';
 
+// ── Gateway session helpers ────────────────────────────────────────────────
+// One credential store: when Supabase is configured it is the only identity
+// (the mirror below is kept current by AuthProvider), and the legacy local
+// session is used only on a build with no auth service at all (local demo).
+
+export interface AuthUser {
+  id: string;
+  handle: string;
+  displayName: string;
+  role: string;
+  createdAt: string;
+}
+
+interface LocalSession {
+  access: string;
+  refresh: string;
+  user: AuthUser;
+}
+
+const K = 'metaloid.session.v1';
+let mem: LocalSession | null = null;
+let listeners = new Set<() => void>();
+/** Access token mirrored from the live Supabase session, so gateway calls can
+ *  attach it synchronously (transport runs outside React). */
+let sbToken: string | null = null;
+let sbUser: AuthUser | null = null;
+
+function read(): LocalSession | null {
+  if (mem) return mem;
+  try {
+    const raw = localStorage.getItem(K);
+    if (raw) mem = JSON.parse(raw) as LocalSession;
+  } catch {
+    mem = null;
+  }
+  return mem;
+}
+
+function write(s: LocalSession | null) {
+  mem = s;
+  try {
+    if (s) localStorage.setItem(K, JSON.stringify(s));
+    else localStorage.removeItem(K);
+  } catch { /* private mode */ }
+  listeners.forEach((fn) => {
+    try {
+      fn();
+    } catch { /* listener error is not our problem */ }
+  });
+}
+
+/** Called by AuthProvider whenever the Supabase session changes. */
+export function mirrorSupabaseSession(session: Session | null) {
+  sbToken = session?.access_token ?? null;
+  const u = session?.user;
+  sbUser = u
+    ? {
+        id: u.id,
+        handle: (u.user_metadata?.display_name as string) || u.email || u.id,
+        displayName: (u.user_metadata?.display_name as string) || u.email || 'You',
+        role: 'authenticated',
+        createdAt: u.created_at || new Date().toISOString(),
+      }
+    : null;
+  listeners.forEach((fn) => {
+    try {
+      fn();
+    } catch { /* ignore */ }
+  });
+}
+
+export function onSessionChange(fn: () => void): () => void {
+  listeners.add(fn);
+  return () => {
+    listeners.delete(fn);
+  };
+}
+
+export function getSession(): LocalSession | null {
+  return read();
+}
+
+/** The bearer token gateway calls use: Supabase first, local demo second. */
+export function getAccessToken(): string | null {
+  return sbToken || read()?.access || null;
+}
+
+export function getAuthUser(): AuthUser | null {
+  return sbUser || read()?.user || null;
+}
+
+export function authHeaders(extra: Record<string, string> = {}): Record<string, string> {
+  const t = getAccessToken();
+  return t ? { ...extra, Authorization: `Bearer ${t}` } : { ...extra };
+}
+
+export function setSession(s: LocalSession) {
+  write(s);
+}
+
+export function clearSession() {
+  sbToken = null;
+  sbUser = null;
+  write(null);
+}
+
+export class AuthRequiredError extends Error {
+  constructor() {
+    super('Sign in required.');
+    this.name = 'AuthRequiredError';
+  }
+}
+
+/** Throw on 401 after clearing the session — callers surface sign-in UI. */
+export function throwIfAuth(res: Response, body: { code?: string } | null) {
+  if (res.status === 401 || body?.code === 'AUTH_REQUIRED') {
+    clearSession();
+    throw new AuthRequiredError();
+  }
+}
+
 export type AuthStatus = 'unconfigured' | 'loading' | 'signed-out' | 'signed-in';
 
 export interface AuthResult {
@@ -69,11 +190,13 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       const { data } = await sb.auth.getSession();
       if (!alive) return;
       setSession(data.session ?? null);
+      mirrorSupabaseSession(data.session ?? null);
       setStatus(data.session ? 'signed-in' : 'signed-out');
 
       const { data: sub } = sb.auth.onAuthStateChange((event, next) => {
         if (!alive) return;
         setSession(next ?? null);
+        mirrorSupabaseSession(next ?? null);
         setStatus(next ? 'signed-in' : 'signed-out');
         // A recovery link lands as PASSWORD_RECOVERY: show the new-password form
         if (event === 'PASSWORD_RECOVERY') setRecoveryMode(true);
@@ -115,6 +238,8 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   const signOut = useCallback(async () => {
     const sb = await getSupabase();
     await sb?.auth.signOut();
+    // the local mirror must not outlive the real session
+    clearSession();
     setRecoveryMode(false);
   }, []);
 

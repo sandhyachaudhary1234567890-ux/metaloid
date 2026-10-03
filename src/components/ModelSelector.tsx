@@ -6,11 +6,13 @@ import { getModels, type LiveModel } from '../lib/transport';
 import { useApp } from '../lib/store';
 import type { ModelId } from '../lib/types';
 import { cn } from '../lib/cn';
+import { AiSetupModal } from './setup/AiSetupModal';
 
 // Tier preference (fast/balanced/smart/vision) + live free-model engine.
 export function ModelSelector({ compact = false }: { compact?: boolean }) {
   const { model, setModel, toast, connection, settings } = useApp();
   const [open, setOpen] = useState(false);
+  const [showSetup, setShowSetup] = useState(false);
   const [live, setLive] = useState<LiveModel[] | null>(null);
   // Any reachable gateway can list models — sandbox and degraded included.
   // Only a genuinely unreachable backend has nothing to show.
@@ -77,7 +79,7 @@ export function ModelSelector({ compact = false }: { compact?: boolean }) {
               <div className="px-3 pt-2 pb-1 text-[11px] font-semibold uppercase tracking-wider text-[var(--fg-muted)] flex items-center gap-2">
                 Live engine
                 {online && (
-                  <button onClick={refresh} className="icon-btn w-5 h-5" aria-label="Refresh model list"><RefreshCw size={11} /></button>
+                  <button onClick={refresh} className="icon-btn w-8 h-8" aria-label="Refresh model list"><RefreshCw size={12} /></button>
                 )}
               </div>
               {online ? (
@@ -103,10 +105,32 @@ export function ModelSelector({ compact = false }: { compact?: boolean }) {
                   Local demo mode &mdash; connect backend for live models.
                 </div>
               )}
+              <div className="p-2 border-t border-[var(--border-subtle)] mt-1">
+                <button
+                  onClick={() => {
+                    setOpen(false);
+                    setShowSetup(true);
+                  }}
+                  className="w-full h-8 rounded-lg bg-[var(--surface-hover)] border border-[var(--border)] text-[11.5px] font-medium text-[var(--fg)] hover:text-[var(--accent)] transition-all flex items-center justify-center gap-1.5"
+                >
+                  Discover 50+ Providers & Free AI &rarr;
+                </button>
+              </div>
             </motion.div>
           </>
         )}
       </AnimatePresence>
+
+      {showSetup && (
+        <div className="fixed inset-0 z-50 bg-black/75 backdrop-blur-sm flex items-center justify-center p-4">
+          <div className="w-full max-w-[620px] max-h-[92vh] overflow-y-auto">
+            <AiSetupModal
+              canSkip={true}
+              onComplete={() => setShowSetup(false)}
+            />
+          </div>
+        </div>
+      )}
     </div>
   );
 }

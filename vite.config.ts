@@ -10,14 +10,14 @@ import react from '@vitejs/plugin-react'
 const keyPath = path.resolve(__dirname, 'certs', 'key.pem')
 const certPath = path.resolve(__dirname, 'certs', 'cert.pem')
 const tls = fs.existsSync(keyPath) && fs.existsSync(certPath)
-console.log(`[metaloid] tls=${tls} key=${keyPath}`)
 
 // Same-origin gateway: the dev/preview server proxies /api to the local
 // gateway so a remote browser (tunnel, preview host, reverse proxy) reaches
 // it without knowing 127.0.0.1 — an unreachable gateway still degrades to
-// the app's honest offline/demo state.
+// the app's honest offline/demo state. https + secure:false covers the local
+// gateway when its LAN certs exist.
 const apiProxy = {
-  '/api': { target: 'http://127.0.0.1:8787', changeOrigin: false },
+  '/api': { target: 'https://127.0.0.1:8787', changeOrigin: true, secure: false },
 }
 
 // The app lives under /app/ so the repo root can serve the marketing page.
@@ -60,8 +60,6 @@ export default defineConfig({
     proxy: apiProxy,
     https: tls ? { key: fs.readFileSync(keyPath), cert: fs.readFileSync(certPath) } : undefined,
   },
-  // production preview for phone testing (no StrictMode, no HMR):
-  // npm run build && npx vite preview --port 4173 --host 0.0.0.0
   preview: {
     port: 4173,
     host: '0.0.0.0',

@@ -1,5 +1,7 @@
 // Memory engine: working / episodic / semantic / procedural / mission.
 // File-backed, source+timestamp+confidence+scope on every record.
+// USER-SCOPED: every record carries userId; all reads/writes enforce it at
+// this boundary (routes additionally gate). No cross-user leakage.
 // Pollution guards: no secrets, no credential-shaped strings, no
 // unverified-assumption-as-fact (confidence capped unless verified).
 
@@ -8,7 +10,12 @@ import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { emit } from './events.js';
 
-const DIR = path.join(path.dirname(fileURLToPath(import.meta.url)), '..', '..', 'data');
+async function supa() {
+  const m = await import('./supadb.js');
+  return m.dbMode() ? m : null;
+}
+
+const DIR = process.env.METALOID_DATA_DIR || path.join(path.dirname(fileURLToPath(import.meta.url)), '..', '..', 'data');
 const FILE = path.join(DIR, 'memory.json');
 const SECRET_RE = /sk-or-[\w-]+|nvapi-[\w-]+|api[_-]?key\s*[:=]|password\s*[:=]|bearer\s+[\w.-]+/i;
 
@@ -26,35 +33,86 @@ function persist() {
 
 let seq = 0;
 
-export function remember({ cls = 'semantic', content, source = 'user', confidence = 'medium', scope = 'personal' }) {
+function needUser(userId) {
+  if (!userId || typeof userId !== 'string') throw new Error('userId required');
+}
+
+export async function remember({ userId, cls = 'semantic', content, source = 'user', confidence = 'medium', scope = 'personal', workspaceId = null }) {
+  needUser(userId);
   const text = String(content || '').slice(0, 1000);
   if (!text) return { ok: false, error: 'Empty content.' };
   if (SECRET_RE.test(text)) {
     emit('security.denied_write', { cls, reason: 'secret-shaped content' });
     return { ok: false, error: 'Refused: looks like a secret/credential. Rotate it if exposed.' };
   }
+  const db = await supa();
+  if (db) {
+    const r = await db.memRemember({ userId, cls, content: text, source, confidence, scope, workspaceId });
+    if (r.ok) emit('memory.saved', { id: r.record.id, class: cls });
+    return r;
+  }
   const rec = {
     id: `mem-${Date.now().toString(36)}-${(++seq).toString(36)}`,
-    class: cls, content: text, source,
+    userId, class: cls, content: text, source,
     confidence: ['low', 'medium', 'high'].includes(confidence) ? confidence : 'medium',
-    scope, at: new Date().toISOString(), lastVerified: null,
+    scope, workspaceId: workspaceId || null,
+    at: new Date().toISOString(), lastVerified: null, lastUsed: null,
   };
   store.records.unshift(rec);
-  if (store.records.length > 1000) store.records.length = 1000;
+  if (store.records.length > 2000) store.records.length = 2000;
   persist();
   emit('memory.saved', { id: rec.id, class: cls });
   return { ok: true, record: rec };
 }
 
-export function recall({ cls, query = '', limit = 20 } = {}) {
-  const q = query.toLowerCase();
-  return store.records
+export async function recall(userId, { cls, query = '', limit = 20, workspaceId } = {}) {
+  needUser(userId);
+  const db = await supa();
+  if (db) return db.memRecall(userId, { cls, query, limit, workspaceId });
+  const q = String(query || '').toLowerCase();
+  const out = store.records
+    .filter((r) => r.userId === userId)
     .filter((r) => (!cls || r.class === cls) && (!q || r.content.toLowerCase().includes(q)))
-    .slice(0, Math.min(limit, 50));
+    .filter((r) => (workspaceId === undefined || r.workspaceId === workspaceId || (!workspaceId && !r.workspaceId)));
+  for (const r of out.slice(0, Math.min(limit, 50))) {
+    r.lastUsed = new Date().toISOString();
+  }
+  return out.slice(0, Math.min(limit, 50));
 }
 
-export function forget(id) {
-  const i = store.records.findIndex((r) => r.id === id);
+/** User control: edit what MetaIoid remembers (content/confidence only). */
+export async function updateMemory(userId, id, patch = {}) {
+  needUser(userId);
+  if (typeof patch.content === 'string' && patch.content.trim() && SECRET_RE.test(patch.content)) {
+    return { ok: false, error: 'Refused: looks like a secret/credential.' };
+  }
+  const db = await supa();
+  if (db) {
+    const r = await db.memUpdate(userId, id, patch);
+    if (r.ok) emit('memory.updated', { id });
+    return r;
+  }
+  const r = store.records.find((x) => x.id === id && x.userId === userId);
+  if (!r) return { ok: false, error: 'Unknown memory.' };
+  if (typeof patch.content === 'string' && patch.content.trim()) {
+    if (SECRET_RE.test(patch.content)) return { ok: false, error: 'Refused: looks like a secret/credential.' };
+    r.content = patch.content.slice(0, 1000);
+  }
+  if (['low', 'medium', 'high'].includes(patch.confidence)) r.confidence = patch.confidence;
+  persist();
+  emit('memory.updated', { id });
+  return { ok: true, record: r };
+}
+
+export async function forget(userId, id) {
+  needUser(userId);
+  const db = await supa();
+  if (db) {
+    const r = await db.memForget(userId, id);
+    if (r.ok) emit('memory.forgotten', { id });
+    return r;
+  }
+  const i = store.records.findIndex((r) => r.id === id && r.userId === userId);
   if (i < 0) return { ok: false, error: 'Unknown memory.' };
   store.records.splice(i, 1);
   persist();
@@ -62,8 +120,56 @@ export function forget(id) {
   return { ok: true };
 }
 
-export function stats() {
+/** Forget everything (account wipe path + user control). */
+export async function forgetAll(userId) {
+  needUser(userId);
+  const db = await supa();
+  if (db) {
+    const r = await db.memForgetAll(userId);
+    if (r.ok) emit('memory.forgotten_all', { user: userId, count: r.deleted });
+    return r;
+  }
+  const before = store.records.length;
+  store.records = store.records.filter((r) => r.userId !== userId);
+  persist();
+  emit('memory.forgotten_all', { user: userId, count: before - store.records.length });
+  return { ok: true, deleted: before - store.records.length };
+}
+
+export async function exportMemories(userId) {
+  needUser(userId);
+  const db = await supa();
+  if (db) return db.memExport(userId);
+  return store.records.filter((r) => r.userId === userId);
+}
+
+export async function stats(userId) {
+  needUser(userId);
+  const db = await supa();
+  if (db) return db.memStats(userId);
   const byClass = {};
-  for (const r of store.records) byClass[r.class] = (byClass[r.class] || 0) + 1;
-  return { total: store.records.length, byClass };
+  let total = 0;
+  for (const r of store.records) {
+    if (r.userId !== userId) continue;
+    total += 1;
+    byClass[r.class] = (byClass[r.class] || 0) + 1;
+  }
+  return { total, byClass };
+}
+
+/** Single-user upgrade path: adopt pre-multi-user records into the first account. */
+export function adoptLegacyRecords(userId) {
+  let n = 0;
+  for (const r of store.records) {
+    if (!r.userId) {
+      r.userId = userId;
+      n += 1;
+    }
+  }
+  if (n) persist();
+  return n;
+}
+
+export function deleteUserMemories(userId) {
+  return forgetAll(userId);
 }

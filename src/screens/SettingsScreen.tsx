@@ -15,7 +15,7 @@ import { cn } from '../lib/cn';
 // Zero theme flash, instant live switching, curated presets.
 
 export function SettingsScreen() {
-  const { settings, updateSettings, toast, openModal, setView, connection, setSkillForgeOpen } = useApp();
+  const { settings, updateSettings, toast, openModal, setView, connection, setSkillForgeOpen, setSkillsOpen } = useApp();
   const saved = (msg: string) => toast({ title: msg });
   // Advanced stays folded away until asked for — no jargon on the first read.
   const [advanced, setAdvanced] = useState(false);

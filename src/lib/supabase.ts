@@ -46,6 +46,12 @@ export function getSupabase(): Promise<SupabaseClient | null> {
   return loading;
 }
 
+/** The client if it has already been created (sync), else null. Used by
+ *  callers that must not force a lazy import — never a second client. */
+export function peekSupabase(): SupabaseClient | null {
+  return client;
+}
+
 /** Current session, or null. Never throws. */
 export async function getSession(): Promise<Session | null> {
   const sb = await getSupabase();

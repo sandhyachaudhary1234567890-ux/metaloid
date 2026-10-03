@@ -5,6 +5,7 @@
 // TTS events fire (dummy device) so audio-path timing is REAL here.
 
 const puppeteer = require('puppeteer-core');
+const { seedTestAuth, seedSnippet } = require('./auth.cjs');
 
 const APP = 'https://127.0.0.1:5173/?no-intro';
 const GW = 'https://127.0.0.1:8787';
@@ -54,6 +55,18 @@ const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
     process.exit(3);
   }
 
+  // ---- auth: harness signs in like a user (gateway is multi-user) ----
+  let TEST_TOKEN = '';
+  try {
+    const seed = await seedTestAuth(GW, 'vt');
+    TEST_TOKEN = seed.token;
+    await page.evaluateOnNewDocument(seedSnippet(seed.session));
+    console.log('AUTH_SEEDED user=' + seed.handle);
+  } catch (e) {
+    console.error(`PREFLIGHT_FAIL auth seed: ${String((e && e.message) || e).slice(0, 120)} — restart gateway, then rerun`);
+    process.exit(3);
+  }
+
   // ---- T12: gateway TTFT over real SSE (retries provider transients) ----
   {
     let first = null;
@@ -65,7 +78,7 @@ const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
         const t0 = Date.now();
         const res = await fetch(`${GW}/api/chat`, {
           method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
+          headers: { 'Content-Type': 'application/json', Authorization: 'Bearer ' + TEST_TOKEN },
           body: JSON.stringify({ message: 'Reply with the single word: ok', task: 'voice' }),
         });
         const reader = res.body.getReader();

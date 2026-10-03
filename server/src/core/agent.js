@@ -4,15 +4,23 @@
 
 import { emit } from './events.js';
 import { discoverSkills, skillBrief, getSkill } from './skills.js';
-import { createMission, runMission, latestActive, attachReport } from './missions.js';
+import { createMission, runMission, latestActive, attachReport, appendDecision } from './missions.js';
 import { validateTarget } from '../osint.js';
 import { verify } from './verify.js';
 import { remember } from './memory.js';
 import { complete } from '../openrouter.js';
 import { renderSystemPrompt, TOOLS_MANIFEST } from '../systemPrompt.js';
+import { proposeFollowups } from './skillInitiatives.js';
+import { getProfile } from './profiles.js';
+import { checkBudget, recordUsage, planCaps } from './entitlements.js';
+import { resolveIntentCapability } from './intentCapabilityResolver.js';
+import { submitJob } from './jobs.js';
 
 export function classifyIntent(text = '') {
   const t = text.toLowerCase().trim();
+  const resolved = resolveIntentCapability(text);
+  if (resolved.kind === 'artifact') return { kind: 'artifact', resolution: resolved };
+  if (resolved.kind === 'unavailable_artifact') return { kind: 'unavailable_artifact', resolution: resolved };
   if (/^(continue|resume|carry on)\b/.test(t)) return { kind: 'continue' };
   if (/^(investigate|osint|recon)\b/.test(t)) return { kind: 'osint' };
   if (/^(mission|do mission|start mission|build|create|plan|research|analyze|compare|watch|monitor)\b/.test(t)) return { kind: 'mission' };
@@ -73,12 +81,14 @@ export function planMission(objective, skillIds) {
   return tasks;
 }
 
-export async function startMission({ objective, constraints = [], apiKey, model }) {
+export async function startMission({ userId, objective, constraints = [], apiKey, model, userName }) {
+  if (!userId) throw new Error('userId required');
   const skillIds = discoverSkills(objective);
   const tasks = planMission(objective, skillIds);
-  const m = createMission({ objective, constraints, tasks, skillIds });
-  // run async; frontend polls
-  runMission(m.id, {}).then(async (done) => {
+  const m = await createMission({ userId, objective, constraints, tasks, skillIds });
+  // run as a bounded background job; frontend polls mission + job status
+  const job = submitJob(userId, 'mission', objective, async () => {
+    const done = await runMission(userId, m.id, { userId });
     if (done && done.status === 'COMPLETED' && apiKey) {
       try {
         const briefs = skillIds.map(skillBrief).filter(Boolean);
@@ -97,7 +107,7 @@ export async function startMission({ objective, constraints = [], apiKey, model 
           }
         }
         const { text } = await complete({
-          apiKey, model, system: renderSystemPrompt({ userName: 'Aryan', tools: TOOLS_MANIFEST }),
+          apiKey, model, system: renderSystemPrompt({ userName: userName || 'friend', tools: TOOLS_MANIFEST }),
           messages: [{
             role: 'user',
             content: `Mission "${objective}" finished. Task log:\n${done.tasks.map((t) => `- [${t.status}] ${t.name}${t.error ? ` (error: ${t.error})` : ''}`).join('\n')}\n\nEVIDENCE (observed tool outputs — only these may be cited):\n${evidence.length ? evidence.join('\n') : '(no tool evidence collected)'}\nSkills: ${JSON.stringify(briefs.map((b) => b.id))}\nWrite a concise mission report: outcome, evidence with sources, gaps, next action. Cite only the evidence above. Never claim unverified results as verified; say "insufficient evidence" where the bundle is thin.`,
@@ -105,19 +115,48 @@ export async function startMission({ objective, constraints = [], apiKey, model 
         });
         const { verify: verifyOutcomes } = await import('./verify.js');
         const v = await verifyOutcomes(text, ['nonempty', 'no-placeholders']);
-        attachReport(m.id, text, v);
+        await attachReport(userId, m.id, text, v);
+        // Initiative hook: relevant skills become ELIGIBLE follow-ups —
+        // policy + budgets decide (suggest / queue / run). Never auto-act
+        // on match alone.
+        try {
+          const prop = await proposeFollowups({ getProfile }, userId, done);
+          if (prop.suggestions?.length) {
+            const prof = await getProfile(userId);
+            await appendDecision(userId, m.id, `Initiative: ${prop.suggestions.map((s) => s.name).join(', ')} relevant to outputs (policy: ${prof.autonomy}, action: ${prop.action}).`);
+          }
+          if ((prop.action === 'queue' || prop.action === 'run') && prop.framed?.length) {
+            for (const f of prop.framed.slice(0, 1)) {
+              const b = await checkBudget(userId, 'missions');
+              if (!b.ok) {
+                await appendDecision(userId, m.id, `Initiative follow-up deferred: ${b.error}`);
+                break;
+              }
+              const caps = planCaps(userId);
+              const fm = await createMission({
+                userId, objective: f.objective, skillIds: f.skillIds, tasks: planMission(f.objective, []),
+                budgets: { maxMs: caps.maxMissionMs, maxSteps: caps.maxMissionSteps },
+              });
+              await recordUsage(userId, 'missions');
+              await appendDecision(userId, m.id, `Initiative follow-up ${prop.action === 'run' ? 'started' : 'queued'}: ${fm.id} (${f.skillIds.join(',')}).`);
+              if (prop.action === 'run') submitJob(userId, 'mission', f.objective, () => runMission(userId, fm.id, { userId }));
+            }
+          }
+        } catch { /* initiative is advisory — mission stands alone */ }
       } catch { /* synthesis is best-effort; tasks stand alone */ }
     }
-  }).catch(() => {});
+    return { missionId: m.id, status: done ? done.status : 'UNKNOWN' };
+  });
   emit('agent.mission_started', { id: m.id });
-  return m;
+  return { mission: m, jobId: job.id };
 }
 
-export async function continueMission() {
-  const m = latestActive();
+export async function continueMission(userId) {
+  if (!userId) throw new Error('userId required');
+  const m = await latestActive(userId);
   if (!m) return { ok: false, error: 'No active mission. Start one with "mission: <objective>".' };
-  runMission(m.id, {}).catch(() => {});
-  return { ok: true, mission: m };
+  const job = submitJob(userId, 'mission', `continue ${m.objective}`.slice(0, 160), () => runMission(userId, m.id, { userId }));
+  return { ok: true, mission: m, jobId: job.id };
 }
 
 /** Critic pass over a draft: propose → attack → revise notes (deterministic checks). */

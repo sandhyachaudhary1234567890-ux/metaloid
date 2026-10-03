@@ -112,13 +112,20 @@ exists only to sign private objects and to complete an account deletion.
 
    ```bash
    supabase link --project-ref <ref>
-   supabase db push          # supabase/migrations/0001..0003
+   supabase db push          # supabase/migrations/*.sql, in order
    ```
 
    `0001_core_schema.sql` (tables, UUIDs, FKs, cursors, indexes),
    `0002_rls_and_grants.sql` (owner-only RLS on every user table, grants,
-   trigger for `profiles`), `0003_storage.sql` (three **private** buckets and
-   their policies). They are plain SQL — re-runnable on any Postgres 15+.
+   trigger for `profiles`), `0003_storage.sql` (private buckets and their
+   policies), then the platform migrations `001`–`006`
+   (credential audit trail, user-id widening for mixed-id deployments — a
+   no-op on the Supabase-shaped schema, credential rotation, missions/world/
+   skills/artifacts/workspaces/devices/jobs/rate counters, pairing codes,
+   artifact soft-delete). They are plain SQL — re-runnable on any Postgres 15+.
+
+   Buckets: `attachments`, `generated`, `avatars` and `artifacts`, all
+   **private**; downloads are signed URLs created after an ownership check.
 3. **Configure the gateway** from `server/.env.example`: service-role key, anon
    key, JWT verification settings, and `METALOID_ENCRYPTION_KEYS`. Without the
    encryption key the gateway refuses to store provider credentials rather than
@@ -126,10 +133,12 @@ exists only to sign private objects and to complete an account deletion.
 4. **Turn on email** — *Authentication → Providers → Email*, and set the
    redirect URLs to `<site>/app/`. Verification and password-reset links land
    back on the app, which opens the right screen.
-5. **Verify**: `GET /api/health` distinguishes `database`, `auth`,
-   `provider_configured`, `provider_healthy` and `storage` separately. It
-   reports values it actually observed — it never says ONLINE because an env
-   var exists.
+5. **Verify**: `GET /api/health` reports `ai`, `database`, `auth`
+   (`configured` / `mode` / `reachable`), `storage`, `encryption`,
+   `data.driver`, `models.free` and `degraded` separately, from probes it
+   actually ran — it never reports ONLINE because an environment variable
+   exists, and `models.free` stays `0` until a provider key reaches the
+   catalogue. `/api/ready` is the stricter check used by uptime monitors.
 
 ### Environment variables
 
@@ -143,6 +152,12 @@ exists only to sign private objects and to complete an account deletion.
 | `METALOID_ENCRYPTION_KEYS`, `_ACTIVE` | **server-only** | encrypts stored provider keys (`openssl rand -base64 32`) |
 | `METALOID_DATA_DRIVER`, `METALOID_DATA_DIR` | server-only | `supabase` in production, `local` for the demo |
 | `ALLOW_ORIGINS`, `BIND_HOST`, `PORT` | server-only | CORS allow-list and listen address |
+
+The full matrix — every variable classified PUBLIC / SERVER-ONLY / OPTIONAL /
+REQUIRED, with the honest failure mode of each — is in
+[`docs/ENV.md`](docs/ENV.md). Production, Preview and Development are
+configured separately; changing a variable only takes effect in a new
+deployment.
 
 The gateway refuses to start a request path that needs a missing secret rather
 than degrading quietly: no JWT key → `auth: unconfigured` and `503`; no
@@ -172,10 +187,18 @@ database holds metadata only.
 ### Testing your own setup
 
 ```bash
-npm test                    # typecheck + 86 tests + 205 RLS assertions
+npm test                    # typecheck, unit, gateway, security and end-to-end
+npm run test:unit           # app contract tests (vitest)
+npm run test:integration    # gateway API tests, real HTTP, real data driver
+npm run test:security       # RLS: 157 properties + the pgTAP suite
+npm run test:e2e            # signup → login → onboarding → chat → logout → reload
 supabase test db            # the same RLS matrix, against your project
 npm run showcase            # landing at /, app at /app/, gateway on 8787
 ```
+
+Counts at this release: 49 app tests, 37 gateway tests, 157 executed RLS
+properties, 49 pgTAP assertions and 24 end-to-end checks — all green, and no
+test was removed to get there.
 
 ## What is inside
 

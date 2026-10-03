@@ -113,13 +113,13 @@ export function MessageActions({
           <button
             onClick={() => onVersion(Math.max(0, shownIndex - 1))}
             disabled={shownIndex === 0}
-            className="icon-btn w-6 h-6 disabled:opacity-30" aria-label="Previous version"
+            className="icon-btn w-9 h-9 disabled:opacity-30" aria-label="Previous version"
           >‹</button>
           <span className="font-mono">{shownIndex + 1} / {total}</span>
           <button
             onClick={() => onVersion(Math.min(versions.length, shownIndex + 1))}
             disabled={shownIndex === versions.length}
-            className="icon-btn w-6 h-6 disabled:opacity-30" aria-label="Next version"
+            className="icon-btn w-9 h-9 disabled:opacity-30" aria-label="Next version"
           >›</button>
         </span>
       )}
@@ -141,8 +141,8 @@ function ActBtn({
       title={label}
       aria-label={label}
       className={cn(
-        'icon-btn w-7 h-7 min-w-[28px] min-h-[28px]',
-        active && 'text-[var(--fg)]'
+        'inline-flex items-center justify-center w-7 h-7 rounded-md text-[var(--fg-muted)] hover:text-[var(--fg)] hover:bg-[var(--surface-hover)] transition-all active:scale-95',
+        active && 'text-[var(--fg)] bg-[var(--surface-hover)]'
       )}
     >
       {children}

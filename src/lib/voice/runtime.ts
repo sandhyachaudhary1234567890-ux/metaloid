@@ -372,6 +372,14 @@ export class VoiceRuntime {
       this.lastChangeAt = now;
     }
 
+    const st = this.machine.getState();
+    if (st === 'LISTENING') {
+      this.machine.go('USER_SPEAKING');
+      this.utterFinalSeen = false;
+      this.ledger.set('VAD', 'active', 'speech detected from stt');
+      if (!this.marks.speechStart) this.marks.speechStart = performance.now();
+    }
+
     // Fast path: check for conversational interruption keywords in partial text
     if (['MODEL_SPEAKING', 'PROCESSING'].includes(this.machine.getState())) {
       const isKeywordInterrupt = this.bargeIn.evaluateTranscript(clean);
@@ -394,7 +402,6 @@ export class VoiceRuntime {
       `${reading.hypothesis} (${reading.score.toFixed(2)}) · ${reading.reasons[0] || ''}`
     );
 
-    const st = this.machine.getState();
     // Speculative preemptive trigger when complete thought is recognized
     if (
       !this.preemptiveFired &&
@@ -404,6 +411,24 @@ export class VoiceRuntime {
     ) {
       this.preemptiveFired = true;
       this.cb.onPreemptiveTranscript?.(clean);
+    }
+
+    // Dynamic endpointing safety timer:
+    // If the browser ASR does not emit isFinal within silence/stability window,
+    // automatically commit the turn to guarantee the model responds promptly.
+    if (!this.utterFinalSeen && !this.holding) {
+      window.clearTimeout(this.finalizeTimer);
+      const endpointDelay = reading.hypothesis === 'complete' ? 850 : 1350;
+      this.finalizeTimer = window.setTimeout(() => {
+        if (!this.openFlag || this.utterFinalSeen) return;
+        if (this.lastInterim.trim()) {
+          const finalCandidate = this.lastInterim.trim();
+          this.utterFinalSeen = true;
+          this.marks.sttFinal = performance.now();
+          this.ledger.set('STT', 'ok', `auto-endpoint: ${finalCandidate.slice(0, 40)}`);
+          this.handleFinalTranscript(finalCandidate);
+        }
+      }, endpointDelay);
     }
   }
 
@@ -642,9 +667,18 @@ export class VoiceRuntime {
       }
     } else {
       this.holding = false;
-      try {
-        (this.rec as { stop?: () => void } | null)?.stop?.();
-      } catch { /* ignore */ }
+      window.clearTimeout(this.finalizeTimer);
+      if (this.lastInterim.trim() && !this.utterFinalSeen) {
+        const text = this.lastInterim.trim();
+        this.utterFinalSeen = true;
+        this.marks.sttFinal = performance.now();
+        this.ledger.set('STT', 'ok', `hold-release: ${text.slice(0, 40)}`);
+        this.handleFinalTranscript(text);
+      } else {
+        try {
+          (this.rec as { stop?: () => void } | null)?.stop?.();
+        } catch { /* ignore */ }
+      }
     }
   }
 

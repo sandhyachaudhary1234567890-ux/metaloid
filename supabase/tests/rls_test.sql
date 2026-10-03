@@ -22,7 +22,7 @@
 -- ═══════════════════════════════════════════════════════════════════════
 
 begin;
-select plan(48);
+select plan(49);
 
 -- ── fixtures: two auth users and one row each ──────────────────────────
 insert into auth.users (id, instance_id, aud, role, email, encrypted_password, email_confirmed_at, created_at, updated_at)
@@ -299,8 +299,12 @@ select pg_temp.as_user('22222222-2222-2222-2222-222222222222');
 
 select is((select count(*) from public.conversations), 1::bigint,
   'non-owner: sees exactly their own one conversation');
-select is((select count(*) from storage.buckets), 3::bigint,
-  'exactly the three expected private buckets exist');
+-- The merged feature set declares four private buckets (attachments,
+-- generated, avatars for account surfaces; artifacts for agent output).
+select is((select count(*) from storage.buckets), 4::bigint,
+  'exactly the four expected private buckets exist');
+select is((select count(*) from storage.buckets where id in ('attachments','generated','avatars','artifacts')), 4::bigint,
+  'the buckets are the ones the migrations declare');
 
 -- ── account deletion cascades ──────────────────────────────────────────
 -- (run last: it destroys user A's rows on purpose, inside this transaction.

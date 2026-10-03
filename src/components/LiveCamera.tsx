@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState } from 'react';
 import { AnimatePresence, motion } from 'framer-motion';
-import { Mic, MicOff, Video, VideoOff, Repeat, Volume2, Settings2, PhoneOff, Eye, Scan } from 'lucide-react';
+import { Mic, MicOff, Video, VideoOff, Repeat, PhoneOff, Eye, Scan } from 'lucide-react';
 import { requestCamera, stopCamera } from '../providers/camera';
 import { analyzeImage } from '../providers/vision';
 import { useApp } from '../lib/store';
@@ -47,8 +47,17 @@ export function LiveCamera({ embedded = false }: { embedded?: boolean }) {
   useEffect(() => () => stopCamera(streamRef.current), []);
 
   const flip = async () => {
-    setFacing((f) => (f === 'user' ? 'environment' : 'user'));
-    toast({ title: 'Camera flipped (demo)' });
+    const next = facing === 'user' ? 'environment' : 'user';
+    setFacing(next);
+    if (camState !== 'live' || !videoRef.current) return;
+    try {
+      stopCamera(streamRef.current);
+      const s = await requestCamera(videoRef.current, next);
+      streamRef.current = s;
+    } catch {
+      setCamState('denied');
+      toast({ title: 'Could not switch camera', desc: 'This device may have only one camera.', tone: 'error' });
+    }
   };
 
   const askVision = async (q: string) => {
@@ -162,9 +171,7 @@ export function LiveCamera({ embedded = false }: { embedded?: boolean }) {
       <div className="mt-4 flex items-center justify-center gap-2 flex-wrap">
         <LiveBtn label={muted ? 'Unmute' : 'Mute'} onClick={() => setMuted((m) => !m)} Icon={muted ? MicOff : Mic} off={muted} />
         <LiveBtn label="Camera" onClick={() => (camState === 'live' ? stop() : start())} Icon={camState === 'live' ? Video : VideoOff} off={camState !== 'live'} />
-        <LiveBtn label="Flip" onClick={flip} Icon={Repeat} />
-        <LiveBtn label="Speaker" onClick={() => toast({ title: 'Speaker toggled (demo)' })} Icon={Volume2} />
-        <LiveBtn label="Settings" onClick={() => toast({ title: 'Live settings (demo)' })} Icon={Settings2} />
+        <LiveBtn label="Flip" onClick={() => void flip()} Icon={Repeat} />
         <button
           onClick={() => openModal('end-live')}
           className="btn-danger h-10 px-4 text-[13px]"

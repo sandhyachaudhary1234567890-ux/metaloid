@@ -40,15 +40,17 @@ export function resolveEntity(type, name, known = []) {
 }
 
 /** Fold normalized findings into the world model with evidence edges. */
-export function ingestFindings(target, findings = []) {
-  const targetEnt = upsertEntity({ type: 'investigation', name: target, source: 'osint-skill' });
+export async function ingestFindings(userId, target, findings = []) {
+  if (!userId) throw new Error('userId required');
+  const targetEnt = await upsertEntity({ userId, type: 'investigation', name: target, source: 'osint-skill' });
   const edges = [];
   for (const f of findings.slice(0, 200)) {
-    const ent = upsertEntity({
+    const ent = await upsertEntity({
+      userId,
       type: f.type, name: String(f.value).slice(0, 160),
       source: f.source, confidence: f.confidence,
     });
-    const r = relate(targetEnt.id, ent.id, `observed:${f.type}`, {
+    const r = await relate(userId, targetEnt.id, ent.id, `observed:${f.type}`, {
       source: f.source, confidence: f.confidence, evidence: f.evidence || '',
     });
     if (r.ok) edges.push(r.edge);

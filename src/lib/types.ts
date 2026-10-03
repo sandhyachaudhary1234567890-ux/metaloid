@@ -18,7 +18,9 @@ export type LanguageId =
 export type ModelId = 'auto' | 'fast' | 'balanced' | 'smart' | 'vision';
 
 export type ViewId =
-  | 'chat' | 'live' | 'memory' | 'history' | 'settings';
+  | 'home' | 'chat' | 'live' | 'memory' | 'history' | 'settings'
+  // master-line surfaces, seamed into the polished shell rather than dropped
+  | 'projects' | 'library' | 'research' | 'tasks';
 
 export type ConnectionState = 'checking' | 'online' | 'offline' | 'mock' | 'degraded';
 
@@ -119,6 +121,8 @@ export interface ToastItem {
   id: string;
   title: string;
   desc?: string;
+  /** Master-line panels raise coloured toasts; the shell renders them. */
+  tone?: 'success' | 'error' | 'info';
 }
 
 // ---- Provider contracts (transport layer implements these) ----
