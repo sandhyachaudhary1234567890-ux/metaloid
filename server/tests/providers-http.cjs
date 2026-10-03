@@ -6,7 +6,8 @@
   const os = await import('node:os');
   const path = await import('node:path');
   const { spawn } = await import('node:child_process');
-  const B = 'https://127.0.0.1:8881';
+  const { base } = require('./_scheme.cjs');
+  const B = base(8881);
   const tmp = fs.mkdtempSync(path.join(os.tmpdir(), 'metaloid-provhttp-'));
   let pass = 0;
   const ok = (n, c) => {
@@ -20,7 +21,7 @@
   };
   const gw = spawn(process.execPath, ['server/src/index.js'], {
     cwd: require('node:path').resolve(__dirname, '..', '..'),
-    env: { ...process.env, PORT: '8881', METALOID_DATA_DIR: tmp, METALOID_ACCESS_TTL_MS: '2000', METALOID_AUTH_LIMIT: '1000' },
+    env: { ...process.env, METALOID_NO_DOTENV: '1', SUPABASE_JWT_SECRET: 'matrix-hs256-secret-never-used-for-signing', PORT: '8881', METALOID_DATA_DIR: tmp, METALOID_ACCESS_TTL_MS: '2000', METALOID_AUTH_LIMIT: '1000' },
     stdio: 'ignore',
   });
   const j = async (r) => r.json().catch(() => ({}));

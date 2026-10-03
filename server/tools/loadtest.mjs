@@ -95,12 +95,12 @@ const child = spawn(process.execPath, [path.join(ROOT, 'src', 'index.js')], {
   stdio: ['ignore', 'pipe', 'pipe'],
   env: {
     ...process.env,
+    METALOID_NO_DOTENV: '1',
     PORT: String(gatewayPort),
     BIND_HOST: '127.0.0.1',
     OPENROUTER_API_KEY: 'load-test-key-0123456789',
     OPENROUTER_BASE: 'http://127.0.0.1:1/api/v1',
     NVIDIA_ENABLED: 'false',
-    METALOID_DATA_DRIVER: 'local',
     METALOID_DATA_DIR: dataDir,
     METALOID_ENCRYPTION_KEYS: `k1:${ENC_KEY}`,
     SUPABASE_JWT_PUBLIC_KEY: PUBLIC_PEM,

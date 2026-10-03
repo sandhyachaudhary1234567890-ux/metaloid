@@ -23,6 +23,54 @@ export const ErrorTypes = {
 /**
  * Base Provider Adapter - Abstract class that all providers must extend
  */
+/**
+ * Normalise a configured API base: strip trailing slashes so path joins never
+ * produce `//chat/completions`, which some gateways 404 on. Written as a loop
+ * rather than a regex so there is no escaping to get subtly wrong.
+ */
+function trimBase(url) {
+  let out = String(url || '');
+  while (out.endsWith('/')) out = out.slice(0, -1);
+  return out;
+}
+
+/**
+ * How long to wait for a provider to *start* answering, before giving up.
+ * Not a cap on the answer itself: a long generation is legitimate, but a
+ * provider that never sends response headers is not, and without this the
+ * streamed request inherits whatever signal the caller happened to pass —
+ * which, on the agent paths that pass none, means no timeout at all. The
+ * request then sits until the runtime gives up minutes later, which the user
+ * experiences as a permanent "Thinking…".
+ */
+const PROVIDER_HEADERS_TIMEOUT_MS = Number(process.env.METALOID_PROVIDER_TIMEOUT_MS || 30_000);
+
+/**
+ * A signal for a streamed request: aborts if the provider never answers, and
+ * still honours a caller's abort mid-stream. The timer is cleared as soon as
+ * headers arrive, so it limits time-to-first-byte and not total duration.
+ */
+function streamGate(request) {
+  const controller = new AbortController();
+  const caller = request && request.signal;
+  if (caller) {
+    if (caller.aborted) controller.abort(caller.reason);
+    // once:true — the caller's signal belongs to the request, so this listener
+    // is collected with it rather than accumulating per attempt.
+    else caller.addEventListener('abort', () => controller.abort(caller.reason), { once: true });
+  }
+  const timer = setTimeout(
+    () => controller.abort(new Error(`provider sent no response within ${PROVIDER_HEADERS_TIMEOUT_MS}ms`)),
+    PROVIDER_HEADERS_TIMEOUT_MS
+  );
+  if (typeof timer.unref === 'function') timer.unref();
+  return {
+    signal: controller.signal,
+    /** Headers are in: stop counting, let the stream run as long as it needs. */
+    answered() { clearTimeout(timer); },
+  };
+}
+
 export class ProviderAdapter {
   constructor(providerId, credentialVault) {
     this.providerId = providerId;
@@ -227,7 +275,11 @@ export class ProviderAdapter {
 export class OpenRouterAdapter extends ProviderAdapter {
   constructor(credentialVault) {
     super('openrouter', credentialVault);
-    this.baseUrl = 'https://openrouter.ai/api/v1';
+    // Same override the catalogue and the platform-key path already honour
+    // (openrouter.js). Hardcoding it here meant a deployment pointed at an
+    // OpenAI-compatible proxy — or a test pointed at a fake — had its BYOK
+    // traffic leave for the real vendor while everything else used the proxy.
+    this.baseUrl = trimBase(process.env.OPENROUTER_BASE || 'https://openrouter.ai/api/v1');
   }
   
   async validateCredential(credential) {
@@ -247,7 +299,7 @@ export class OpenRouterAdapter extends ProviderAdapter {
       const response = await fetch(`${this.baseUrl}/models`, {
         headers: {
           'Authorization': `Bearer ${credential.credential}`,
-          'HTTP-Referer': 'http://localhost:5173',
+          'HTTP-Referer': process.env.PUBLIC_APP_URL || 'http://localhost:5173',
           'X-Title': 'METALOID'
         },
         signal: AbortSignal.timeout(8000)
@@ -305,7 +357,7 @@ export class OpenRouterAdapter extends ProviderAdapter {
         headers: {
           'Content-Type': 'application/json',
           'Authorization': `Bearer ${credential.credential}`,
-          'HTTP-Referer': 'http://localhost:5173',
+          'HTTP-Referer': process.env.PUBLIC_APP_URL || 'http://localhost:5173',
           'X-Title': 'METALOID'
         },
         body: JSON.stringify({
@@ -348,22 +400,30 @@ export class OpenRouterAdapter extends ProviderAdapter {
       const { model, messages, system } = request;
       const sys = system || 'You are METALOID, a private personal AI assistant. Be concise unless complexity demands detail.';
       
-      const response = await fetch(`${this.baseUrl}/chat/completions`, {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          'Authorization': `Bearer ${credential.credential}`,
-          'HTTP-Referer': 'http://localhost:5173',
-          'X-Title': 'METALOID'
-        },
-        body: JSON.stringify({
-          model,
-          stream: true,
-          messages: [{ role: 'system', content: sys }, ...messages]
-        }),
-        signal: request.signal
-      });
-      
+      const gate = streamGate(request);
+      let response;
+      try {
+        response = await fetch(`${this.baseUrl}/chat/completions`, {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+            'Authorization': `Bearer ${credential.credential}`,
+            'HTTP-Referer': process.env.PUBLIC_APP_URL || 'http://localhost:5173',
+            'X-Title': 'METALOID'
+          },
+          body: JSON.stringify({
+            model,
+            stream: true,
+            messages: [{ role: 'system', content: sys }, ...messages]
+          }),
+          signal: gate.signal
+        });
+      } finally {
+        // Headers arrived, or the attempt failed. Either way time-to-first-byte
+        // is no longer the question, so the connect budget stops here.
+        gate.answered();
+      }
+
       if (!response.ok || !response.body) {
         const error = await response.text().catch(() => '');
         throw this.normalizeError({ message: `OpenRouter ${response.status}: ${error}`, statusCode: response.status });
@@ -451,7 +511,7 @@ export class OpenRouterAdapter extends ProviderAdapter {
 export class NvidiaAdapter extends ProviderAdapter {
   constructor(credentialVault) {
     super('nvidia', credentialVault);
-    this.baseUrl = 'https://integrate.api.nvidia.com/v1';
+    this.baseUrl = trimBase(process.env.NVIDIA_BASE || 'https://integrate.api.nvidia.com/v1');
   }
   
   async validateCredential(credential) {
@@ -518,21 +578,27 @@ export class NvidiaAdapter extends ProviderAdapter {
       const { model = 'nvidia/llama-3.1-nemotron-70b-instruct', messages, system } = request;
       const sys = system || 'You are METALOID, a private personal AI assistant. Be concise unless complexity demands detail.';
       
-      const response = await fetch(`${this.baseUrl}/chat/completions`, {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          'Authorization': `Bearer ${credential.credential}`
-        },
-        body: JSON.stringify({
-          model,
-          stream: true,
-          temperature: 0.6,
-          messages: [{ role: 'system', content: sys }, ...messages]
-        }),
-        signal: request.signal
-      });
-      
+      const gate = streamGate(request);
+      let response;
+      try {
+        response = await fetch(`${this.baseUrl}/chat/completions`, {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+            'Authorization': `Bearer ${credential.credential}`
+          },
+          body: JSON.stringify({
+            model,
+            stream: true,
+            temperature: 0.6,
+            messages: [{ role: 'system', content: sys }, ...messages]
+          }),
+          signal: gate.signal
+        });
+      } finally {
+        gate.answered(); // headers in, or the attempt is over
+      }
+
       if (!response.ok || !response.body) {
         const error = await response.text().catch(() => '');
         throw this.normalizeError({ message: `NVIDIA ${response.status}: ${error}`, statusCode: response.status });

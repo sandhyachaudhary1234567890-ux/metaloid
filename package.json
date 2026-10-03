@@ -3,7 +3,7 @@
   "private": true,
   "version": "0.1.0",
   "type": "module",
-  "description": "metaloid \u2014 private personal AI operating system (frontend prototype)",
+  "description": "metaloid — private personal AI operating system (frontend prototype)",
   "scripts": {
     "dev": "vite",
     "build": "tsc -b && vite build && node scripts/build-landing.mjs",
@@ -20,12 +20,17 @@
     "test:unit": "vitest run",
     "test:integration": "npm --prefix server test && npm --prefix server run test:matrices",
     "test:security": "node supabase/tests/rls.pglite.mjs && node supabase/tests/rls_pgtap.pglite.mjs",
-    "test:e2e": "node scripts/e2e.mjs"
+    "test:e2e": "node scripts/e2e.mjs",
+    "test:live": "node scripts/live-smoke.mjs"
   },
   "dependencies": {
     "@supabase/supabase-js": "^2.117.2",
+    "cors": "^2.8.5",
+    "express": "^4.21.2",
     "framer-motion": "^11.11.17",
+    "jose": "^6.2.12",
     "lucide-react": "^0.454.0",
+    "pg": "^8.23.1",
     "react": "^18.3.1",
     "react-dom": "^18.3.1",
     "react-markdown": "^10.1.0",
@@ -33,20 +38,21 @@
     "three": "^0.163.0"
   },
   "devDependencies": {
+    "@electric-sql/pglite": "^0.5.8",
+    "@testing-library/dom": "^10.4.2",
+    "@testing-library/react": "^16.3.3",
     "@types/node": "^26.6.2",
     "@types/react": "^18.3.12",
     "@types/react-dom": "^18.3.1",
     "@types/three": "^0.163.0",
     "@vitejs/plugin-react": "^4.3.3",
     "autoprefixer": "^10.4.20",
+    "jsdom": "^30.1.1",
     "postcss": "^8.4.49",
+    "sharp": "^0.35.5",
     "tailwindcss": "^3.4.14",
     "typescript": "^5.6.3",
     "vite": "^5.4.10",
-    "@electric-sql/pglite": "^0.5.8",
-    "@testing-library/dom": "^10.4.2",
-    "@testing-library/react": "^16.3.3",
-    "jsdom": "^30.1.1",
     "vitest": "^2.1.9"
   },
   "main": "postcss.config.js",

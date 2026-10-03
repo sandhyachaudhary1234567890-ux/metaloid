@@ -72,7 +72,7 @@ export function ProviderSettings() {
   };
 
   if (!online) {
-    return <p className="text-[12.5px] text-[var(--fg-muted)]">Sign in with the gateway online to manage AI providers.</p>;
+    return <p className="text-small text-[var(--fg-muted)]">Sign in with the gateway online to manage AI providers.</p>;
   }
 
   const credFor = (pid: string) => creds.find((c) => c.providerId === pid);
@@ -157,12 +157,12 @@ export function ProviderSettings() {
     <div>
       <div className="mb-4 flex items-center justify-between">
         <div>
-          <h3 className="text-[15px] font-semibold text-[var(--fg)]">AI Connections</h3>
-          <p className="text-[12.5px] text-[var(--fg-muted)]">Configure verified free models, cloud frontier APIs, or local AI.</p>
+          <h3 className="text-read font-semibold text-[var(--fg)]">AI Connections</h3>
+          <p className="text-small text-[var(--fg-muted)]">Configure verified free models, cloud frontier APIs, or local AI.</p>
         </div>
         <button
           onClick={() => setShowDiscovery(true)}
-          className="btn-primary h-9 px-3.5 text-[12.5px] flex items-center gap-1.5 shrink-0"
+          className="btn-primary h-9 px-3.5 text-small flex items-center gap-1.5 shrink-0"
         >
           <Sparkles size={14} /> Discover 50+ Providers & Free AI
         </button>
@@ -204,19 +204,19 @@ export function ProviderSettings() {
         return (
           <div key={p.providerId} className="rounded-2xl border border-[var(--border)] bg-[var(--surface-elevated)] p-3.5 mt-2.5">
             <div className="flex items-center gap-2.5">
-              <span className={cn('h-2 w-2 rounded-full shrink-0', !cred ? 'bg-zinc-500' : !hs ? 'bg-zinc-400' : hs.status === 'healthy' ? 'bg-emerald-400' : 'bg-amber-300')} />
+              <span className={cn('h-2 w-2 rounded-full shrink-0', !cred ? 'bg-[var(--surface-hover)]' : !hs ? 'bg-[var(--surface-hover)]' : hs.status === 'healthy' ? 'bg-success/10' : 'bg-warning/10')} />
               <div className="flex-1 min-w-0">
-                <p className="text-[14px] font-semibold text-[var(--fg)]">
+                <p className="text-body font-semibold text-[var(--fg)]">
                   {p.name}
-                  {isDefault && <span className="ml-2 text-[10.5px] font-bold uppercase text-[var(--accent)]">Default</span>}
-                  {isFallback && !isDefault && <span className="ml-2 text-[10.5px] font-bold uppercase text-[var(--fg-muted)]">Fallback</span>}
+                  {isDefault && <span className="ml-2 text-micro font-bold uppercase text-[var(--accent)]">Default</span>}
+                  {isFallback && !isDefault && <span className="ml-2 text-micro font-bold uppercase text-[var(--fg-muted)]">Fallback</span>}
                 </p>
-                <p className="text-[12px] text-[var(--fg-muted)]">
+                <p className="text-small text-[var(--fg-muted)]">
                   {cred ? `Connected · ${cred.redacted || 'key stored'}` : 'Not connected'}
                   {hs && cred ? ` · ${hs.status}${hs.ms !== null ? ` · ${hs.ms}ms` : ''}` : ''}
                   {u ? ` · ${u.requests} req · ${u.totalTokens} tok` : ''}
                 </p>
-                <p className="text-[11.5px] text-[var(--fg-faint)]">
+                <p className="text-micro text-[var(--fg-faint)]">
                   {(p.capabilities.supportedModalities || []).join(' · ') || p.category}
                   {u ? ` · cost: ${u.cost.usd === null ? 'not reported by provider' : `$${u.cost.usd.toFixed(4)} reported`}` : ''}
                 </p>
@@ -297,9 +297,9 @@ function PanelBtn({ label, onClick, danger, busy }: { label: string; onClick: ()
       onClick={onClick}
       disabled={!!busy}
       className={cn(
-        'h-8 px-2.5 rounded-lg border text-[12px] font-medium disabled:opacity-50',
+        'h-8 px-2.5 rounded-lg border text-small font-medium disabled:opacity-50',
         danger
-          ? 'border-red-500/30 text-red-400 hover:bg-red-500/10'
+          ? 'border-danger/30 text-danger hover:bg-danger/10'
           : 'border-[var(--border)] text-[var(--fg-muted)] hover:text-[var(--fg)]'
       )}
     >
@@ -319,9 +319,9 @@ function KeyForm({ providerId, help, keyInput, setKeyInput, busy, rotate, onSave
 }) {
   return (
     <div className="mt-2.5 rounded-xl bg-[var(--surface-sunken)] border border-[var(--border-subtle)] p-3">
-      <p className="text-[12px] font-medium text-[var(--fg-muted)]">API Key</p>
+      <p className="text-small font-medium text-[var(--fg-muted)]">API Key</p>
       {help?.keyUrl && (
-        <a href={help.keyUrl} target="_blank" rel="noreferrer" className="text-[12px] text-[var(--accent)] hover:underline">
+        <a href={help.keyUrl} target="_blank" rel="noreferrer" className="text-small text-[var(--accent)] hover:underline">
           Get API key →
         </a>
       )}
@@ -333,13 +333,13 @@ function KeyForm({ providerId, help, keyInput, setKeyInput, busy, rotate, onSave
           if (e.key === 'Enter') onSave();
         }}
         placeholder="Paste key — stored encrypted, never shown again"
-        className="mt-1.5 h-10 w-full rounded-xl bg-[var(--surface-elevated)] border border-[var(--border)] px-3 font-mono text-[13px] outline-none"
+        className="mt-1.5 h-10 w-full rounded-xl bg-[var(--surface-elevated)] border border-[var(--border)] px-3 font-mono text-ui outline-none"
         aria-label={`${providerId} API key`}
       />
       <button
         onClick={onSave}
         disabled={busy || !keyInput.trim()}
-        className="mt-2 h-9 w-full rounded-xl bg-[var(--accent)] text-white text-[13px] font-semibold disabled:opacity-50"
+        className="mt-2 h-9 w-full rounded-xl bg-[var(--accent-solid)] text-[var(--accent-on-solid)] text-ui font-semibold disabled:opacity-50"
       >
         {busy ? 'Saving…' : rotate ? 'Rotate key' : 'Connect'}
       </button>
@@ -357,17 +357,17 @@ function ModelPicker({ providerId, models, routing, onPick, onRefresh }: {
   return (
     <div className="mt-2.5 rounded-xl bg-[var(--surface-sunken)] border border-[var(--border-subtle)] p-3">
       <div className="flex items-center gap-2 mb-2">
-        <p className="text-[12px] font-medium text-[var(--fg-muted)] flex-1">Default model for {providerId}</p>
-        <button onClick={onRefresh} className="text-[12px] text-[var(--accent)] hover:underline">Update models</button>
+        <p className="text-small font-medium text-[var(--fg-muted)] flex-1">Default model for {providerId}</p>
+        <button onClick={onRefresh} className="text-small text-[var(--accent)] hover:underline">Update models</button>
       </div>
-      {!models.length && <p className="text-[12px] text-[var(--fg-faint)]">No models cached — press Sync catalog.</p>}
+      {!models.length && <p className="text-small text-[var(--fg-faint)]">No models cached — press Sync catalog.</p>}
       <div className="space-y-1">
         {models.map((m) => (
           <button
             key={m.modelId}
             onClick={() => onPick(m.modelId)}
             className={cn(
-              'w-full text-left px-2.5 py-1.5 rounded-lg text-[12.5px] font-mono hover:bg-[var(--surface-elevated)]',
+              'w-full text-left px-2.5 py-1.5 rounded-lg text-small font-mono hover:bg-[var(--surface-elevated)]',
               routing?.defaultModel === m.modelId ? 'text-[var(--accent)] font-semibold' : 'text-[var(--fg)]'
             )}
           >
@@ -395,22 +395,22 @@ function OnboardingCard({ providers, help, ensureHelp, onDone }: {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [pid]);
   return (
-    <div className="rounded-2xl border border-[var(--accent)]/40 bg-[var(--accent)]/[0.06] p-4">
-      <p className="text-[14px] font-bold text-[var(--fg)]">Connect your first AI provider.</p>
-      <p className="text-[12.5px] text-[var(--fg-muted)] mt-0.5">Choose an LLM → paste key → test → ready. Nothing else needed.</p>
+    <div className="rounded-2xl border border-[color-mix(in_srgb,var(--accent)_40%,transparent)] bg-[var(--accent)]/[0.06] p-4">
+      <p className="text-body font-bold text-[var(--fg)]">Connect your first AI provider.</p>
+      <p className="text-small text-[var(--fg-muted)] mt-0.5">Choose an LLM → paste key → test → ready. Nothing else needed.</p>
       <div className="flex gap-1.5 mt-3 flex-wrap">
         {providers.filter((p) => ['openai', 'anthropic', 'gemini', 'openrouter'].includes(p.providerId)).map((p) => (
           <button
             key={p.providerId}
             onClick={() => setPid(p.providerId)}
-            className={cn('h-9 px-3.5 rounded-xl border text-[13px] font-medium', pid === p.providerId ? 'border-[var(--accent)] bg-[var(--accent)]/10 text-[var(--fg)]' : 'border-[var(--border)] text-[var(--fg-muted)]')}
+            className={cn('h-9 px-3.5 rounded-xl border text-ui font-medium', pid === p.providerId ? 'border-[var(--accent)] bg-[color-mix(in_srgb,var(--accent)_10%,transparent)] text-[var(--fg)]' : 'border-[var(--border)] text-[var(--fg-muted)]')}
           >
             {p.name}
           </button>
         ))}
       </div>
       {h?.keyUrl && (
-        <a href={h.keyUrl} target="_blank" rel="noreferrer" className="inline-block mt-2.5 text-[13px] text-[var(--accent)] hover:underline">
+        <a href={h.keyUrl} target="_blank" rel="noreferrer" className="inline-block mt-2.5 text-ui text-[var(--accent)] hover:underline">
           Get API key →
         </a>
       )}
@@ -436,7 +436,7 @@ function OnboardingCard({ providers, help, ensureHelp, onDone }: {
           }
         }}
         placeholder="Paste API key"
-        className="mt-2 h-11 w-full rounded-xl bg-[var(--surface-elevated)] border border-[var(--border)] px-3.5 font-mono text-[13.5px] outline-none"
+        className="mt-2 h-11 w-full rounded-xl bg-[var(--surface-elevated)] border border-[var(--border)] px-3.5 font-mono text-ui outline-none"
         aria-label="API key"
       />
       <button
@@ -456,7 +456,7 @@ function OnboardingCard({ providers, help, ensureHelp, onDone }: {
             }
           })();
         }}
-        className="mt-2.5 h-11 w-full rounded-xl bg-[var(--accent)] text-white text-[14px] font-semibold disabled:opacity-50"
+        className="mt-2.5 h-11 w-full rounded-xl bg-[var(--accent-solid)] text-[var(--accent-on-solid)] text-body font-semibold disabled:opacity-50"
       >
         {busy ? 'Testing key…' : 'Connect & Test'}
       </button>

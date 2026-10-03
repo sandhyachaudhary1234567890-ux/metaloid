@@ -1,7 +1,23 @@
-# Render blueprint for the METALOID gateway (persistent Node process).
-# The gateway CANNOT run on Vercel serverless (in-memory missions/OSINT
-# jobs, file stores, long SSE streams) — frontend goes to Vercel,
-# gateway goes here (or Railway/Fly with the same start command).
+# OPTIONAL: a persistent gateway host.
+#
+# The gateway DOES run on Vercel — api/[...path].js serves this same app as a
+# serverless function, so auth, account data, the model catalogue, provider
+# credentials and streaming chat all work on the Vercel deployment with no
+# second backend. This blueprint is not needed for that; it exists for the
+# long-running surfaces, which want a process that stays alive between
+# requests:
+#
+#   * mission and OSINT job state, which is per-process
+#   * SSE streams longer than the serverless function's maxDuration
+#   * the repository indexer and file watcher
+#
+# Use it (or Railway/Fly with the same start command) only if you want those
+# on a persistent host. Do not run it as a second copy of the API: two hosts
+# serving /api with different configuration is the split this rewrite removed.
+#
+# It is safe to run either way because the account data lives in Postgres, not
+# in the process. Set SUPABASE_DB=supabase here too, or this host keeps its own
+# store and the two hosts will disagree about what a user has.
 services:
   - type: web
     name: metaloid-gateway
@@ -21,3 +37,22 @@ services:
         sync: false
       - key: NVIDIA_ENABLED
         value: 'false'
+      # Postgres is the source of truth. Without these two the gateway writes
+      # to a local JSON store and this host would hold data the Vercel
+      # deployment cannot see.
+      - key: SUPABASE_DB
+        value: supabase
+      - key: SUPABASE_DB_POOL_URL
+        sync: false
+      - key: SUPABASE_URL
+        sync: false
+      - key: SUPABASE_ANON_KEY
+        sync: false
+      - key: SUPABASE_JWT_PUBLIC_KEY
+        sync: false
+      - key: METALOID_ENCRYPTION_KEYS
+        sync: false
+      - key: METALOID_ENCRYPTION_ACTIVE
+        value: k1
+      - key: METALOID_MODE
+        value: production

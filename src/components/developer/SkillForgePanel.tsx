@@ -137,12 +137,12 @@ export function SkillForgePanel({ open, onClose }: SkillForgePanelProps) {
               </div>
               <div>
                 <div className="flex items-center gap-2">
-                  <h2 className="text-[15px] font-bold tracking-tight">Developer / Owner &middot; Skill Forge</h2>
-                  <span className="text-[10px] font-mono uppercase px-2 py-0.5 rounded border border-emerald-500/30 bg-emerald-500/10 text-emerald-400">
+                  <h2 className="text-read font-bold tracking-tight">Developer / Owner &middot; Skill Forge</h2>
+                  <span className="text-micro font-mono uppercase px-2 py-0.5 rounded border border-success/30 bg-success/10 text-success">
                     Sandboxed Engine
                   </span>
                 </div>
-                <p className="text-[11.5px] text-[var(--fg-muted)]">
+                <p className="text-micro text-[var(--fg-muted)]">
                   Autonomous skill synthesis, benchmark verification, canary versions & rollback
                 </p>
               </div>
@@ -153,7 +153,7 @@ export function SkillForgePanel({ open, onClose }: SkillForgePanelProps) {
                 onClick={runMaintenance}
                 disabled={isMaintaining}
                 className={cn(
-                  'h-8 px-3 rounded-lg text-[12px] font-medium border border-[var(--border)] bg-[var(--surface-sunken)] hover:bg-[var(--surface)] inline-flex items-center gap-1.5 transition-colors',
+                  'h-8 px-3 rounded-lg text-small font-medium border border-[var(--border)] bg-[var(--surface-sunken)] hover:bg-[var(--surface)] inline-flex items-center gap-1.5 transition-colors',
                   isMaintaining && 'opacity-60 cursor-not-allowed'
                 )}
               >
@@ -167,7 +167,7 @@ export function SkillForgePanel({ open, onClose }: SkillForgePanelProps) {
           </div>
 
           {/* Navigation Tabs */}
-          <div className="flex items-center gap-1 px-6 border-b border-[var(--border)] bg-[var(--surface)] text-[12.5px]">
+          <div className="flex items-center gap-1 px-6 border-b border-[var(--border)] bg-[var(--surface)] text-small">
             <button
               onClick={() => setActiveTab('skills')}
               className={cn(
@@ -219,9 +219,9 @@ export function SkillForgePanel({ open, onClose }: SkillForgePanelProps) {
           </div>
 
           {statusMessage && (
-            <div className="px-6 py-2 bg-[var(--accent-subtle)] border-b border-[var(--accent)]/30 text-[12px] text-[var(--fg)] flex items-center justify-between">
+            <div className="px-6 py-2 bg-[var(--accent-subtle)] border-b border-[color-mix(in_srgb,var(--accent)_30%,transparent)] text-small text-[var(--fg)] flex items-center justify-between">
               <span>{statusMessage}</span>
-              <button onClick={() => setStatusMessage('')} className="text-[11px] underline opacity-70">
+              <button onClick={() => setStatusMessage('')} className="text-micro underline opacity-70">
                 Dismiss
               </button>
             </div>
@@ -243,34 +243,34 @@ export function SkillForgePanel({ open, onClose }: SkillForgePanelProps) {
                       <div className="flex items-start justify-between">
                         <div>
                           <div className="flex items-center gap-2">
-                            <span className="font-semibold text-[14px] text-[var(--fg)]">{skill.name}</span>
-                            <span className="text-[11px] font-mono text-[var(--fg-muted)]">v{skill.currentVersion}</span>
+                            <span className="font-semibold text-body text-[var(--fg)]">{skill.name}</span>
+                            <span className="text-micro font-mono text-[var(--fg-muted)]">v{skill.currentVersion}</span>
                             <span
                               className={cn(
-                                'text-[10px] font-mono uppercase px-2 py-0.5 rounded border font-semibold',
-                                status === 'STABLE' && 'border-emerald-500/30 bg-emerald-500/10 text-emerald-400',
-                                status === 'CANARY' && 'border-amber-500/30 bg-amber-500/10 text-amber-300',
-                                status === 'EXPERIMENTAL' && 'border-sky-500/30 bg-sky-500/10 text-sky-400',
-                                status === 'DISABLED' && 'border-red-500/30 bg-red-500/10 text-red-400'
+                                'text-micro font-mono uppercase px-2 py-0.5 rounded border font-semibold',
+                                status === 'STABLE' && 'border-success/30 bg-success/10 text-success',
+                                status === 'CANARY' && 'border-warning/30 bg-warning/10 text-warning',
+                                status === 'EXPERIMENTAL' && 'border-info/30 bg-info/10 text-info',
+                                status === 'DISABLED' && 'border-danger/30 bg-danger/10 text-danger'
                               )}
                             >
                               {status}
                             </span>
                           </div>
-                          <p className="text-[12.5px] text-[var(--fg-muted)] mt-1">{skill.purpose}</p>
+                          <p className="text-small text-[var(--fg-muted)] mt-1">{skill.purpose}</p>
                         </div>
 
                         <div className="flex items-center gap-2">
                           <button
                             onClick={() => testSkillInSandbox(skill)}
-                            className="h-7 px-2.5 rounded text-[11.5px] font-medium border border-[var(--border)] bg-[var(--surface-sunken)] hover:bg-[var(--surface-elevated)] inline-flex items-center gap-1"
+                            className="h-7 px-2.5 rounded text-micro font-medium border border-[var(--border)] bg-[var(--surface-sunken)] hover:bg-[var(--surface-elevated)] inline-flex items-center gap-1"
                           >
                             <Play size={11} /> Test Sandbox
                           </button>
                           {currentVer?.rollbackVersion && (
                             <button
                               onClick={() => rollbackSkill(skill.skillId)}
-                              className="h-7 px-2.5 rounded text-[11.5px] font-medium border border-amber-500/30 bg-amber-500/10 text-amber-300 hover:bg-amber-500/20 inline-flex items-center gap-1"
+                              className="h-7 px-2.5 rounded text-micro font-medium border border-warning/30 bg-warning/10 text-warning hover:bg-warning/20 inline-flex items-center gap-1"
                               title={`Rollback to ${currentVer.rollbackVersion}`}
                             >
                               <RotateCcw size={11} /> Rollback
@@ -281,7 +281,7 @@ export function SkillForgePanel({ open, onClose }: SkillForgePanelProps) {
 
                       {/* Benchmark & Telemetry */}
                       {currentVer?.benchmark && (
-                        <div className="mt-3 grid grid-cols-4 gap-2 pt-3 border-t border-[var(--border)] text-[11.5px]">
+                        <div className="mt-3 grid grid-cols-4 gap-2 pt-3 border-t border-[var(--border)] text-micro">
                           <div>
                             <span className="text-[var(--fg-subtle)] block">Accuracy</span>
                             <span className="font-mono font-medium">
@@ -300,7 +300,7 @@ export function SkillForgePanel({ open, onClose }: SkillForgePanelProps) {
                           </div>
                           <div>
                             <span className="text-[var(--fg-subtle)] block">Sandbox Security</span>
-                            <span className="font-mono text-emerald-400 inline-flex items-center gap-1">
+                            <span className="font-mono text-success inline-flex items-center gap-1">
                               <ShieldCheck size={11} /> Isolated
                             </span>
                           </div>
@@ -309,7 +309,7 @@ export function SkillForgePanel({ open, onClose }: SkillForgePanelProps) {
 
                       {/* Sandbox test output preview */}
                       {testingSkillId === skill.skillId && testOutput && (
-                        <div className="mt-3 p-3 rounded-lg bg-[var(--surface-sunken)] border border-[var(--border)] font-mono text-[11px] text-[var(--fg-secondary)] overflow-x-auto max-h-36">
+                        <div className="mt-3 p-3 rounded-lg bg-[var(--surface-sunken)] border border-[var(--border)] font-mono text-micro text-[var(--fg-secondary)] overflow-x-auto max-h-36">
                           <div className="flex items-center justify-between text-[var(--fg-muted)] mb-1">
                             <span className="inline-flex items-center gap-1">
                               <Terminal size={11} /> Sandbox Output
@@ -332,9 +332,9 @@ export function SkillForgePanel({ open, onClose }: SkillForgePanelProps) {
               <div className="space-y-3">
                 {gaps.length === 0 ? (
                   <div className="p-8 text-center text-[var(--fg-muted)]">
-                    <CheckCircle2 size={24} className="mx-auto text-emerald-400 mb-2" />
-                    <p className="text-[13.5px] font-medium">No open capability gaps detected.</p>
-                    <p className="text-[12px] mt-1">All agent workflows and tasks are executing within known tools.</p>
+                    <CheckCircle2 size={24} className="mx-auto text-success mb-2" />
+                    <p className="text-ui font-medium">No open capability gaps detected.</p>
+                    <p className="text-small mt-1">All agent workflows and tasks are executing within known tools.</p>
                   </div>
                 ) : (
                   gaps.map((gap) => (
@@ -344,20 +344,20 @@ export function SkillForgePanel({ open, onClose }: SkillForgePanelProps) {
                     >
                       <div>
                         <div className="flex items-center gap-2">
-                          <span className="font-semibold text-[13.5px] text-[var(--fg)]">{gap.proposedSkillName}</span>
-                          <span className="text-[10.5px] font-mono px-2 py-0.5 rounded border border-amber-500/30 bg-amber-500/10 text-amber-300">
+                          <span className="font-semibold text-ui text-[var(--fg)]">{gap.proposedSkillName}</span>
+                          <span className="text-micro font-mono px-2 py-0.5 rounded border border-warning/30 bg-warning/10 text-warning">
                             {gap.classification}
                           </span>
                         </div>
-                        <p className="text-[12.5px] text-[var(--fg-muted)] mt-1">{gap.proposedPurpose}</p>
-                        <p className="text-[11px] text-[var(--fg-subtle)] mt-0.5">
+                        <p className="text-small text-[var(--fg-muted)] mt-1">{gap.proposedPurpose}</p>
+                        <p className="text-micro text-[var(--fg-subtle)] mt-0.5">
                           Source: {gap.source} &middot; Recurring: {gap.recurringCount}x
                         </p>
                       </div>
 
                       <button
                         onClick={() => forgeGap(gap)}
-                        className="h-8 px-3.5 rounded-lg text-[12px] font-medium bg-[var(--accent)] text-white hover:opacity-90 transition-opacity inline-flex items-center gap-1.5"
+                        className="h-8 px-3.5 rounded-lg text-small font-medium bg-[var(--accent-solid)] text-[var(--accent-on-solid)] hover:opacity-90 transition-opacity inline-flex items-center gap-1.5"
                       >
                         <Sparkles size={12} /> Forge Skill
                       </button>
@@ -373,29 +373,29 @@ export function SkillForgePanel({ open, onClose }: SkillForgePanelProps) {
                 {auditLogs.map((log) => (
                   <div
                     key={log.id}
-                    className="p-3.5 rounded-xl border border-[var(--border)] bg-[var(--surface)] text-[12.5px]"
+                    className="p-3.5 rounded-xl border border-[var(--border)] bg-[var(--surface)] text-small"
                   >
                     <div className="flex items-center justify-between">
                       <div className="flex items-center gap-2">
                         <span className="font-mono font-semibold text-[var(--fg)]">{log.skillId}</span>
                         <span
                           className={cn(
-                            'text-[10px] font-mono uppercase px-1.5 py-0.5 rounded border',
-                            log.action === 'CREATED' && 'border-emerald-500/30 text-emerald-400',
-                            log.action === 'IMPROVED' && 'border-sky-500/30 text-sky-400',
-                            log.action === 'PROMOTED_STABLE' && 'border-emerald-500/30 text-emerald-400',
-                            log.action === 'ROLLED_BACK' && 'border-amber-500/30 text-amber-300'
+                            'text-micro font-mono uppercase px-1.5 py-0.5 rounded border',
+                            log.action === 'CREATED' && 'border-success/30 text-success',
+                            log.action === 'IMPROVED' && 'border-info/30 text-info',
+                            log.action === 'PROMOTED_STABLE' && 'border-success/30 text-success',
+                            log.action === 'ROLLED_BACK' && 'border-warning/30 text-warning'
                           )}
                         >
                           {log.action}
                         </span>
                       </div>
-                      <span className="text-[11px] text-[var(--fg-subtle)]">
+                      <span className="text-micro text-[var(--fg-subtle)]">
                         {new Date(log.timestamp).toLocaleTimeString()}
                       </span>
                     </div>
-                    <p className="text-[12px] text-[var(--fg-muted)] mt-1">{log.reason}</p>
-                    <p className="text-[11px] text-[var(--fg-subtle)] mt-0.5 font-mono">{log.testResultsSummary}</p>
+                    <p className="text-small text-[var(--fg-muted)] mt-1">{log.reason}</p>
+                    <p className="text-micro text-[var(--fg-subtle)] mt-0.5 font-mono">{log.testResultsSummary}</p>
                   </div>
                 ))}
               </div>
@@ -403,9 +403,9 @@ export function SkillForgePanel({ open, onClose }: SkillForgePanelProps) {
 
             {/* TAB: MAINTENANCE REPORT */}
             {activeTab === 'maintenance' && (
-              <div className="p-4 rounded-xl border border-[var(--border)] bg-[var(--surface)] text-[13px] leading-relaxed space-y-3 font-mono">
+              <div className="p-4 rounded-xl border border-[var(--border)] bg-[var(--surface)] text-ui leading-relaxed space-y-3 font-mono">
                 {maintenanceReport ? (
-                  <pre className="whitespace-pre-wrap text-[12px] text-[var(--fg-secondary)]">
+                  <pre className="whitespace-pre-wrap text-small text-[var(--fg-secondary)]">
                     {IdleMaintenanceEngine.formatImprovementSummary(maintenanceReport)}
                   </pre>
                 ) : (
@@ -416,9 +416,9 @@ export function SkillForgePanel({ open, onClose }: SkillForgePanelProps) {
           </div>
 
           {/* Footer Safety Notice */}
-          <div className="px-6 py-2.5 border-t border-[var(--border)] bg-[var(--surface)] flex items-center justify-between text-[11px] text-[var(--fg-subtle)]">
+          <div className="px-6 py-2.5 border-t border-[var(--border)] bg-[var(--surface)] flex items-center justify-between text-micro text-[var(--fg-subtle)]">
             <span className="inline-flex items-center gap-1.5">
-              <ShieldCheck size={12} className="text-emerald-400" />
+              <ShieldCheck size={12} className="text-success" />
               Core Boundary: Auth, permissions, security, and secrets cannot be modified by autonomous experiments.
             </span>
             <span className="font-mono">MetaIoid v2.4</span>

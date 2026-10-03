@@ -16,9 +16,15 @@ const LOCAL_HOSTS = /^(localhost|127\.0\.0\.1|\[::1\]|::1)$/i;
 const onLocalhost =
   typeof window === 'undefined' || LOCAL_HOSTS.test(window.location.hostname);
 
+// On localhost the fallback mirrors the dev server's proxy scheme. Without
+// certs the gateway serves plain http, and defaulting to https meant the first
+// call of every local session failed and only succeeded via the scheme-swap
+// rescue below — a visible stall for a condition we can just read.
 export const API_URL =
   (import.meta as unknown as { env?: Record<string, string> }).env?.VITE_API_URL ||
-  (onLocalhost ? 'https://127.0.0.1:8787' : '');
+  (onLocalhost ? (import.meta as unknown as { env?: Record<string, string> }).env?.VITE_GATEWAY_TLS === 'true'
+    ? 'https://127.0.0.1:8787'
+    : 'http://127.0.0.1:8787' : '');
 
 export interface ServiceHealth {
   server: boolean;

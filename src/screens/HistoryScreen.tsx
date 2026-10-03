@@ -1,9 +1,10 @@
 import { useMemo, useState } from 'react';
 import { motion } from 'framer-motion';
-import { Search, Pin, Pencil, Trash2, MessageSquare, Plus, X } from 'lucide-react';
+import { Search, Pin, Pencil, Trash2, Plus, X } from 'lucide-react';
 import { useApp } from '../lib/store';
 import { groupConversations, timeAgo, cn } from '../lib/cn';
 import { useAuth } from '../lib/auth';
+import { EmptyState } from '../components/ui/EmptyState';
 
 // HISTORY — conversations only: title · preview · time.
 // Open · rename · delete. Semantic tokens throughout.
@@ -46,15 +47,15 @@ export function HistoryScreen() {
     <div className="max-w-[860px] mx-auto px-4 sm:px-8 py-6 pb-32 md:pb-12">
       <div className="flex items-center gap-3">
         <div>
-          <h2 className="text-[22px] font-semibold tracking-tight text-[var(--fg)]">History</h2>
-          <p className="text-[13px] text-[var(--fg-muted)] mt-0.5">
+          <h2 className="t-display text-[var(--fg)]">History</h2>
+          <p className="text-ui text-[var(--fg-muted)] mt-0.5">
             {conversations.length === 0
               ? 'Nothing yet'
               : `${conversations.length} ${conversations.length === 1 ? 'conversation' : 'conversations'}`}
             {auth.status === 'signed-in' ? ' · synced to your account' : ' · saved on this device'}
           </p>
         </div>
-        <button onClick={() => { newConversation(); setView('chat'); }} className="btn-primary h-10 px-3.5 text-[13px] ml-auto min-h-[40px]">
+        <button onClick={() => { newConversation(); setView('chat'); }} className="btn-primary h-10 px-3.5 text-ui ml-auto min-h-[40px]">
           <Plus size={15} /> New chat
         </button>
       </div>
@@ -65,25 +66,33 @@ export function HistoryScreen() {
           value={q}
           onChange={(e) => setQ(e.target.value)}
           placeholder="Search conversations…"
-          className="flex-1 bg-transparent outline-none text-[13.5px] text-[var(--fg)] placeholder:text-[var(--fg-muted)]"
+          className="flex-1 bg-transparent outline-none text-ui text-[var(--fg)] placeholder:text-[var(--fg-muted)]"
           aria-label="Search conversations"
         />
         {q && <button onClick={() => setQ('')} className="icon-btn w-6 h-6" aria-label="Clear"><X size={13} /></button>}
       </div>
 
       {filtered.length === 0 ? (
-        <div className="surface mt-5 p-12 text-center">
-          <MessageSquare size={24} className="mx-auto text-[var(--fg-muted)]" />
-          <p className="mt-3 text-[14.5px] font-medium text-[var(--fg)]">{q ? 'Nothing matched that.' : 'No conversations yet.'}</p>
-          <p className="text-[12.5px] text-[var(--fg-muted)] mt-1">
-            {q ? 'Try a shorter word, or part of a message you remember.' : 'Start one from Chat — it will be waiting here.'}
-          </p>
-          {!q && (
-            <button onClick={() => { newConversation(); setView('chat'); }} className="btn-primary h-9 px-3.5 text-[13px] mt-4">
-              Start a chat
-            </button>
-          )}
-        </div>
+        <EmptyState
+          art="conversations"
+          title={q ? 'Nothing matched that' : 'No conversations yet'}
+          description={
+            q
+              ? 'Try a shorter word, or part of a message you remember.'
+              : 'Start one from Chat — it will be waiting here.'
+          }
+          action={
+            !q ? (
+              <button
+                onClick={() => { newConversation(); setView('chat'); }}
+                className="btn-primary h-9 gap-1.5 px-3.5 text-ui"
+              >
+                <Plus size={14} strokeWidth={1.8} />
+                Start a chat
+              </button>
+            ) : undefined
+          }
+        />
       ) : (
         <div className="mt-6 space-y-6">
           {groups.map((g) => (
@@ -99,7 +108,7 @@ export function HistoryScreen() {
                     className="surface px-4 py-3 flex items-center gap-3 hover:border-[var(--border-strong)] hover:bg-[var(--surface-hover)] transition-all group"
                   >
                     <button onClick={() => selectConversation(c.id)} className="flex-1 min-w-0 text-left min-h-[40px]" aria-label={`Open ${c.title}`}>
-                      <span className="flex items-center gap-2 text-[14px] font-medium text-[var(--fg)] truncate">
+                      <span className="flex items-center gap-2 text-body font-medium text-[var(--fg)] truncate">
                         {c.pinned && <Pin size={13} className="text-[var(--accent)] shrink-0" fill="currentColor" />}
                         {editingId === c.id ? (
                           <input
@@ -110,14 +119,14 @@ export function HistoryScreen() {
                               if (e.key === 'Enter') { renameConversation(c.id, editVal || c.title); setEditingId(null); }
                               if (e.key === 'Escape') setEditingId(null);
                             }}
-                            className="bg-[var(--surface-sunken)] border border-[var(--border)] rounded-lg px-2 py-1 text-[13.5px] text-[var(--fg)] outline-none w-full focus:border-[var(--accent)]"
+                            className="bg-[var(--surface-sunken)] border border-[var(--border)] rounded-lg px-2 py-1 text-ui text-[var(--fg)] outline-none w-full focus:border-[var(--accent)]"
                             autoFocus
                             aria-label="Conversation title"
                           />
                         ) : highlight(c.title, q)}
                       </span>
-                      <span className="block text-[12px] text-[var(--fg-muted)] mt-0.5 truncate">{c.preview || `${c.messages.length} messages`}</span>
-                      <span className="block text-[11px] text-[var(--fg-subtle)] mt-0.5">{timeAgo(c.updatedAt)}</span>
+                      <span className="block text-small text-[var(--fg-muted)] mt-0.5 truncate">{c.preview || `${c.messages.length} messages`}</span>
+                      <span className="block text-micro text-[var(--fg-subtle)] mt-0.5">{timeAgo(c.updatedAt)}</span>
                     </button>
                     <span className="flex items-center gap-1 shrink-0 opacity-60 group-hover:opacity-100 transition-opacity">
                       <button
@@ -138,7 +147,7 @@ export function HistoryScreen() {
                       </button>
                       <button
                         onClick={() => openModal('delete-chat', c.id)}
-                        className="icon-btn w-8 h-8 hover:!text-red-400"
+                        className="icon-btn w-8 h-8 hover:!text-danger"
                         title="Delete"
                         aria-label="Delete conversation"
                       >

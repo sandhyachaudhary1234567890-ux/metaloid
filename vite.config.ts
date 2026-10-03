@@ -14,10 +14,19 @@ const tls = fs.existsSync(keyPath) && fs.existsSync(certPath)
 // Same-origin gateway: the dev/preview server proxies /api to the local
 // gateway so a remote browser (tunnel, preview host, reverse proxy) reaches
 // it without knowing 127.0.0.1 — an unreachable gateway still degrades to
-// the app's honest offline/demo state. https + secure:false covers the local
-// gateway when its LAN certs exist.
+// the app's honest offline state.
+//
+// The scheme has to match what the gateway is actually serving. It only
+// upgrades to TLS when `certs/` exists (server/certs-gen.mjs); with no certs
+// it listens on plain http, and a hardcoded https target made every /api call
+// through the dev server fail until the client's scheme-swap rescue retried
+// over http. Same condition as the dev server above, so they cannot disagree.
 const apiProxy = {
-  '/api': { target: 'https://127.0.0.1:8787', changeOrigin: true, secure: false },
+  '/api': {
+    target: tls ? 'https://127.0.0.1:8787' : 'http://127.0.0.1:8787',
+    changeOrigin: true,
+    secure: false,
+  },
 }
 
 // The app lives under /app/ so the repo root can serve the marketing page.

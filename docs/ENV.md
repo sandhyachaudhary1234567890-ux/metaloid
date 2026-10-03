@@ -33,11 +33,12 @@ ship them to every visitor and into the Android bundle.
 | `SUPABASE_SERVICE_ROLE_KEY` | required for server-side storage/account work | Signs private objects, storage cleanup, account deletion. Absent → those routes refuse; nothing is served unsigned. Bypasses RLS, so it never reaches the browser. |
 | `SUPABASE_JWKS_URL` | required in production auth | Verifies user JWTs against the project's JWKS. Absent (with no other verifier) → `/api/health` shows `auth: { configured:false, reachable:true }` and user-data routes answer `503 auth_unconfigured`. |
 | `SUPABASE_JWT_SECRET` | alternative | HS256 verification for projects without JWKS. |
-| `SUPABASE_PUBLIC_KEY_PEM` | alternative | Static public key verification. |
+| `SUPABASE_JWT_PUBLIC_KEY` | alternative | Static public-key verification (SPKI PEM). `auth.js` reads this name and only this name — a deployment that sets a different one is not authenticated. |
 | `SUPABASE_JWT_AUDIENCE` / `_ISSUER` | optional | Tightens verification; defaults to `authenticated`. |
 | `METALOID_ENCRYPTION_KEYS`, `METALOID_ENCRYPTION_ACTIVE` | required to store provider keys | AES-256-GCM envelope `v1:<keyId>:<iv>:<tag>:<ct>`. Absent → the gateway refuses to store a credential rather than storing it weakly. No hardcoded fallback key exists. |
-| `METALOID_DATA_DRIVER` | optional | `supabase` (production) or `local` (demo/file mode). |
+| `SUPABASE_DB` | required for durable storage | `supabase` selects the Postgres driver. Anything else — including unset — is the local JSON store. There is no auto-detection. |
 | `METALOID_DATA_DIR` | optional | Where the local driver keeps state. Serverless filesystems are ephemeral — production uses Supabase. |
+| `METALOID_NO_DOTENV` | testing only | Skip loading `server/.env`. Set by the test suite so a developer cannot change what is under test. |
 | `ALLOW_ORIGINS` | required in production | Comma-separated allowlist of web origins. Unlisted origins get no CORS grant and a 403 on state-changing routes; there is no wildcard path. |
 | `ALLOW_MOBILE_ORIGINS` | optional | Origins of the trusted Android/desktop clients, if any. |
 | `ALLOW_VERCEL_PREVIEWS` | optional | `true` also trusts `*.vercel.app` previews. Off in production. |

@@ -5,7 +5,7 @@
 import React, { createContext, useCallback, useContext, useEffect, useState } from 'react';
 import type { AgentStatus, AppSettings, ConnectionState, LanguageId, ModelId, ToastItem, ViewId } from '../lib/types';
 import { storage, uid, setActiveUser, claimLegacyForUser } from '../lib/storage';
-import { applyTheme } from '../lib/theme';
+import { watchTheme } from '../lib/theme';
 import { allDown, checkBackend, type ServiceHealth } from '../lib/transport';
 import {
   getSession, setSession as saveSession, clearSession, onSessionChange,
@@ -227,15 +227,9 @@ export function SessionProvider({ children }: { children: React.ReactNode }) {
 
   useEffect(() => storage.saveSettings(settings), [settings]);
 
-  useEffect(() => {
-    applyTheme(settings);
-    if (settings.theme === 'system' && typeof window !== 'undefined') {
-      const mq = window.matchMedia('(prefers-color-scheme: dark)');
-      const listener = () => applyTheme(settings);
-      mq.addEventListener('change', listener);
-      return () => mq.removeEventListener('change', listener);
-    }
-  }, [settings]);
+  // One place applies the design tokens, including following the OS when the
+  // theme is set to `system`.
+  useEffect(() => watchTheme(settings), [settings]);
 
   const recheckConnection = useCallback(async () => {
     setConnection('checking');

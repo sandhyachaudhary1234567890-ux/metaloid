@@ -11,6 +11,7 @@ import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { emit } from './events.js';
 import { encrypt, decrypt, redactCredential, MASTER_KEY, ENCRYPTION_ALGORITHM } from './crypto.js';
+import * as accountBridge from './accountBridge.js';
 
 const DIR = process.env.METALOID_DATA_DIR || path.join(path.dirname(fileURLToPath(import.meta.url)), '..', '..', 'data');
 const CREDENTIALS_FILE = path.join(DIR, 'credentials.json');
@@ -162,8 +163,30 @@ export async function storeUserCredential(userId, providerId, credential, metada
 /**
  * Get user credential (decrypted)
  */
+/**
+ * Where a credential is read from, in priority order.
+ *
+ * The account-data contract is authoritative: it is what the app writes when
+ * a user saves a key, and it is the only path that works on a serverless host
+ * (there is no filesystem to hold a vault file). The file vault below it
+ * remains for local development, and the legacy `supadb` branch is kept only
+ * for a database that predates the current schema.
+ */
+const accountIsAuthoritative = () => String(process.env.SUPABASE_DB || '').toLowerCase() === 'supabase';
+
 export async function getUserCredential(userId, providerId) {
   needUser(userId);
+
+  const fromAccount = await accountBridge.credentialFor(userId, providerId);
+  if (fromAccount) {
+    return {
+      id: `contract:${providerId}`, providerId, credential: fromAccount,
+      metadata: {}, isActive: true, lastRotatedAt: null, rotationCount: 0,
+    };
+  }
+  // Nothing in the contract, and the contract is the only configured store:
+  // this account has no key. Do NOT fall through to a stale query.
+  if (accountIsAuthoritative()) return null;
 
   const db = await supa();
   if (db) {
@@ -367,6 +390,23 @@ export async function rotateUserCredential(userId, providerId, newCredential) {
  */
 export async function listUserCredentialProviders(userId) {
   needUser(userId);
+
+  // The contract answers first for the same reason as getUserCredential: it
+  // is the store the app writes to, and the only one a serverless host has.
+  const fromAccount = await accountBridge.listCredentials(userId);
+  if (fromAccount.length) {
+    return fromAccount
+      .filter((c) => c.status !== 'invalid')
+      .map((c) => ({
+        id: c.id,
+        providerId: c.provider,
+        isActive: true,
+        createdAt: c.updated_at,
+        lastRotatedAt: null,
+        rotationCount: 0,
+      }));
+  }
+  if (accountIsAuthoritative()) return [];
 
   const db = await supa();
   if (db) return db.credList(userId);

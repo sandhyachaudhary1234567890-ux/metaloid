@@ -45,8 +45,8 @@ export function ToolsDrawer() {
           >
             <div className="flex items-start gap-3">
               <div>
-                <h3 className="text-[17px] font-semibold tracking-tight">Tools</h3>
-                <p className="text-[12.5px] text-[var(--fg-muted)] mt-0.5">
+                <h3 className="text-title font-semibold tracking-tight">Tools</h3>
+                <p className="text-small text-[var(--fg-muted)] mt-0.5">
                   What MetaIoid can use right now{offline ? ' — local demo' : ''}
                 </p>
               </div>
@@ -62,8 +62,8 @@ export function ToolsDrawer() {
                     <t.icon size={17} className="text-[var(--accent)]" />
                   </span>
                   <span className="min-w-0">
-                    <span className="block text-[14px] font-medium text-[var(--fg)] truncate">{t.name}</span>
-                    <span className="block text-[12.5px] text-[var(--fg-muted)] truncate">{t.desc}</span>
+                    <span className="block text-body font-medium text-[var(--fg)] truncate">{t.name}</span>
+                    <span className="block text-small text-[var(--fg-muted)] truncate">{t.desc}</span>
                   </span>
                 </button>
               ))}

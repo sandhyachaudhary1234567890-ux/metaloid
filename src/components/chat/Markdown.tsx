@@ -138,12 +138,12 @@ export function CodeBlock({ code, lang }: { code: string; lang: string }) {
   return (
     <div className="ml-code my-3 overflow-hidden rounded-xl border border-[var(--border)] bg-[var(--surface-sunken)]">
       <div className="flex items-center gap-2 px-3.5 h-9 border-b border-[var(--border-subtle)] bg-[var(--surface)]">
-        <span className="text-[11px] font-mono font-medium text-[var(--fg-muted)]">{label}</span>
+        <span className="text-micro font-mono font-medium text-[var(--fg-muted)]">{label}</span>
         <span className="ml-auto flex items-center gap-1">
           {long && (
             <button
               onClick={() => setExpanded((e) => !e)}
-              className="inline-flex items-center gap-1 h-7 px-2 rounded-md text-[11.5px] text-[var(--fg-muted)] hover:text-[var(--fg)] hover:bg-[var(--surface-hover)] transition-all"
+              className="inline-flex items-center gap-1 h-7 px-2 rounded-md text-micro text-[var(--fg-muted)] hover:text-[var(--fg)] hover:bg-[var(--surface-hover)] transition-all"
               aria-expanded={expanded}
             >
               <ChevronDown size={13} className={cn('transition-transform', expanded && 'rotate-180')} />
@@ -152,17 +152,17 @@ export function CodeBlock({ code, lang }: { code: string; lang: string }) {
           )}
           <button
             onClick={copy}
-            className="inline-flex items-center gap-1.5 h-7 px-2 rounded-md text-[11.5px] text-[var(--fg-muted)] hover:text-[var(--fg)] hover:bg-[var(--surface-hover)] transition-all"
+            className="inline-flex items-center gap-1.5 h-7 px-2 rounded-md text-micro text-[var(--fg-muted)] hover:text-[var(--fg)] hover:bg-[var(--surface-hover)] transition-all"
             aria-label={copied ? 'Copied' : `Copy ${label} code`}
             title={copied ? 'Copied' : 'Copy code'}
           >
-            {copied ? <Check size={12} className="text-emerald-400" /> : <Copy size={12} />}
-            {copied ? <span className="text-emerald-400">Copied</span> : 'Copy'}
+            {copied ? <Check size={12} className="text-success" /> : <Copy size={12} />}
+            {copied ? <span className="text-success">Copied</span> : 'Copy'}
           </button>
         </span>
       </div>
       <div className={cn('relative', !expanded && long && 'max-h-[420px]')}>
-        <pre className="overflow-x-auto p-3.5 text-[13px] leading-[1.65] font-mono">
+        <pre className="overflow-x-auto p-3.5 text-ui leading-[1.65] font-mono">
           <code>
             {lines.map((toks, li) => (
               <span key={li} className="block whitespace-pre">

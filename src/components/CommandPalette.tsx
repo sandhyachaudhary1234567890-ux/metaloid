@@ -90,16 +90,16 @@ export function CommandPalette() {
               if (e.key === 'Enter') { filtered[idx]?.run(); setPaletteOpen(false); }
             }}
             placeholder="Type a command or search…"
-            className="flex-1 h-13 bg-transparent outline-none text-[14.5px] text-[var(--fg)] placeholder:text-[var(--fg-subtle)]"
+            className="flex-1 h-13 bg-transparent outline-none text-body text-[var(--fg)] placeholder:text-[var(--fg-subtle)]"
             aria-label="Search commands"
           />
-          <kbd className="hidden sm:flex items-center gap-1 font-mono text-[10.5px] text-[var(--fg-muted)] border border-[var(--border)] rounded px-1.5 py-0.5">
+          <kbd className="hidden sm:flex items-center gap-1 font-mono text-micro text-[var(--fg-muted)] border border-[var(--border)] rounded px-1.5 py-0.5">
             <Command size={10} />K
           </kbd>
         </div>
         <div className="p-2 max-h-[340px] overflow-y-auto">
           {filtered.length === 0 && (
-            <div className="px-4 py-8 text-center text-[13px] text-[var(--fg-muted)]">No commands found.</div>
+            <div className="px-4 py-8 text-center text-ui text-[var(--fg-muted)]">No commands found.</div>
           )}
           {filtered.map((a, i) => (
             <button
@@ -115,14 +115,14 @@ export function CommandPalette() {
                 <a.icon size={15} className={i === idx ? 'text-[var(--accent)]' : 'text-[var(--fg-muted)]'} />
               </span>
               <span className="flex-1 min-w-0">
-                <span className="block text-[13.5px] font-medium text-[var(--fg)] truncate">{a.label}</span>
-                <span className="block text-[11.5px] text-[var(--fg-muted)] truncate">{a.hint}</span>
+                <span className="block text-ui font-medium text-[var(--fg)] truncate">{a.label}</span>
+                <span className="block text-micro text-[var(--fg-muted)] truncate">{a.hint}</span>
               </span>
-              {i === idx && <span className="text-[11px] text-[var(--fg-muted)] font-mono">↵</span>}
+              {i === idx && <span className="text-micro text-[var(--fg-muted)] font-mono">↵</span>}
             </button>
           ))}
         </div>
-        <div className="px-4 py-2.5 border-t border-[var(--border)] flex items-center justify-between text-[11.5px] text-[var(--fg-muted)] bg-[var(--surface)]">
+        <div className="px-4 py-2.5 border-t border-[var(--border)] flex items-center justify-between text-micro text-[var(--fg-muted)] bg-[var(--surface)]">
           <div className="flex items-center gap-4">
             <span className="flex items-center gap-1"><MessageSquare size={11} /> New chat ⌘N</span>
             <span>↑↓ navigate</span>
@@ -139,8 +139,8 @@ export function CommandPalette() {
 export function EmptyState({ title, desc, action }: { title: string; desc: string; action?: React.ReactNode }) {
   return (
     <div className="rounded-2xl border border-[var(--border)] bg-[var(--surface)] p-8 text-center max-w-[420px] mx-auto">
-      <h3 className="text-[15px] font-semibold text-[var(--fg)]">{title}</h3>
-      <p className="text-[13px] text-[var(--fg-muted)] mt-1">{desc}</p>
+      <h3 className="text-read font-semibold text-[var(--fg)]">{title}</h3>
+      <p className="text-ui text-[var(--fg-muted)] mt-1">{desc}</p>
       {action && <div className="mt-4">{action}</div>}
     </div>
   );

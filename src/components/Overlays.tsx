@@ -5,8 +5,8 @@ import { useApp } from '../lib/store';
 import { cn } from '../lib/cn';
 
 const TONES = {
-  success: { icon: Check, iconClass: 'text-emerald-400', boxClass: 'bg-emerald-500/15 border-emerald-500/25' },
-  error: { icon: AlertTriangle, iconClass: 'text-red-400', boxClass: 'bg-red-500/10 border-red-500/25' },
+  success: { icon: Check, iconClass: 'text-success', boxClass: 'bg-success/15 border-success/25' },
+  error: { icon: AlertTriangle, iconClass: 'text-danger', boxClass: 'bg-danger/10 border-danger/25' },
   info: { icon: Info, iconClass: 'text-[var(--accent)]', boxClass: 'bg-[var(--accent-subtle)] border-[var(--border)]' },
 } as const;
 
@@ -31,8 +31,8 @@ export function Toasts() {
               <Icon size={14} className={tone.iconClass} />
             </span>
             <span className="min-w-0 flex-1">
-              <span className="block text-[13px] font-medium text-[var(--fg)] leading-tight">{t.title}</span>
-              {t.desc && <span className="block text-[12px] text-[var(--fg-muted)] leading-snug mt-0.5">{t.desc}</span>}
+              <span className="block text-ui font-medium text-[var(--fg)] leading-tight">{t.title}</span>
+              {t.desc && <span className="block text-small text-[var(--fg-muted)] leading-snug mt-0.5">{t.desc}</span>}
             </span>
             <button onClick={() => closeToast(t.id)} className="icon-btn w-7 h-7 shrink-0" aria-label="Dismiss notification"><X size={13} /></button>
           </motion.div>
@@ -106,16 +106,16 @@ export function ModalRoot() {
         className="relative w-full max-w-[390px] rounded-2xl border border-[var(--border)] bg-[var(--surface-elevated)] shadow-elevated p-6"
       >
         <button onClick={closeModal} className="absolute top-4 right-4 icon-btn w-8 h-8" aria-label="Close dialog"><X size={15} /></button>
-        <div className={`w-10 h-10 rounded-xl flex items-center justify-center border mb-4 ${meta.danger ? 'bg-red-500/10 border-red-500/25' : 'bg-[var(--accent-subtle)] border-[var(--border)]'}`}>
-          {meta.danger ? <AlertTriangle size={18} className="text-red-400" /> : <Info size={18} className="text-[var(--accent)]" />}
+        <div className={`w-10 h-10 rounded-xl flex items-center justify-center border mb-4 ${meta.danger ? 'bg-danger/10 border-danger/25' : 'bg-[var(--accent-subtle)] border-[var(--border)]'}`}>
+          {meta.danger ? <AlertTriangle size={18} className="text-danger" /> : <Info size={18} className="text-[var(--accent)]" />}
         </div>
-        <h3 className="text-[16px] font-semibold tracking-tight text-[var(--fg)]">{meta.title}</h3>
-        <p className="text-[13px] text-[var(--fg-muted)] mt-1.5 leading-relaxed">{meta.desc}</p>
+        <h3 className="text-read font-semibold tracking-tight text-[var(--fg)]">{meta.title}</h3>
+        <p className="text-ui text-[var(--fg-muted)] mt-1.5 leading-relaxed">{meta.desc}</p>
         {modal.kind === 'rename-chat' && (
           <input
             value={input}
             onChange={(e) => setInput(e.target.value)}
-            className="mt-4 w-full h-10 rounded-lg bg-[var(--surface-sunken)] border border-[var(--border)] px-3 text-[13.5px] text-[var(--fg)] outline-none focus:border-[var(--accent)]"
+            className="mt-4 w-full h-10 rounded-lg bg-[var(--surface-sunken)] border border-[var(--border)] px-3 text-ui text-[var(--fg)] outline-none focus:border-[var(--accent)]"
             aria-label="Conversation name"
             autoFocus
           />
@@ -124,14 +124,14 @@ export function ModalRoot() {
           <input
             value={input}
             onChange={(e) => setInput(e.target.value)}
-            className="mt-4 w-full h-10 rounded-lg bg-[var(--surface-sunken)] border border-[var(--border)] px-3 text-[13.5px] text-[var(--fg)] outline-none focus:border-[var(--accent)]"
+            className="mt-4 w-full h-10 rounded-lg bg-[var(--surface-sunken)] border border-[var(--border)] px-3 text-ui text-[var(--fg)] outline-none focus:border-[var(--accent)]"
             aria-label="Project name"
             placeholder="e.g. School science fair"
             autoFocus
           />
         )}
         <div className="mt-6 grid grid-cols-2 gap-2.5">
-          <button onClick={closeModal} className="btn-ghost h-10 text-[13px]">Cancel</button>
+          <button onClick={closeModal} className="btn-ghost h-10 text-ui">Cancel</button>
           <button
             onClick={() => {
               if (modal.kind === 'rename-chat') {
@@ -149,7 +149,7 @@ export function ModalRoot() {
               }
               confirm();
             }}
-            className={`h-10 rounded-lg text-[13px] font-medium transition-all ${meta.danger ? 'btn-danger' : 'btn-primary'}`}
+            className={`h-10 rounded-lg text-ui font-medium transition-all ${meta.danger ? 'btn-danger' : 'btn-primary'}`}
           >{meta.confirmLabel ?? 'Confirm'}</button>
         </div>
       </motion.div>

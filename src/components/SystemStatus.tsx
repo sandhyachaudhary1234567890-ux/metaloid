@@ -31,9 +31,9 @@ export function SystemStatus() {
     : { label: 'No provider connected', tone: 'muted' as const };
 
   const toneClass = {
-    emerald: 'text-emerald-400 border-emerald-500/30 bg-emerald-500/10',
-    amber: 'text-amber-300 border-amber-500/30 bg-amber-500/10',
-    violet: 'text-violet-300 border-violet-500/30 bg-violet-500/10',
+    emerald: 'text-success border-success/30 bg-success/10',
+    amber: 'text-warning border-warning/30 bg-warning/10',
+    violet: 'text-info border-info/30 bg-info/10',
     muted: 'text-[var(--fg-muted)] border-[var(--border)] bg-[var(--surface-elevated)]',
   };
 
@@ -41,11 +41,11 @@ export function SystemStatus() {
     <div className="rounded-xl border border-[var(--border)] bg-[var(--surface)] divide-y divide-[var(--border-subtle)]">
       {billing && (
         <div className="px-3.5 py-2.5 flex items-center gap-3">
-          <span className={cn('text-[11px] font-semibold tracking-wide border rounded-full px-2.5 py-1', toneClass[billing.tone])}>
+          <span className={cn('text-micro font-semibold tracking-wide border rounded-full px-2.5 py-1', toneClass[billing.tone])}>
             {billing.label}
           </span>
           {typeof health?.models?.free === 'number' && (
-            <span className="text-[11.5px] text-[var(--fg-muted)]">
+            <span className="text-micro text-[var(--fg-muted)]">
               {health.models.free} model{health.models.free === 1 ? '' : 's'} usable
               {health.models.catalogue === false ? ' · catalogue unreachable' : ''}
             </span>
@@ -57,12 +57,12 @@ export function SystemStatus() {
         return (
           <div key={r.key} className="flex items-center gap-3 px-3.5 py-2.5">
             <span className={cn('h-2 w-2 rounded-full shrink-0',
-              connection === 'checking' ? 'bg-amber-400 animate-pulse' : ok ? 'bg-emerald-400' : 'bg-[var(--fg-subtle)]')} />
+              connection === 'checking' ? 'bg-warning/10 animate-pulse' : ok ? 'bg-success/10' : 'bg-[var(--fg-subtle)]')} />
             <span className="flex-1 min-w-0">
-              <span className="block text-[13px] font-medium text-[var(--fg)]">{r.label}</span>
-              <span className="block text-[11.5px] text-[var(--fg-muted)]">{r.hint}</span>
+              <span className="block text-ui font-medium text-[var(--fg)]">{r.label}</span>
+              <span className="block text-micro text-[var(--fg-muted)]">{r.hint}</span>
             </span>
-            <span className={cn('text-[12px] font-medium shrink-0', ok ? 'text-emerald-400' : 'text-[var(--fg-muted)]')}>
+            <span className={cn('text-small font-medium shrink-0', ok ? 'text-success' : 'text-[var(--fg-muted)]')}>
               {connection === 'checking' ? 'Checking…'
                 : ok ? (r.key === 'ai' && mock ? 'Sandbox' : 'Operational')
                 : 'Not connected'}
@@ -71,7 +71,7 @@ export function SystemStatus() {
         );
       })}
       <div className="px-3.5 py-2.5">
-        <button onClick={() => recheckConnection()} className="btn-ghost h-8 px-3 text-[12.5px] w-full">
+        <button onClick={() => recheckConnection()} className="btn-ghost h-8 px-3 text-small w-full">
           Recheck connection
         </button>
       </div>

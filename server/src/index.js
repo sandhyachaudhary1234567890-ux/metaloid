@@ -22,6 +22,7 @@ import {
 } from './openrouter.js';
 import { mountV1 } from './api/v1.js';
 import { authConfigured, authMode } from './auth.js';
+import { requireIdentity } from './identity.js';
 import { ping as dbPing, storagePing, driverInfo } from './data/index.js';
 import { streamNvidia, NVIDIA_SMART } from './nvidia.js';
 // Provider Platform imports
@@ -129,15 +130,23 @@ function buildRuntimeContext(c = {}, personalization = '') {
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 // minimal .env loader (no dependency)
-try {
-  const envPath = path.join(__dirname, '..', '.env');
-  if (fs.existsSync(envPath)) {
-    for (const line of fs.readFileSync(envPath, 'utf8').split('\n')) {
-      const m = line.match(/^\s*([A-Z_]+)\s*=\s*(.*)\s*$/);
-      if (m && !process.env[m[1]]) process.env[m[1]] = m[2].trim();
+//
+// Skipped when METALOID_NO_DOTENV is set. Tests spawn this file with an
+// explicit environment and must be hermetic: without the escape hatch, a
+// developer's real `server/.env` silently changes what they are testing — a
+// live Supabase URL leaking in once turned a self-contained suite into one
+// that sat for five minutes trying to fetch a JWKS over a blocked network.
+if (!process.env.METALOID_NO_DOTENV) {
+  try {
+    const envPath = path.join(__dirname, '..', '.env');
+    if (fs.existsSync(envPath)) {
+      for (const line of fs.readFileSync(envPath, 'utf8').split('\n')) {
+        const m = line.match(/^\s*([A-Z_]+)\s*=\s*(.*)\s*$/);
+        if (m && !process.env[m[1]]) process.env[m[1]] = m[2].trim();
+      }
     }
-  }
-} catch { /* env optional */ }
+  } catch { /* env optional */ }
+}
 
 const PORT = Number(process.env.PORT || 8787);
 const DATA_DIR = process.env.METALOID_DATA_DIR || path.join(__dirname, '..', 'data');
@@ -302,6 +311,35 @@ process.on('unhandledRejection', (e) => {
 process.on('uncaughtException', (e) => {
   console.error('[uncaughtException]', String((e && e.stack) || e).slice(0, 500));
   process.exitCode = 1;
+});
+
+// ---- no request may hang unanswered ----
+// Express 4 does not catch a rejected async handler. The promise rejects, the
+// process logs [unhandledRejection], and no response is ever written — so the
+// client waits indefinitely and the user sees a permanent "Thinking…" with no
+// error and nothing to retry. That is exactly the state the product is not
+// allowed to reach, and it was reachable: POST /api/missions awaited nothing
+// and called .map on a promise, so it could never answer a single request.
+//
+// A bug must surface as an error rather than as silence. This is a backstop,
+// not a licence to be slow: the cap sits under the platform's own function
+// limit so our message wins the race. Streaming routes are untouched — they
+// send headers immediately, and this only fires when nothing has been written.
+const RESPONSE_TIMEOUT_MS = Number(process.env.METALOID_RESPONSE_TIMEOUT_MS || 50_000);
+app.use((req, res, next) => {
+  const timer = setTimeout(() => {
+    if (res.headersSent || res.writableEnded) return;
+    console.error(`[timeout] ${req.method} ${req.originalUrl} produced no response in ${RESPONSE_TIMEOUT_MS}ms`);
+    res.status(504).json({
+      error: 'The request took too long and was stopped. Please try again.',
+      code: 'upstream_timeout',
+    });
+  }, RESPONSE_TIMEOUT_MS);
+  if (typeof timer.unref === 'function') timer.unref();
+  const done = () => clearTimeout(timer);
+  res.on('finish', done);
+  res.on('close', done);
+  next();
 });
 
 // Root: friendly status instead of "Cannot GET /" when opened in a browser.
@@ -488,7 +526,11 @@ app.post('/api/chat', requireAuth, rateLimit(60, 60000), async (req, res) => {
     return res.status(400).json({ error: 'Invalid message.' });
   }
   if (!OR_KEY && !NV_KEY) return res.status(503).json({ error: 'No model provider configured.' });
-  const budget = await checkBudget(req.auth.userId, 'chat');
+  // The route is behind requireAuth, so a locally-verified subject always
+  // exists; reading it from one place is what keeps the model the user saved
+  // visible to the router in the same request.
+  const userId = requireIdentity(req);
+  const budget = await checkBudget(userId, 'chat');
   if (!budget.ok) return res.status(429).json({ error: budget.error });
 
   const messages = [
@@ -498,10 +540,10 @@ app.post('/api/chat', requireAuth, rateLimit(60, 60000), async (req, res) => {
   ];
   const tier = task && ['fast', 'smart', 'vision', 'coding', 'voice'].includes(task) ? task : classifyTask(message);
   // identity comes from the session, not the client: profile name wins.
-  const profile = await getProfile(req.auth.userId);
+  const profile = await getProfile(userId);
   const ctx = { ...(req.body?.context || {}) };
   if (profile.displayName) ctx.userName = profile.displayName;
-  const system = buildRuntimeContext(ctx, await personalizationBlock(req.auth.userId))
+  const system = buildRuntimeContext(ctx, await personalizationBlock(userId))
     + (tier === 'voice'
       ? '\n\nVOICE MODE: this reply will be SPOKEN aloud. Keep it to 1–3 short sentences, conversational, no markdown, no lists, no URLs, no code. Say numbers and units in words. If the full answer needs detail, speak the key point first in one sentence.'
       : '');
@@ -542,9 +584,12 @@ app.post('/api/chat', requireAuth, rateLimit(60, 60000), async (req, res) => {
   // routing prefs + health) stream here; platform keys stay as fallback.
   let byokError = null;
   try {
-    const prefs = await getProfile(req.auth.userId);
+    const prefs = await getProfile(userId);
     const out = await chatWithProviders({
-      userId: req.auth.userId, messages, system, prefs,
+      userId: userId, messages, system, prefs,
+      // The classified tier drives candidate ordering, so a voice turn asks
+      // for a fast model and a coding turn for a coding one.
+      task: tier,
       signal: controller.signal,
       onToken: (full) => send({ token: full }),
       onAttempt: (a) => send({ meta: { model: a.model, tier, provider: a.providerId, demo: false, byok: true } }),
@@ -552,7 +597,7 @@ app.post('/api/chat', requireAuth, rateLimit(60, 60000), async (req, res) => {
     usedModel = out.model;
     usedProvider = out.providerId;
     trackModel({ provider: out.providerId, model: out.model, tier, ms: Date.now() - t0, ok: true });
-    await recordUsage(req.auth.userId, 'chat');
+    await recordUsage(userId, 'chat');
     send({ done: true });
     clearTimeout(timer);
     res.end();
@@ -578,7 +623,17 @@ app.post('/api/chat', requireAuth, rateLimit(60, 60000), async (req, res) => {
     for (const cand of candidates) {
       try {
         usedModel = cand.id;
-        send({ meta: { model: cand.id, tier, provider: PROVIDER_LABEL, demo: PROVIDER_LABEL !== 'openrouter' } });
+        send({
+          meta: {
+            model: cand.id, tier, provider: PROVIDER_LABEL,
+            demo: PROVIDER_LABEL !== 'openrouter',
+            // If the user's own provider was tried and failed, the reply is
+            // coming from MetaIoid's shared tier instead — say so. Silently
+            // swapping in a platform key hides a broken BYOK credential
+            // forever and presents someone else's quota as the user's own.
+            ...(byokError ? { byok: false, notice: 'byok_failed', notice_code: providerCodeOf(byokError) } : {}),
+          },
+        });
         await streamChat({
           apiKey: OR_KEY, model: cand, messages, system,
           signal: controller.signal,
@@ -599,7 +654,7 @@ app.post('/api/chat', requireAuth, rateLimit(60, 60000), async (req, res) => {
     }
     if (!streamed) throw lastErr || new Error('openrouter failed');
     trackModel({ provider: usedProvider || PROVIDER_LABEL, model: usedModel, tier, ms: Date.now() - t0, ok: true });
-    await recordUsage(req.auth.userId, 'chat');
+    await recordUsage(userId, 'chat');
     send({ done: true });
   } catch (e) {
     // NVIDIA fallback only when entitled (see NV_ON)
@@ -1163,10 +1218,13 @@ app.post('/api/missions', requireAuth, rateLimit(10, 60000), async (req, res) =>
   const caps = planCaps(req.auth.userId);
   const codeSkills = Array.isArray(skillIds) && skillIds.length ? skillIds : discoverSkills(objective);
   // user-skill discovery: project/user packages join code skills in planning
-  const discovered = discoverFor(req.auth.userId, objective, { workspaceId: req.body?.workspaceId, projectId: req.body?.projectId }).map((c) => c.skillId);
+    const discovered = (await discoverFor(req.auth.userId, objective, { workspaceId: req.body?.workspaceId, projectId: req.body?.projectId })).map((c) => c.skillId);
   const allSkills = [...codeSkills, ...discovered.filter((id) => !codeSkills.includes(id))].slice(0, 8);
   const tasks = planMission(objective, codeSkills);
-  const m = createMission({
+  // `createMission` is async — it writes the mission through the data layer.
+  // Without the await this returned a Promise, which serialised to `{}`, so
+  // every created mission came back as an empty object with a 201.
+  const m = await createMission({
     userId: req.auth.userId, objective, constraints, tasks, skillIds: allSkills,
     budgets: { maxMs: caps.maxMissionMs, maxSteps: caps.maxMissionSteps },
   });
@@ -1655,6 +1713,14 @@ app.delete('/api/account', requireAuth, rateLimit(5, 60000), async (req, res) =>
   res.json({ ok: true, deleted: uid });
 });
 
+// ---- unmatched API routes answer in the API's own language ----
+// Anything under /api that no route claimed is a 404 in JSON. Without this a
+// typo in a client path falls through to whatever serves the app shell, and
+// the client reports a JSON parse failure instead of a missing endpoint.
+app.use('/api', (req, res) => {
+  res.status(404).json({ error: 'Unknown API endpoint.', code: 'not_found', path: req.path });
+});
+
 // TLS when LAN certs exist (server/../certs from certs-gen.mjs) — required
 // because an https page may not call an http gateway (mixed content), and
 // the phone needs https for mic access at all.
@@ -1670,6 +1736,16 @@ const serve = tlsOn
   // that cannot drain on SIGTERM is killed mid-stream on every deploy.
   : http.createServer(app);
 
+/**
+ * Serverless hosts (Vercel) import this module and own the lifecycle: they
+ * call the exported `app` per request and must never have a listening socket
+ * created for them. A long-running process (local, Render, a container) is
+ * the case that needs `listen`.
+ */
+export const SERVERLESS = Boolean(process.env.VERCEL) || process.env.METALOID_HEADLESS === '1';
+export { app };
+export { serve };
+
 // Graceful shutdown: finish in-flight streams before dying, so a deploy never
 // cuts a user mid-sentence.
 let shuttingDown = false;
@@ -1684,7 +1760,7 @@ for (const sig of ['SIGTERM', 'SIGINT']) {
   });
 }
 
-serve.listen(PORT, BIND_HOST, () => {
+if (!SERVERLESS) serve.listen(PORT, BIND_HOST, () => {
   console.log(`metaloid-gateway ${tlsOn ? 'https' : 'http'}://${
     BIND_HOST === '0.0.0.0' ? '<lan-ip>' : BIND_HOST
   }:${PORT} (openrouter:${OR_KEY ? 'set' : 'missing'} nvidia:${NV_ON && NV_KEY ? 'enabled' : 'off'})`);

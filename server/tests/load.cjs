@@ -8,7 +8,8 @@
   const os = await import('node:os');
   const path = await import('node:path');
   const { spawn } = await import('node:child_process');
-  const B = 'https://127.0.0.1:8890';
+  const { base } = require('./_scheme.cjs');
+  const B = base(8890);
   const tmp = fs.mkdtempSync(path.join(os.tmpdir(), 'metaloid-load-'));
   const N = 50;
   const lat = {};
@@ -18,7 +19,7 @@
   };
   const gw = spawn(process.execPath, ['server/src/index.js'], {
     cwd: require('node:path').resolve(__dirname, '..', '..'),
-    env: { ...process.env, PORT: '8890', METALOID_DATA_DIR: tmp, METALOID_AUTH_LIMIT: '10000' },
+    env: { ...process.env, METALOID_NO_DOTENV: '1', SUPABASE_JWT_SECRET: 'matrix-hs256-secret-never-used-for-signing', PORT: '8890', METALOID_DATA_DIR: tmp, METALOID_AUTH_LIMIT: '10000' },
     stdio: 'ignore',
   });
   const j = async (r) => r.json().catch(() => ({}));

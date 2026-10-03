@@ -14,12 +14,12 @@ import { cn } from '../lib/cn';
 
 const STATUS_STYLE: Record<string, string> = {
   QUEUED: 'text-[var(--fg-muted)] border-[var(--border)] bg-[var(--surface-sunken)]',
-  RUNNING: 'text-[var(--accent)] border-cyan-200/25 bg-cyan-300/[0.06]',
-  PAUSED: 'text-amber-300 border-amber-400/25 bg-amber-400/[0.06]',
-  BLOCKED: 'text-amber-300 border-amber-400/25 bg-amber-400/[0.06]',
-  FAILED: 'text-red-300 border-red-500/25 bg-red-500/[0.06]',
-  COMPLETED: 'text-emerald-300 border-emerald-400/25 bg-emerald-400/[0.06]',
-  VERIFIED: 'text-emerald-200 border-emerald-300/40 bg-emerald-400/[0.10]',
+  RUNNING: 'text-[var(--accent)] border-info/25 bg-info/5',
+  PAUSED: 'text-warning border-warning/25 bg-warning/5',
+  BLOCKED: 'text-warning border-warning/25 bg-warning/5',
+  FAILED: 'text-danger border-danger/25 bg-danger/5',
+  COMPLETED: 'text-success border-success/25 bg-success/5',
+  VERIFIED: 'text-success border-success/40 bg-success/10',
 };
 
 export function MissionsPanel({ open, onClose, initialObjective = '' }: {
@@ -117,12 +117,12 @@ export function MissionsPanel({ open, onClose, initialObjective = '' }: {
           >
             <div className="px-6 pt-5 pb-4 border-b border-[var(--border-subtle)]">
               <div className="flex items-center gap-3">
-                <span className="w-10 h-10 rounded-2xl bg-violet-400/10 border border-violet-300/25 flex items-center justify-center">
-                  <Rocket size={18} className="text-violet-200" />
+                <span className="w-10 h-10 rounded-2xl bg-info/10 border border-info/25 flex items-center justify-center">
+                  <Rocket size={18} className="text-info" />
                 </span>
                 <div className="flex-1">
-                  <h3 className="text-[17px] font-bold tracking-tight">Mission Control</h3>
-                  <p className="text-[12px] text-[var(--fg-muted)]">Plan → execute → verify · resumable</p>
+                  <h3 className="text-title font-bold tracking-tight">Mission Control</h3>
+                  <p className="text-small text-[var(--fg-muted)]">Plan → execute → verify · resumable</p>
                 </div>
                 <button onClick={onClose} className="icon-btn w-9 h-9" aria-label="Close missions"><X size={17} /></button>
               </div>
@@ -131,10 +131,10 @@ export function MissionsPanel({ open, onClose, initialObjective = '' }: {
                   value={draft} onChange={(e) => setDraft(e.target.value)}
                   onKeyDown={(e) => { if (e.key === 'Enter') launch(true); }}
                   placeholder="Mission objective — e.g. Profile example.com footprint"
-                  className="flex-1 h-12 rounded-2xl bg-[var(--surface-sunken)] border border-[var(--border)] px-4 text-[14px] outline-none focus:border-[var(--accent)] placeholder:text-[var(--fg-subtle)] min-w-0"
+                  className="flex-1 h-12 rounded-2xl bg-[var(--surface-sunken)] border border-[var(--border)] px-4 text-body outline-none focus:border-[var(--accent)] placeholder:text-[var(--fg-subtle)] min-w-0"
                   aria-label="Mission objective"
                 />
-                <button onClick={() => launch(true)} disabled={busy} className="btn-primary h-12 px-4 text-[13.5px] shrink-0 disabled:opacity-50 min-w-[44px]" title="Run with model synthesis">
+                <button onClick={() => launch(true)} disabled={busy} className="btn-primary h-12 px-4 text-ui shrink-0 disabled:opacity-50 min-w-[44px]" title="Run with model synthesis">
                   <Plus size={15} /> Run
                 </button>
               </div>
@@ -143,8 +143,8 @@ export function MissionsPanel({ open, onClose, initialObjective = '' }: {
             <div className="flex-1 overflow-y-auto px-6 py-4 space-y-2.5">
               {missions.length === 0 && (
                 <div className="py-10 text-center">
-                  <p className="text-[14.5px] text-[var(--fg-secondary)]">No missions yet.</p>
-                  <p className="text-[13px] text-[var(--fg-subtle)] mt-1">Say “mission: …” in chat, or describe one above. “Continue” resumes.</p>
+                  <p className="text-body text-[var(--fg-secondary)]">No missions yet.</p>
+                  <p className="text-ui text-[var(--fg-subtle)] mt-1">Say “mission: …” in chat, or describe one above. “Continue” resumes.</p>
                 </div>
               )}
               {missions.map((m) => {
@@ -153,12 +153,12 @@ export function MissionsPanel({ open, onClose, initialObjective = '' }: {
                 return (
                   <div key={m.id} className="rounded-2xl border border-[var(--border-subtle)] bg-[var(--surface-sunken)] overflow-hidden">
                     <button onClick={() => setActiveId(expanded ? null : m.id)} className="w-full flex items-center gap-3 p-4 text-left min-h-[56px]">
-                      <span className={cn('text-[10.5px] font-bold tracking-[0.1em] rounded-full px-2.5 py-1 border shrink-0', STATUS_STYLE[m.status] ?? STATUS_STYLE.QUEUED)}>
+                      <span className={cn('text-micro font-bold tracking-[0.1em] rounded-full px-2.5 py-1 border shrink-0', STATUS_STYLE[m.status] ?? STATUS_STYLE.QUEUED)}>
                         {m.status}
                       </span>
                       <span className="flex-1 min-w-0">
-                        <span className="block text-[14px] font-semibold truncate">{m.objective}</span>
-                        <span className="block text-[12px] text-[var(--fg-muted)]">{done}/{m.tasks.length} tasks{expanded ? '' : ` · ${new Date(m.createdAt).toLocaleString()}`}</span>
+                        <span className="block text-body font-semibold truncate">{m.objective}</span>
+                        <span className="block text-small text-[var(--fg-muted)]">{done}/{m.tasks.length} tasks{expanded ? '' : ` · ${new Date(m.createdAt).toLocaleString()}`}</span>
                       </span>
                     </button>
                     {expanded && (
@@ -168,21 +168,21 @@ export function MissionsPanel({ open, onClose, initialObjective = '' }: {
                         </div>
                         <div className="space-y-1.5">
                           {m.tasks.map((t) => (
-                            <div key={t.id} className="flex items-center gap-2.5 text-[13px]">
+                            <div key={t.id} className="flex items-center gap-2.5 text-ui">
                               <TaskDot status={t.status} />
                               <span className="flex-1 min-w-0 truncate text-[var(--fg-secondary)]">{t.name}</span>
-                              {t.tool && <span className="font-mono text-[11px] text-[var(--fg-subtle)] shrink-0">{t.tool}</span>}
-                              {t.error && <span className="text-[11.5px] text-red-300 truncate max-w-[180px]" title={t.error}>{t.error}</span>}
+                              {t.tool && <span className="font-mono text-micro text-[var(--fg-subtle)] shrink-0">{t.tool}</span>}
+                              {t.error && <span className="text-micro text-danger truncate max-w-[180px]" title={t.error}>{t.error}</span>}
                             </div>
                           ))}
                         </div>
                         {m.outputs?.report && (
-                          <div className="mt-3 rounded-xl border border-[var(--border-subtle)] bg-[var(--surface-sunken)] p-3.5 text-[13px] leading-relaxed text-[var(--fg-secondary)] whitespace-pre-wrap max-h-[220px] overflow-y-auto">
+                          <div className="mt-3 rounded-xl border border-[var(--border-subtle)] bg-[var(--surface-sunken)] p-3.5 text-ui leading-relaxed text-[var(--fg-secondary)] whitespace-pre-wrap max-h-[220px] overflow-y-auto">
                             {m.outputs.report}
                           </div>
                         )}
                         {m.errors.length > 0 && (
-                          <p className="mt-2 text-[12px] text-amber-300/90">{m.errors.length} noted error(s) — see timeline in debug.</p>
+                          <p className="mt-2 text-small text-warning/90">{m.errors.length} noted error(s) — see timeline in debug.</p>
                         )}
                         <div className="mt-3 flex flex-wrap gap-1.5">
                           {(m.status === 'QUEUED' || m.status === 'PAUSED' || m.status === 'BLOCKED') && (
@@ -195,10 +195,10 @@ export function MissionsPanel({ open, onClose, initialObjective = '' }: {
                             </>
                           )}
                           {m.status === 'COMPLETED' && (
-                            <span className="inline-flex items-center gap-1.5 text-[12px] text-emerald-300"><CheckCircle2 size={13} /> Awaiting verification</span>
+                            <span className="inline-flex items-center gap-1.5 text-small text-success"><CheckCircle2 size={13} /> Awaiting verification</span>
                           )}
                           {m.status === 'VERIFIED' && (
-                            <span className="inline-flex items-center gap-1.5 text-[12px] text-emerald-200"><CheckCircle2 size={13} /> Verified outcome</span>
+                            <span className="inline-flex items-center gap-1.5 text-small text-success"><CheckCircle2 size={13} /> Verified outcome</span>
                           )}
                         </div>
                       </div>
@@ -217,14 +217,14 @@ export function MissionsPanel({ open, onClose, initialObjective = '' }: {
 function TaskDot({ status }: { status: string }) {
   return (
     <span className={cn('w-2 h-2 rounded-full shrink-0',
-      status === 'COMPLETED' ? 'bg-emerald-400' : status === 'RUNNING' ? 'bg-cyan-200 animate-pulse'
-      : status === 'FAILED' ? 'bg-red-400' : status === 'BLOCKED' ? 'bg-amber-300' : 'bg-[var(--fg-subtle)]')} />
+      status === 'COMPLETED' ? 'bg-success/10' : status === 'RUNNING' ? 'bg-info/10 animate-pulse'
+      : status === 'FAILED' ? 'bg-danger/10' : status === 'BLOCKED' ? 'bg-warning/10' : 'bg-[var(--fg-subtle)]')} />
   );
 }
 
 function PanelBtn({ icon: Icon, label, onClick }: { icon: typeof Play; label: string; onClick: () => void }) {
   return (
-    <button onClick={onClick} className="btn-ghost h-9 px-3.5 text-[12.5px]">
+    <button onClick={onClick} className="btn-ghost h-9 px-3.5 text-small">
       <Icon size={13} /> {label}
     </button>
   );

@@ -5,12 +5,33 @@
     <link rel="icon" type="image/png" href="/brand/metaloid-mark.png" />
     <link rel="apple-touch-icon" href="/brand/metaloid-mark.png" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover" />
-    <meta name="description" content="MetaIoid — Autonomous Frontier Intelligence. Continuous learning, real-time voice, vision, and deep verified execution." />
-    <meta name="theme-color" content="#08090b" />
-    <title>MetaIoid — Autonomous Frontier Intelligence</title>
+    <meta name="description" content="MetaIoid — a private personal AI. Continuous learning, real-time voice, vision, and deep verified execution." />
+    <meta name="theme-color" content="#0E0E0D" media="(prefers-color-scheme: dark)" />
+    <meta name="theme-color" content="#FAF8F4" media="(prefers-color-scheme: light)" />
+    <meta name="color-scheme" content="dark light" />
+    <title>MetaIoid</title>
+
     <link rel="preconnect" href="https://fonts.googleapis.com" />
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
-    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&family=Manrope:wght@500;600;700;800&family=JetBrains+Mono:wght@400;500&family=Noto+Sans+Devanagari:wght@400;500;600;700&display=swap" rel="stylesheet" />
+    <link
+      href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600&family=Manrope:wght@500;600;700&family=JetBrains+Mono:wght@400;500&family=Noto+Sans+Devanagari:wght@400;500;600&display=swap"
+      rel="stylesheet"
+    />
+
+    <!--
+      Paint the page background before the stylesheet arrives. Without this the
+      app flashes white between the HTML parse and the first CSS paint, which is
+      the single most visible "unfinished" moment in a dark product.
+    -->
+    <style>
+      html { background: #0e0e0d; color-scheme: dark; }
+      html.light { background: #faf8f4; color-scheme: light; }
+      body { margin: 0; }
+      @media (prefers-reduced-motion: no-preference) {
+        #root { animation: app-in 260ms cubic-bezier(0.22, 1, 0.36, 1) both; }
+      }
+      @keyframes app-in { from { opacity: 0 } to { opacity: 1 } }
+    </style>
   </head>
   <body>
     <div id="root"></div>

@@ -74,56 +74,56 @@ export function Onboarding() {
       className={cn(
         'rounded-xl border px-3.5 py-2.5 text-left transition-colors',
         active
-          ? 'border-[var(--accent)] bg-[var(--accent)]/10'
+          ? 'border-[var(--accent)] bg-[color-mix(in_srgb,var(--accent)_10%,transparent)]'
           : 'border-[var(--border)] bg-[var(--surface-elevated)] hover:border-[var(--fg-faint)]'
       )}
     >
-      <span className="block text-[13.5px] font-semibold text-[var(--fg)]">{label}</span>
-      {hint && <span className="block text-[11.5px] text-[var(--fg-muted)]">{hint}</span>}
+      <span className="block text-ui font-semibold text-[var(--fg)]">{label}</span>
+      {hint && <span className="block text-micro text-[var(--fg-muted)]">{hint}</span>}
     </button>
   );
 
   return (
     <div className="h-full flex items-center justify-center px-4 overflow-y-auto">
       <div className="w-full max-w-[480px] py-10">
-        <p className="text-[12px] font-semibold tracking-[0.18em] text-[var(--accent)]">FIRST-RUN SETUP</p>
-        <h1 className="text-[24px] font-bold tracking-tight text-[var(--fg)] mt-1">Tell MetaIoid the essentials.</h1>
-        <p className="text-[13.5px] text-[var(--fg-muted)] mt-1">Thirty seconds now — everything else it learns from how you use it.</p>
+        <p className="text-small font-semibold tracking-[0.18em] text-[var(--accent)]">FIRST-RUN SETUP</p>
+        <h1 className="text-display font-bold tracking-tight text-[var(--fg)] mt-1">Tell MetaIoid the essentials.</h1>
+        <p className="text-ui text-[var(--fg-muted)] mt-1">Thirty seconds now — everything else it learns from how you use it.</p>
 
         <label className="block mt-6">
-          <span className="text-[12px] font-medium text-[var(--fg-muted)]">What should MetaIoid call you?</span>
+          <span className="text-small font-medium text-[var(--fg-muted)]">What should MetaIoid call you?</span>
           <input
             value={name}
             onChange={(e) => setName(e.target.value)}
             placeholder="Your name"
-            className="mt-1.5 h-11 w-full rounded-xl bg-[var(--surface-elevated)] border border-[var(--border)] px-3.5 text-[14px] text-[var(--fg)] outline-none focus:border-[var(--accent)]"
+            className="mt-1.5 h-11 w-full rounded-xl bg-[var(--surface-elevated)] border border-[var(--border)] px-3.5 text-body text-[var(--fg)] outline-none focus:border-[var(--accent)]"
           />
         </label>
 
-        <p className="mt-5 text-[12px] font-medium text-[var(--fg-muted)]">Language</p>
+        <p className="mt-5 text-small font-medium text-[var(--fg-muted)]">Language</p>
         <div className="mt-1.5 grid grid-cols-2 sm:grid-cols-4 gap-2">
           {LANGS.map((l) => (
             <Chip key={l.id} active={language === l.id} onClick={() => setLanguage(l.id)} label={l.label} hint={l.hint} />
           ))}
         </div>
 
-        <p className="mt-5 text-[12px] font-medium text-[var(--fg-muted)]">Answer style</p>
+        <p className="mt-5 text-small font-medium text-[var(--fg-muted)]">Answer style</p>
         <div className="mt-1.5 grid grid-cols-3 gap-2">
           {STYLES.map((s) => (
             <Chip key={s.id} active={verbosity === s.id} onClick={() => setVerbosity(s.id)} label={s.label} hint={s.hint} />
           ))}
         </div>
 
-        <p className="mt-5 text-[12px] font-medium text-[var(--fg-muted)]">How independent should MetaIoid be?</p>
+        <p className="mt-5 text-small font-medium text-[var(--fg-muted)]">How independent should MetaIoid be?</p>
         <div className="mt-1.5 grid grid-cols-3 gap-2">
           {PROACTIVITY.map((p) => (
             <Chip key={p.id} active={autonomy === p.id} onClick={() => setAutonomy(p.id)} label={p.label} hint={p.hint} />
           ))}
         </div>
-        <p className="mt-2 text-[11.5px] text-[var(--fg-faint)]">You can change this anytime in Control Center. MetaIoid never raises it by itself.</p>
+        <p className="mt-2 text-micro text-[var(--fg-faint)]">You can change this anytime in Control Center. MetaIoid never raises it by itself.</p>
 
         {error && (
-          <p className="mt-3 text-[13px] text-red-400" role="alert">
+          <p className="mt-3 text-ui text-danger" role="alert">
             {error}
           </p>
         )}
@@ -131,7 +131,7 @@ export function Onboarding() {
         <button
           onClick={saveProfileAndProceed}
           disabled={busy}
-          className="mt-6 h-11 w-full rounded-xl bg-[var(--accent)] text-white text-[14px] font-semibold disabled:opacity-50 hover:brightness-110"
+          className="mt-6 h-11 w-full rounded-xl bg-[var(--accent-solid)] text-[var(--accent-on-solid)] text-body font-semibold disabled:opacity-50 hover:brightness-110"
         >
           {busy ? 'Setting up…' : 'Continue to AI Setup →'}
         </button>

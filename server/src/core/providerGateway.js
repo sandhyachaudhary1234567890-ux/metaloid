@@ -11,6 +11,8 @@ import { getAdapter } from './providerAdapters.js';
 import { getHealthManager, recordProviderCall } from './providerHealth.js';
 import { recordProviderUsage } from './providerMeters.js';
 import { emit } from './events.js';
+import { prefsFor } from './accountBridge.js';
+import { listFreeModels, pickCandidates } from '../openrouter.js';
 
 function sleep(ms) {
   return new Promise((r) => setTimeout(r, ms));
@@ -45,6 +47,44 @@ function firstModel(providerId) {
   return models.length ? models[0].modelId : null;
 }
 
+/**
+ * Choose the model for one attempt.
+ *
+ * The provider registry carries a static manifest, and for OpenRouter it
+ * declares `models: []` because the catalogue is fetched at runtime. Nothing
+ * used to bridge the two, so the router resolved no model at all and BYOK
+ * chat failed with "No models registered" no matter what the user had picked
+ * in the UI. The live catalogue is that bridge.
+ *
+ * Free-first is a property of the catalogue, not a filter applied afterwards:
+ * `listFreeModels()` keeps only `:free` slugs, so a paid model cannot be
+ * reached by a fallback. A saved model is honoured when it is a live free
+ * candidate; when it is not, the router says so rather than quietly swapping
+ * the user's choice for a different one.
+ */
+async function chooseModel(providerId, prefs, task) {
+  const registered = getProviderModels(providerId) || [];
+  if (registered.length) {
+    const saved = prefs.defaultModel;
+    if (saved && registered.some((m) => m.modelId === saved)) return saved;
+    return registered[0].modelId;
+  }
+
+  if (providerId !== 'openrouter') return null;
+
+  const free = await listFreeModels().catch(() => []);
+  const ordered = pickCandidates(free, task, 8).map((m) => m.id);
+  const saved = prefs.defaultModel;
+  if (saved && ordered.includes(saved)) return saved;
+  if (saved && !ordered.includes(saved)) {
+    // Visible, not silent: the operator can see the saved slug was skipped
+    // (dead, quarantined, or no longer offered) instead of wondering why the
+    // reply came from a different model.
+    emit('provider.saved_model_skipped', { provider: providerId, saved });
+  }
+  return ordered[0] || null;
+}
+
 export async function orderProviders(userId, prefs = {}) {
   const creds = (await listUserCredentialProviders(userId)).map((c) => c.providerId);
   const health = healthMap(userId);
@@ -75,8 +115,14 @@ function modelFor(providerId, prefs) {
   return firstModel(providerId);
 }
 
-export async function chatWithProviders({ userId, messages, system, prefs = {}, signal, onToken, onAttempt, maxTokens = 1200 }) {
-  const { order, skippedUnhealthy } = await orderProviders(userId, prefs);
+export async function chatWithProviders({ userId, messages, system, prefs = {}, task = 'chat', signal, onToken, onAttempt, maxTokens = 1200 }) {
+  // The account's saved model and provider come from the v1 contract — the
+  // screen that let the user choose them writes there, and nowhere else.
+  // Merged *over* the caller's prefs so the persisted choice wins; a field
+  // the account has not set is left absent rather than blanked.
+  const account = await prefsFor(userId);
+  const effective = { ...prefs, ...account };
+  const { order, skippedUnhealthy } = await orderProviders(userId, effective);
   if (!order.length) {
     const e = new Error('NO_CREDENTIALS');
     e.code = 'NO_CREDENTIALS';
@@ -89,7 +135,7 @@ export async function chatWithProviders({ userId, messages, system, prefs = {}, 
       tried.push({ providerId: pid, error: 'No adapter installed for this provider yet.' });
       continue;
     }
-    const model = modelFor(pid, prefs);
+    const model = await chooseModel(pid, effective, task);
     if (!model) {
       tried.push({ providerId: pid, error: 'No models registered.' });
       continue;

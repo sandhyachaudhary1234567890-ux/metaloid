@@ -1,17 +1,36 @@
-// Sign in / sign up / recovery.
+// SIGN IN · SIGN UP · RECOVERY
 //
-// Shown only when Supabase is configured AND there is no session — the app
-// never gates the local sandbox demo behind a login. Visual language matches
-// the rest of METALOID (obsidian surfaces, hairline borders, one accent).
+// Shown only when an auth service is configured and there is no session — the
+// local experience is never gated behind a login.
+//
+// Two rules this screen was rebuilt around:
+//
+//   1. The backend is invisible. The previous version explained JWTs, Row
+//      Level Security and Supabase's exact role to someone who just wanted to
+//      sign in. Nobody signing in to a premium product is shown its schema.
+//
+//   2. It is MetaIoid, not a form. Brand presence, the product's own artwork,
+//      its typography and its surfaces — no gradient blobs, no third-party
+//      look.
 
-import { useEffect, useState } from 'react';
-import { motion } from 'framer-motion';
-import { Loader2, Mail, Lock, AlertCircle, CheckCircle2, ArrowRight, KeyRound } from 'lucide-react';
+import { useEffect, useId, useState } from 'react';
+import { motion, AnimatePresence } from 'framer-motion';
+import { Loader2, Mail, Lock, AlertCircle, CheckCircle2, ArrowRight, Eye, EyeOff } from 'lucide-react';
 import { useAuth } from '../lib/auth';
 import { MetaIoidLockup } from '../components/brand';
+import { Artwork } from '../components/ui/Artwork';
 import { cn } from '../lib/cn';
+import { duration, ease } from '../design/motion';
 
 type Mode = 'signin' | 'signup' | 'forgot' | 'reset' | 'verify';
+
+const HEADING: Record<Mode, { title: string; sub: string; cta: string }> = {
+  signin: { title: 'Welcome back', sub: 'Sign in to keep your conversations, memory and files on every device.', cta: 'Sign in' },
+  signup: { title: 'Create your account', sub: 'One identity, so your work follows you.', cta: 'Create account' },
+  forgot: { title: 'Reset your password', sub: 'We will email you a link that expires shortly.', cta: 'Send link' },
+  reset: { title: 'Choose a new password', sub: 'Use at least eight characters.', cta: 'Update password' },
+  verify: { title: 'Confirm your email', sub: 'Open the link we sent, then sign in.', cta: 'Resend email' },
+};
 
 export function AuthScreen() {
   const auth = useAuth();
@@ -23,7 +42,6 @@ export function AuthScreen() {
   const [error, setError] = useState<string | null>(null);
   const [notice, setNotice] = useState<string | null>(null);
 
-  // a recovery link puts the app into "choose a new password"
   useEffect(() => {
     if (auth.recoveryMode) setMode('reset');
   }, [auth.recoveryMode]);
@@ -41,7 +59,10 @@ export function AuthScreen() {
       } else if (mode === 'signup') {
         const r = await auth.signUp(email, password, displayName);
         if (!r.ok) setError(r.message || 'Could not create the account.');
-        else if (r.needsVerification) { setNotice(r.message || null); setMode('verify'); }
+        else if (r.needsVerification) {
+          setNotice(r.message || null);
+          setMode('verify');
+        }
       } else if (mode === 'forgot') {
         const r = await auth.resetPassword(email);
         if (!r.ok) setError(r.message || 'Could not send the reset link.');
@@ -49,147 +70,175 @@ export function AuthScreen() {
       } else if (mode === 'reset') {
         const r = await auth.updatePassword(password);
         if (!r.ok) setError(r.message || 'Could not update the password.');
-        else { setNotice(r.message || 'Password updated.'); setMode('signin'); }
+        else {
+          setNotice(r.message || 'Password updated.');
+          setMode('signin');
+        }
       }
     } finally {
       setBusy(false);
     }
   };
 
-  const heading: Record<Mode, { title: string; sub: string; cta: string }> = {
-    signin: { title: 'Sign in', sub: 'Your conversations, memory and provider keys, on every device.', cta: 'Sign in' },
-    signup: { title: 'Create your account', sub: 'One identity for the web app and the Android client.', cta: 'Create account' },
-    forgot: { title: 'Reset your password', sub: 'We will email you a secure link that expires shortly.', cta: 'Send reset link' },
-    reset: { title: 'Choose a new password', sub: 'Use at least 8 characters.', cta: 'Update password' },
-    verify: { title: 'Confirm your email', sub: 'Click the link we sent, then sign in.', cta: 'Resend email' },
+  const h = HEADING[mode];
+  const go = (m: Mode) => {
+    setMode(m);
+    setError(null);
+    setNotice(null);
   };
 
-  const h = heading[mode];
-
   return (
-    <div className="min-h-full h-full flex items-stretch bg-[var(--bg)] text-[var(--fg)]">
-      {/* brand / value panel — hidden on small screens */}
-      <div className="hidden lg:flex flex-col justify-between w-[46%] p-12 border-r border-[var(--border)] bg-[var(--bg-subtle)] relative overflow-hidden">
-        <div
-          className="absolute inset-0 pointer-events-none"
-          style={{
-            background:
-              'radial-gradient(520px 320px at 18% 22%, var(--accent-glow), transparent 62%), radial-gradient(420px 300px at 82% 78%, rgba(129,140,248,.16), transparent 64%)',
-          }}
-        />
-        <div className="relative">
-          <MetaIoidLockup size="md" />
-        </div>
-        <div className="relative max-w-md">
-          <h2 className="text-[30px] leading-tight font-extrabold tracking-tight">
-            One private workspace for voice, vision, agents and memory.
+    <div className="flex h-full min-h-full items-stretch bg-[var(--bg)] text-[var(--fg)]">
+      {/* ── Brand panel. Hidden below lg; the form stands alone on phones. ── */}
+      <div className="relative hidden w-[44%] shrink-0 flex-col justify-between overflow-hidden border-r border-[var(--border)] bg-[var(--bg-subtle)] p-12 lg:flex">
+        <MetaIoidLockup variant="full" size="md" />
+
+        <div className="relative max-w-[380px]">
+          <Artwork name="atmosphere" size={148} radius="xl" priority className="mb-8" />
+          <h2 className="t-display text-[var(--fg)] text-balance">
+            One quiet workspace for everything you think about.
           </h2>
-          <ul className="mt-7 space-y-3.5 text-[13.5px] text-[var(--fg-secondary)]">
-            {[
-              'Your provider keys are encrypted server-side and never returned to a browser.',
-              'Conversations, memories and tasks sync across devices — and stay yours.',
-              'Row Level Security means another account cannot read your data, even with your URL.',
-              'Free models first. Paid usage is never switched on silently.',
-            ].map((line) => (
-              <li key={line} className="flex gap-3">
-                <CheckCircle2 size={16} className="text-[var(--accent)] shrink-0 mt-0.5" />
-                <span>{line}</span>
-              </li>
-            ))}
-          </ul>
+          <p className="mt-3 text-body text-[var(--fg-muted)] text-pretty">
+            Voice, vision, research and memory in a single place — private by default, and yours to leave at
+            any time.
+          </p>
         </div>
-        <p className="relative text-[11.5px] text-[var(--fg-muted)]">
-          METALOID keeps model traffic on its own gateway — Supabase handles identity and data, never inference.
+
+        <p className="text-small text-[var(--fg-subtle)]">
+          Nothing here leaves your device unless you ask it to.
         </p>
       </div>
 
-      {/* form panel */}
-      <div className="flex-1 flex items-center justify-center p-6 sm:p-10">
+      {/* ── Form panel. ── */}
+      <div className="flex flex-1 items-center justify-center p-6 sm:p-10">
         <motion.div
-          initial={{ opacity: 0, y: 10 }}
+          initial={{ opacity: 0, y: 8 }}
           animate={{ opacity: 1, y: 0 }}
-          transition={{ duration: 0.25, ease: [0.22, 1, 0.36, 1] }}
-          className="w-full max-w-[400px]"
+          transition={{ duration: duration.large, ease: ease.out }}
+          className="w-full max-w-[380px]"
         >
-          <div className="lg:hidden mb-8 flex justify-center">
-            <MetaIoidLockup size="md" />
+          <div className="mb-9 flex justify-center lg:hidden">
+            <MetaIoidLockup variant="full" size="md" />
           </div>
 
-          <h1 className="text-[24px] font-bold tracking-tight">{h.title}</h1>
-          <p className="text-[13.5px] text-[var(--fg-muted)] mt-1.5">{h.sub}</p>
+          <AnimatePresence mode="wait" initial={false}>
+            <motion.div
+              key={mode}
+              initial={{ opacity: 0, y: 4 }}
+              animate={{ opacity: 1, y: 0 }}
+              exit={{ opacity: 0, y: -4 }}
+              transition={{ duration: duration.small, ease: ease.out }}
+            >
+              <h1 className="t-display text-[var(--fg)]">{h.title}</h1>
+              <p className="mt-1.5 text-body text-[var(--fg-muted)] text-pretty">{h.sub}</p>
+            </motion.div>
+          </AnimatePresence>
 
-          <form onSubmit={submit} className="mt-7 space-y-3.5" noValidate>
+          <form onSubmit={submit} className="mt-7 space-y-4" noValidate>
             {mode === 'signup' && (
               <Field
-                id="display-name" label="Name" icon={null} type="text" autoComplete="name"
-                value={displayName} onChange={setDisplayName} placeholder="How should METALOID address you?"
+                id="display-name"
+                label="Name"
+                type="text"
+                autoComplete="name"
+                value={displayName}
+                onChange={setDisplayName}
+                placeholder="What should MetaIoid call you?"
               />
             )}
 
             {mode !== 'reset' && (
               <Field
-                id="email" label="Email" icon={<Mail size={15} />} type="email" autoComplete="email"
-                value={email} onChange={setEmail} placeholder="you@example.com" required
+                id="email"
+                label="Email"
+                icon={<Mail size={15} />}
+                type="email"
+                autoComplete="email"
+                value={email}
+                onChange={setEmail}
+                placeholder="you@example.com"
+                required
               />
             )}
 
             {mode !== 'forgot' && mode !== 'verify' && (
               <Field
-                id="password" label="Password" icon={<Lock size={15} />} type="password"
+                id="password"
+                label="Password"
+                icon={<Lock size={15} />}
+                type="password"
                 autoComplete={mode === 'signin' ? 'current-password' : 'new-password'}
-                value={password} onChange={setPassword} placeholder="••••••••" required
+                value={password}
+                onChange={setPassword}
+                placeholder="••••••••"
+                required
                 hint={mode === 'signup' || mode === 'reset' ? 'At least 8 characters.' : undefined}
               />
             )}
 
-            {error && (
-              <div role="alert" className="flex items-start gap-2.5 rounded-xl border border-red-500/25 bg-red-500/[0.07] px-3.5 py-3">
-                <AlertCircle size={15} className="text-red-400 shrink-0 mt-0.5" />
-                <span className="text-[12.5px] text-red-300">{error}</span>
-              </div>
-            )}
-            {notice && (
-              <div className="flex items-start gap-2.5 rounded-xl border border-emerald-500/25 bg-emerald-500/[0.07] px-3.5 py-3">
-                <CheckCircle2 size={15} className="text-emerald-400 shrink-0 mt-0.5" />
-                <span className="text-[12.5px] text-emerald-300">{notice}</span>
-              </div>
-            )}
+            <AnimatePresence initial={false}>
+              {error && (
+                <motion.div
+                  initial={{ opacity: 0, height: 0 }}
+                  animate={{ opacity: 1, height: 'auto' }}
+                  exit={{ opacity: 0, height: 0 }}
+                  transition={{ duration: duration.small, ease: ease.out }}
+                  className="overflow-hidden"
+                >
+                  <div
+                    role="alert"
+                    className="flex items-start gap-2.5 rounded-[var(--radius-md)] border border-[color-mix(in_srgb,var(--danger)_28%,transparent)] bg-[color-mix(in_srgb,var(--danger)_7%,transparent)] px-3.5 py-3"
+                  >
+                    <AlertCircle size={15} className="mt-0.5 shrink-0 text-[var(--danger)]" />
+                    <span className="text-small text-[var(--fg)]">{error}</span>
+                  </div>
+                </motion.div>
+              )}
+
+              {notice && (
+                <motion.div
+                  initial={{ opacity: 0, height: 0 }}
+                  animate={{ opacity: 1, height: 'auto' }}
+                  exit={{ opacity: 0, height: 0 }}
+                  transition={{ duration: duration.small, ease: ease.out }}
+                  className="overflow-hidden"
+                >
+                  <div className="flex items-start gap-2.5 rounded-[var(--radius-md)] border border-[color-mix(in_srgb,var(--success)_28%,transparent)] bg-[color-mix(in_srgb,var(--success)_8%,transparent)] px-3.5 py-3">
+                    <CheckCircle2 size={15} className="mt-0.5 shrink-0 text-[var(--success)]" />
+                    <span className="text-small text-[var(--fg)]">{notice}</span>
+                  </div>
+                </motion.div>
+              )}
+            </AnimatePresence>
 
             <button
               type="submit"
               disabled={busy}
-              className={cn(
-                'w-full h-11 rounded-xl text-[13.5px] font-semibold flex items-center justify-center gap-2 transition-all',
-                'bg-[var(--accent)] text-white hover:opacity-90 disabled:opacity-60'
-              )}
+              className="btn-primary h-11 w-full text-ui font-medium"
             >
-              {busy ? <Loader2 size={16} className="animate-spin" /> : <ArrowRight size={16} />}
-              {mode === 'verify' ? 'Resend email' : h.cta}
+              {busy ? <Loader2 size={16} className="animate-spin" /> : null}
+              {busy ? 'Working…' : h.cta}
+              {!busy && <ArrowRight size={15} className="opacity-70" />}
             </button>
           </form>
 
-          <div className="mt-6 flex flex-wrap items-center gap-x-4 gap-y-2 text-[12.5px]">
+          <div className="mt-6 flex flex-wrap items-center gap-x-5 gap-y-2 text-small">
             {mode === 'signin' && (
               <>
-                <button className="text-[var(--fg-muted)] hover:text-[var(--fg)]" onClick={() => { setMode('signup'); setError(null); }}>
+                <button onClick={() => go('signup')} className="text-[var(--fg-muted)] transition-colors duration-micro hover:text-[var(--fg)]">
                   Create an account
                 </button>
-                <button className="text-[var(--fg-muted)] hover:text-[var(--fg)]" onClick={() => { setMode('forgot'); setError(null); }}>
+                <button onClick={() => go('forgot')} className="text-[var(--fg-muted)] transition-colors duration-micro hover:text-[var(--fg)]">
                   Forgot password
                 </button>
               </>
             )}
             {mode !== 'signin' && (
-              <button className="text-[var(--fg-muted)] hover:text-[var(--fg)]" onClick={() => { setMode('signin'); setError(null); setNotice(null); }}>
+              <button onClick={() => go('signin')} className="text-[var(--fg-muted)] transition-colors duration-micro hover:text-[var(--fg)]">
                 Back to sign in
               </button>
             )}
           </div>
-
-          <p className="mt-8 text-[11.5px] text-[var(--fg-muted)] flex items-center gap-2">
-            <KeyRound size={13} className="text-[var(--fg-subtle)]" />
-            Sessions are JWT-based and refresh automatically. Signing out clears this device.
-          </p>
         </motion.div>
       </div>
     </div>
@@ -197,11 +246,20 @@ export function AuthScreen() {
 }
 
 function Field({
-  id, label, icon, hint, value, onChange, type, placeholder, autoComplete, required,
+  id,
+  label,
+  icon,
+  hint,
+  value,
+  onChange,
+  type,
+  placeholder,
+  autoComplete,
+  required,
 }: {
   id: string;
   label: string;
-  icon: React.ReactNode;
+  icon?: React.ReactNode;
   hint?: string;
   value: string;
   onChange: (v: string) => void;
@@ -210,27 +268,45 @@ function Field({
   autoComplete?: string;
   required?: boolean;
 }) {
+  const reactId = useId();
+  const fieldId = `${id}-${reactId}`;
+  const [reveal, setReveal] = useState(false);
+  const isPassword = type === 'password';
+
   return (
     <div>
-      <label htmlFor={id} className="block text-[12px] font-medium text-[var(--fg-secondary)] mb-1.5">{label}</label>
-      <div className="relative">
-        {icon && <span className="absolute left-3 top-1/2 -translate-y-1/2 text-[var(--fg-subtle)]">{icon}</span>}
+      <label htmlFor={fieldId} className="mb-1.5 block text-small font-medium text-[var(--fg-secondary)]">
+        {label}
+      </label>
+
+      <div className="input-shell flex h-11 items-center gap-2.5 px-3">
+        {icon && <span className="shrink-0 text-[var(--fg-subtle)]">{icon}</span>}
         <input
-          id={id}
-          type={type}
+          id={fieldId}
+          type={isPassword && reveal ? 'text' : type}
           value={value}
           required={required}
           autoComplete={autoComplete}
           placeholder={placeholder}
           onChange={(e) => onChange(e.target.value)}
-          className={cn(
-            'w-full h-11 rounded-xl bg-[var(--surface-elevated)] border border-[var(--border)] text-[13.5px] text-[var(--fg)]',
-            'placeholder:text-[var(--fg-subtle)] outline-none focus:border-[var(--accent)] transition-colors',
-            icon ? 'pl-9 pr-3' : 'px-3'
-          )}
+          className="min-w-0 flex-1 bg-transparent text-ui text-[var(--fg)] outline-none placeholder:text-[var(--fg-subtle)]"
         />
+        {isPassword && (
+          <button
+            type="button"
+            onClick={() => setReveal((r) => !r)}
+            aria-label={reveal ? 'Hide password' : 'Show password'}
+            className="icon-btn -mr-1 h-7 w-7 shrink-0"
+          >
+            {reveal ? <EyeOff size={15} /> : <Eye size={15} />}
+          </button>
+        )}
       </div>
-      {hint && <p className="mt-1.5 text-[11.5px] text-[var(--fg-muted)]">{hint}</p>}
+
+      {hint && <p className="mt-1.5 text-small text-[var(--fg-muted)]">{hint}</p>}
     </div>
   );
 }
+
+/** Kept for callers that need the field shell elsewhere. */
+export const authFieldClass = cn('input-shell flex h-11 items-center gap-2.5 px-3');

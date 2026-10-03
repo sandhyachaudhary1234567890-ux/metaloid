@@ -31,17 +31,17 @@ export function PuterConnect() {
       <span
         className={cn(
           'h-1.5 w-1.5 rounded-full',
-          state === 'in' ? 'bg-emerald-400' : state === 'checking' || state === 'busy' ? 'bg-amber-300 animate-pulse' : 'bg-zinc-500'
+          state === 'in' ? 'bg-success/10' : state === 'checking' || state === 'busy' ? 'bg-warning/10 animate-pulse' : 'bg-[var(--surface-hover)]'
         )}
       />
-      <span className="text-[12px] text-[var(--fg-muted)]">
+      <span className="text-small text-[var(--fg-muted)]">
         {state === 'in' ? 'Connected' : state === 'checking' ? 'Checking…' : state === 'busy' ? 'Signing in…' : 'Not connected'}
       </span>
       {state !== 'in' && state !== 'checking' && (
         <button
           onClick={connect}
           disabled={state === 'busy'}
-          className="h-8 rounded-lg border border-[var(--border)] bg-[var(--surface-elevated)] px-3 text-[12px] font-medium text-[var(--fg)] hover:border-[var(--accent)] disabled:opacity-60"
+          className="h-8 rounded-lg border border-[var(--border)] bg-[var(--surface-elevated)] px-3 text-small font-medium text-[var(--fg)] hover:border-[var(--accent)] disabled:opacity-60"
         >
           Connect free
         </button>
@@ -50,7 +50,7 @@ export function PuterConnect() {
         href="https://developer.puter.com"
         target="_blank"
         rel="noreferrer"
-        className="text-[11px] text-[var(--fg-faint)] underline decoration-dotted underline-offset-2 hover:text-[var(--fg-muted)]"
+        className="text-micro text-[var(--fg-faint)] underline decoration-dotted underline-offset-2 hover:text-[var(--fg-muted)]"
       >
         Powered by Puter
       </a>
