@@ -7,6 +7,15 @@
 // Keys live ONLY in process.env (server/.env). Nothing secret is logged
 // or ever sent to the frontend.
 
+// MUST stay the first import in this file, and in every other entry point.
+//
+// ES imports are evaluated before this module's body, so `./env.js` has to be
+// listed ahead of every module that reads process.env at module scope (auth.js,
+// openrouter.js, core/*). Moving it down, or deleting it on the assumption that
+// the `listen()` block below is "early enough", reintroduces the bug where a
+// `.env`-configured gateway reports `auth.configured:false`. See env.js.
+import './env.js';
+
 import fs from 'node:fs';
 import path from 'node:path';
 import os from 'node:os';
@@ -129,24 +138,10 @@ function buildRuntimeContext(c = {}, personalization = '') {
 }
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
-// minimal .env loader (no dependency)
-//
-// Skipped when METALOID_NO_DOTENV is set. Tests spawn this file with an
-// explicit environment and must be hermetic: without the escape hatch, a
-// developer's real `server/.env` silently changes what they are testing — a
-// live Supabase URL leaking in once turned a self-contained suite into one
-// that sat for five minutes trying to fetch a JWKS over a blocked network.
-if (!process.env.METALOID_NO_DOTENV) {
-  try {
-    const envPath = path.join(__dirname, '..', '.env');
-    if (fs.existsSync(envPath)) {
-      for (const line of fs.readFileSync(envPath, 'utf8').split('\n')) {
-        const m = line.match(/^\s*([A-Z_]+)\s*=\s*(.*)\s*$/);
-        if (m && !process.env[m[1]]) process.env[m[1]] = m[2].trim();
-      }
-    }
-  } catch { /* env optional */ }
-}
+
+// Environment configuration is loaded by `./env.js`, which is imported at the
+// top of this file. It has to run before the imports above are evaluated, so
+// there is deliberately no loader here any more.
 
 const PORT = Number(process.env.PORT || 8787);
 const DATA_DIR = process.env.METALOID_DATA_DIR || path.join(__dirname, '..', 'data');

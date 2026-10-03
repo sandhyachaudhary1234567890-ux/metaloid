@@ -30,28 +30,49 @@ function gatewayError(message, code, status = 401) {
   return Object.assign(new Error(message), { code, status, metaloid: true });
 }
 
-const JWKS_URL = (process.env.SUPABASE_JWKS_URL || '').trim();
-const JWT_SECRET = (process.env.SUPABASE_JWT_SECRET || '').trim();
-const EXPECTED_ISSUER = (process.env.SUPABASE_JWT_ISSUER || '').trim();
-const EXPECTED_AUD = (process.env.SUPABASE_JWT_AUDIENCE || 'authenticated').trim();
+// Configuration is read at CALL time, never captured at module-evaluation time.
+//
+// It used to be five module-scope constants. That made the verifier depend on
+// being imported *after* the environment was populated — and ES module imports
+// are evaluated before the importing module's body, so a loader sitting inside
+// index.js's body always ran too late. The failure was silent and dangerous:
+// with SUPABASE_JWT_SECRET in server/.env, `authConfigured()` returned false,
+// and `localOpenMode()` (core/users.js) gates the development owner fallback on
+// exactly that answer.
+//
+// The derived cryptography is still memoised — keyed on the configuration
+// string it was built from, so it is never stale and never rebuilt per request.
+function readConfig() {
+  const raw = (name) => (process.env[name] || '').trim();
+  return {
+    jwksUrl: raw('SUPABASE_JWKS_URL'),
+    jwtSecret: raw('SUPABASE_JWT_SECRET'),
+    issuer: raw('SUPABASE_JWT_ISSUER'),
+    audience: raw('SUPABASE_JWT_AUDIENCE') || 'authenticated',
+    // Local test/dev key: an explicit PEM public key (or JWKS file served by a
+    // test server) avoids any network dependency in CI.
+    publicKeyPem: raw('SUPABASE_JWT_PUBLIC_KEY').replace(/\\n/g, '\n'),
+  };
+}
 
-// Local test/dev key: an explicit PEM public key (or JWKS file served by a
-// test server) avoids any network dependency in CI.
-const PUBLIC_KEY_PEM = (process.env.SUPABASE_JWT_PUBLIC_KEY || '').trim().replace(/\\n/g, '\n');
-
-let jwks = null;
-function getJwks() {
-  if (!jwks && JWKS_URL) {
-    jwks = createRemoteJWKSet(new URL(JWKS_URL), {
-      // jose's defaults are tens of seconds with retries. Every protected route
-      // waits on this, so an unreachable identity provider would stall the whole
-      // app and surface as a spinner. Fail fast instead, and let the caller
-      // retry once the network recovers.
-      timeoutDuration: Number(process.env.METALOID_JWKS_TIMEOUT_MS || 5000),
-      cooldownDuration: 30_000,
-    });
+let jwksCache = { url: '', value: null };
+function getJwks(url) {
+  if (!url) return null;
+  if (jwksCache.url !== url) {
+    jwksCache = {
+      url,
+      value: createRemoteJWKSet(new URL(url), {
+        // jose's defaults are tens of seconds with retries. Every protected route
+        // waits on this, so an unreachable identity provider would stall the whole
+        // app and surface as a spinner. Fail fast instead, and let the caller
+        // retry once the network recovers. Read per-call so the timeout is not
+        // another value frozen at import time.
+        timeoutDuration: Number(process.env.METALOID_JWKS_TIMEOUT_MS || 5000),
+        cooldownDuration: 30_000,
+      }),
+    };
   }
-  return jwks;
+  return jwksCache.value;
 }
 
 /**
@@ -69,30 +90,45 @@ function isKeyFetchFailure(e) {
   return /ERR_JWKS_TIMEOUT|ERR_JWKS_INVALID|fetch failed|ENOTFOUND|ECONNREFUSED|ETIMEDOUT|ECONNRESET|EAI_AGAIN|socket hang up|UND_ERR|TimeoutError|network/i.test(fingerprint);
 }
 
-let secretKey = null;
-async function getSecretKey() {
-  if (!secretKey && JWT_SECRET) secretKey = new TextEncoder().encode(JWT_SECRET);
-  return secretKey;
-}
-
-let pemKey = null;
-async function getPemKey() {
-  if (!pemKey && PUBLIC_KEY_PEM) {
-    const { importSPKI } = await import('jose');
-    pemKey = await importSPKI(PUBLIC_KEY_PEM, 'ES256').catch(async () => importSPKI(PUBLIC_KEY_PEM, 'RS256'));
+let secretCache = { source: '', value: null };
+async function getSecretKey(secret) {
+  if (!secret) return null;
+  if (secretCache.source !== secret) {
+    secretCache = { source: secret, value: new TextEncoder().encode(secret) };
   }
-  return pemKey;
+  return secretCache.value;
 }
 
+let pemCache = { source: '', value: null };
+async function getPemKey(pem) {
+  if (!pem) return null;
+  if (pemCache.source !== pem) {
+    const { importSPKI } = await import('jose');
+    const value = await importSPKI(pem, 'ES256').catch(async () => importSPKI(pem, 'RS256'));
+    pemCache = { source: pem, value };
+  }
+  return pemCache.value;
+}
+
+/**
+ * Is any verifier available? Answered from the live environment.
+ *
+ * This is a security boundary, not a convenience: core/users.js uses it to
+ * decide whether the development owner fallback may apply at all. A false
+ * negative here means a configured deployment can be mistaken for an
+ * unconfigured one, so it must never be a stale snapshot.
+ */
 export function authConfigured() {
-  return Boolean(JWKS_URL || JWT_SECRET || PUBLIC_KEY_PEM);
+  const c = readConfig();
+  return Boolean(c.jwksUrl || c.jwtSecret || c.publicKeyPem);
 }
 
 /** Which verification mode is live — surfaced by /api/health, no secrets. */
 export function authMode() {
-  if (JWKS_URL) return 'jwks';
-  if (PUBLIC_KEY_PEM) return 'public-key';
-  if (JWT_SECRET) return 'hs256';
+  const c = readConfig();
+  if (c.jwksUrl) return 'jwks';
+  if (c.publicKeyPem) return 'public-key';
+  if (c.jwtSecret) return 'hs256';
   return 'unconfigured';
 }
 
@@ -105,23 +141,26 @@ export async function verifyToken(token) {
   if (!authConfigured()) {
     throw gatewayError('Supabase auth is not configured on this gateway.', 'auth_unconfigured', 503);
   }
+  const cfg = readConfig();
   const opts = {
-    issuer: EXPECTED_ISSUER || undefined,
-    audience: EXPECTED_AUD || undefined,
+    issuer: cfg.issuer || undefined,
+    audience: cfg.audience || undefined,
     clockTolerance: '5s',
   };
   try {
     const header = decodeProtectedHeader(token);
     let key;
     if (header.alg === 'HS256') {
-      key = await getSecretKey();
+      // An HS256 token may never be checked against an asymmetric key, and vice
+      // versa: the algorithm decides which configured verifier applies.
+      key = await getSecretKey(cfg.jwtSecret);
       if (!key) {
         throw gatewayError('Token is HS256 but no SUPABASE_JWT_SECRET is configured.', 'auth_unconfigured', 503);
       }
-    } else if (PUBLIC_KEY_PEM && !JWKS_URL) {
-      key = await getPemKey();
+    } else if (cfg.publicKeyPem && !cfg.jwksUrl) {
+      key = await getPemKey(cfg.publicKeyPem);
     } else {
-      key = getJwks();
+      key = getJwks(cfg.jwksUrl);
       if (!key) {
         throw gatewayError('No Supabase signing key available for this token.', 'auth_unconfigured', 503);
       }

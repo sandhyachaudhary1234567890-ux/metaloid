@@ -9,6 +9,11 @@
 //
 // Two things have to happen before the gateway is imported:
 //
+//   0. The environment must be initialised. `server/src/auth.js` and
+//      `server/src/openrouter.js` read process.env while being *evaluated*,
+//      and ES imports are evaluated before the importing module's body — so
+//      the loader has to be an import of this module, not a statement inside
+//      it. Importing `server/src/env.js` first is what guarantees that.
 //   1. METALOID_DATA_DIR must point somewhere writable. A serverless bundle is
 //      read-only apart from /tmp, and a dozen core modules create their data
 //      directory at module scope. Setting it here — not inside the handler —
@@ -21,7 +26,15 @@
 // first request, so a cold start is paid once per instance and the module
 // top-level code above cannot be blocked by it.
 
-process.env.METALOID_DATA_DIR = process.env.METALOID_DATA_DIR || '/tmp/metaloid';
+import '../server/src/env.js';
+
+// On a serverless host the only writable location is /tmp, and a deployment
+// that accidentally shipped a `server/.env` must not be able to point the data
+// directory at a read-only path and break every cold start. Off Vercel the
+// existing behaviour is preserved exactly.
+process.env.METALOID_DATA_DIR = process.env.VERCEL
+  ? '/tmp/metaloid'
+  : (process.env.METALOID_DATA_DIR || '/tmp/metaloid');
 process.env.METALOID_HEADLESS = process.env.METALOID_HEADLESS || '1';
 
 let appPromise = null;

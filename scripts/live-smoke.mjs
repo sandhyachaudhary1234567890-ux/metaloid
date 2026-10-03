@@ -15,6 +15,20 @@
 // the core-integrity claims: identity from the session, one account cannot see
 // another's rows, keys go in and never come out, the saved model drives the
 // next request, and deleting a conversation propagates to history and URLs.
+//
+// Verdicts
+// --------
+//   PASS        every check ran against a reachable target and held.  exit 0
+//   FAIL        the target answered, and something real was wrong.    exit 1
+//   UNVERIFIED  the target could not be reached over the network.     exit 2
+//
+// UNVERIFIED is not a soft failure and must never be read as success. Most of
+// the checks below are negative assertions — "B cannot see A's rows", "the key
+// never comes back" — and a dead network satisfies every one of them while
+// proving nothing at all. A transport error is therefore never allowed to
+// settle a check: it is counted separately, and any transport error anywhere in
+// the run downgrades the whole verdict to UNVERIFIED. The reachability gate
+// below catches the common case before a single assertion is printed.
 
 import crypto from 'node:crypto';
 
@@ -32,23 +46,72 @@ const mint = (sub) => {
 };
 
 let pass = 0, fail = 0;
+/** Transport failures seen during the run. Non-zero ⇒ the verdict is UNVERIFIED. */
+let transportFailures = 0;
+
 const ok = (name, cond, extra = '') => {
   if (cond) { pass++; console.log(`  ✓ ${name}`); }
   else { fail++; console.log(`  ✗ ${name}${extra ? '  ' + extra : ''}`); }
 };
 
+/** Human-readable cause for a fetch failure, without a stack trace. */
+const why = (e) => e?.cause?.code || e?.code || e?.name || 'network error';
+
+/**
+ * Record a transport failure and return a result no assertion can satisfy.
+ *
+ * The shape matches a successful response exactly — including `text` — because
+ * callers destructure it, and a missing field would crash the run before the
+ * UNVERIFIED verdict could be printed. Failing to report honestly is worse than
+ * failing loudly.
+ */
+const unreachable = (path, e) => {
+  transportFailures++;
+  console.log(`  ! transport failure on ${path}: ${why(e)}`);
+  return { status: 0, unreachable: true, json: {}, text: '' };
+};
+
 const req = async (method, path, { token, body, raw } = {}) => {
-  const r = await fetch(APP + path, {
-    method,
-    headers: { 'Content-Type': 'application/json', ...(token ? { Authorization: `Bearer ${token}` } : {}) },
-    body: body === undefined ? undefined : JSON.stringify(body),
-    signal: AbortSignal.timeout(30_000),
-  });
-  const text = await r.text();
+  let r;
+  try {
+    r = await fetch(APP + path, {
+      method,
+      headers: { 'Content-Type': 'application/json', ...(token ? { Authorization: `Bearer ${token}` } : {}) },
+      body: body === undefined ? undefined : JSON.stringify(body),
+      signal: AbortSignal.timeout(30_000),
+    });
+  } catch (e) {
+    return unreachable(path, e);
+  }
+  let text;
+  try {
+    text = await r.text();
+  } catch (e) {
+    return unreachable(path, e);
+  }
   if (raw) return { status: r.status, text };
   let json; try { json = JSON.parse(text); } catch { json = { raw: text.slice(0, 200) }; }
   return { status: r.status, json };
 };
+
+// ── Reachability gate ────────────────────────────────────────────────────
+// Nothing below is meaningful if the target is not answering, so ask once,
+// plainly, before printing any assertion.
+console.log(`live smoke → ${APP}`);
+{
+  let probe;
+  try {
+    probe = await fetch(`${APP}/api/health`, { signal: AbortSignal.timeout(15_000) });
+  } catch (e) {
+    console.log(`\nUNVERIFIED — could not reach ${APP}`);
+    console.log(`  reason: ${why(e)}`);
+    console.log('  No PASS/FAIL is reported: an unreachable target proves nothing either way.\n');
+    process.exit(2);
+  }
+  // A reachable host that answers badly is a real FAIL, not an unknown — so
+  // only transport failure gates here. Status is reported, then measured.
+  console.log(`  reachable — /api/health answered HTTP ${probe.status}`);
+}
 
 const A = `11111111-2222-4333-8444-${Date.now().toString().slice(-12)}`;
 const B = `99999999-8888-4777-8666-${Date.now().toString().slice(-12)}`;
@@ -122,5 +185,17 @@ ok('history no longer lists it', !(hist.json.rows || []).some((c) => c.id === ci
 const goneMsgs = await req('GET', `/api/v1/conversations/${cid}/messages`, { token: tokenA });
 ok('its messages are gone too', goneMsgs.status === 404 || goneMsgs.json.rows?.length === 0, JSON.stringify(goneMsgs.json).slice(0, 120));
 
-console.log(`\n${pass} passed, ${fail} failed\n`);
-process.exitCode = fail ? 1 : 0;
+// ── Verdict ──────────────────────────────────────────────────────────────
+// A transport failure anywhere means the run could not be completed, so the
+// result is UNVERIFIED and the exit code is non-zero. It is deliberately
+// reported before PASS/FAIL: `fail` is meaningless if checks never ran.
+const verdict = transportFailures > 0 ? 'UNVERIFIED' : (fail > 0 ? 'FAIL' : 'PASS');
+
+console.log(`\n${pass} passed, ${fail} failed${transportFailures ? `, ${transportFailures} unreachable` : ''}`);
+console.log(`VERDICT: ${verdict}`);
+if (verdict === 'UNVERIFIED') {
+  console.log('  The target was not fully reachable — this run is not evidence of either health or breakage.');
+}
+console.log('');
+
+process.exitCode = verdict === 'PASS' ? 0 : verdict === 'FAIL' ? 1 : 2;
