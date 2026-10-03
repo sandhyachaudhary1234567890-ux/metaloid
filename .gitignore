@@ -35,3 +35,4 @@ Thumbs.db
 # generated test/build scratch
 coverage/
 .vitest/
+tsconfig.tsbuildinfo
