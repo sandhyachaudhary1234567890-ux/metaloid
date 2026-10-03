@@ -347,39 +347,46 @@ words the web app uses. Never show ONLINE because a variable exists.
 Measured with `server/tools/loadtest.mjs` — a real gateway, real JWTs, 24
 simulated accounts, the request mix clients actually make (30 % list
 conversations, 40 % read messages, 12 % append, 10 % usage, 5 % memories, 3 %
-new conversation), 1 500 requests per level, on a **2-vCPU sandbox** with the
-**local file-backed driver** (`docs/loadtest-local.json`):
+new conversation), **2 000 requests per level**, on a **2-vCPU sandbox** with
+the **local file-backed driver** (`docs/loadtest-local.json`):
 
-| concurrency | rps | p50 | p95 | p99 | errors |
-|---|---|---|---|---|---|
-| 1 | 777 | 1.1 ms | 2.2 ms | 4.0 ms | 0 |
-| 8 | 1 330 | 4.9 ms | 12.4 ms | 21.4 ms | 0 |
-| 32 | 1 139 | 20.3 ms | 83.0 ms | 114.6 ms | 0 |
+| concurrency | rps | p50 | p95 | p99 | max | errors |
+|---|---|---|---|---|---|---|
+| 1 | 774 | 1.1 ms | 2.2 ms | 4.4 ms | 18 ms | 0 |
+| 8 | 1 288 | 4.8 ms | 13.7 ms | 24.9 ms | 89 ms | 0 |
+| 32 | 1 816 | 15.0 ms | 31.0 ms | 53.6 ms | 126 ms | 0 |
+| 64 | 1 912 | 30.4 ms | 62.4 ms | 128.5 ms | 264 ms | 0 |
 
 Reproduce it yourself:
 
 ```bash
-cd server && node tools/loadtest.mjs --levels 1,8,32 --total 1500 --json docs/loadtest-local.json
+cd server && node tools/loadtest.mjs --levels 1,8,32,64 --total 2000 --json docs/loadtest-local.json
 ```
 
 **Read this honestly.**
 
-* This measures the API + repository layer against a local JSON file. Production
-  adds a network round-trip and Postgres work per query — expect lower
-  throughput and higher latency there until the same script is run against
-  Supabase. It is a **floor**, not a capacity estimate.
-* Throughput peaks around 8 concurrent workers on 2 vCPUs and degrades past
-  that: the bottleneck is CPU-bound JSON serialisation plus synchronous file
-  persistence, not the request model.
-* Zero errors means every request was answered; it says nothing about the
-  provider (no model traffic is involved) and nothing about multi-region
-  behaviour.
+* This measures the API + repository layer against a local JSON file on two
+  vCPUs. Production adds a network round-trip and Postgres work per query —
+  expect lower throughput and higher latency there until this script is run
+  against Supabase. It is a **floor and a method**, not a capacity estimate.
+* Throughput keeps climbing to 64 concurrent workers (1.9 k rps) while latency
+  queues predictably: p95 goes 2 ms → 62 ms because 64 requests share a
+  fixed CPU budget, not because anything is broken. Past that point the
+  bottleneck is CPU-bound JSON serialisation, and the next lever is the driver,
+  not the API.
+* The numbers move between runs (the earlier 1 500-request run at concurrency
+  32 measured 1 139 rps / p95 83 ms on the same machine): treat them as an
+  order of magnitude, not a spec.
+* Zero errors means every request was answered. It says nothing about the
+  model provider — no model traffic is involved — and nothing about
+  multi-region behaviour.
+* Per-account rate limits are enforced before the handler (600/min baseline,
+  see the table above), so a *single* account is capped by policy long before
+  the machine is; the load test uses 24 accounts for exactly that reason.
 * No claim is made about how many *users* this supports. What it establishes is
-  the per-request cost of the API layer, and that it is not the first thing
-  that breaks. The first things that break under real load are, in order:
-  provider rate limits and free-tier quotas, then the data driver, then CPU.
-
----
+  the per-request cost of the API layer and that it is not the first thing that
+  breaks. In production the order of failure is: provider rate limits and
+  free-tier quotas, then the data driver, then CPU.
 
 ## 12. What Android must never do
 

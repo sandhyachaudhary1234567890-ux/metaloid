@@ -1,5 +1,5 @@
 {
-  "measured_at": "2026-10-03T04:14:19.564Z",
+  "measured_at": "2026-10-03T04:27:21.301Z",
   "host": {
     "platform": "linux",
     "cpus": 2,
@@ -35,51 +35,66 @@
     }
   ],
   "accounts": 24,
-  "requests_per_level": 1500,
+  "requests_per_level": 2000,
   "results": [
     {
       "concurrency": 1,
-      "requests": 1500,
-      "wall_s": 1.93,
-      "rps": 777,
+      "requests": 2000,
+      "wall_s": 2.58,
+      "rps": 774,
       "p50_ms": 1.1,
       "p95_ms": 2.2,
-      "p99_ms": 4,
-      "max_ms": 13.5,
+      "p99_ms": 4.4,
+      "max_ms": 18.1,
       "errors": 0,
       "statuses": {
-        "200": 1125,
-        "201": 375
+        "200": 1500,
+        "201": 500
       }
     },
     {
       "concurrency": 8,
-      "requests": 1500,
-      "wall_s": 1.13,
-      "rps": 1330,
-      "p50_ms": 4.9,
-      "p95_ms": 12.4,
-      "p99_ms": 21.4,
-      "max_ms": 58.5,
+      "requests": 2000,
+      "wall_s": 1.55,
+      "rps": 1288,
+      "p50_ms": 4.8,
+      "p95_ms": 13.7,
+      "p99_ms": 24.9,
+      "max_ms": 88.8,
       "errors": 0,
       "statuses": {
-        "200": 1125,
-        "201": 375
+        "200": 1500,
+        "201": 500
       }
     },
     {
       "concurrency": 32,
-      "requests": 1500,
-      "wall_s": 1.32,
-      "rps": 1139,
-      "p50_ms": 20.3,
-      "p95_ms": 83,
-      "p99_ms": 114.6,
-      "max_ms": 150.1,
+      "requests": 2000,
+      "wall_s": 1.1,
+      "rps": 1816,
+      "p50_ms": 15,
+      "p95_ms": 31,
+      "p99_ms": 53.6,
+      "max_ms": 126,
       "errors": 0,
       "statuses": {
-        "200": 1125,
-        "201": 375
+        "200": 1500,
+        "201": 500
+      }
+    },
+    {
+      "concurrency": 64,
+      "requests": 2000,
+      "wall_s": 1.05,
+      "rps": 1912,
+      "p50_ms": 30.4,
+      "p95_ms": 62.4,
+      "p99_ms": 128.5,
+      "max_ms": 264.2,
+      "errors": 0,
+      "statuses": {
+        "200": 1500,
+        "201": 500
       }
     }
   ]

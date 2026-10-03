@@ -144,6 +144,35 @@ export function useAccountSync(): SyncState {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [token, auth.user?.id]);
 
+  // ── PUSH: preferences (theme, voice, model, memory) ──────────────────
+  // A debounced PATCH of the profile row, so a new device restores how the
+  // app looks and behaves — not just what is in it. The fingerprint guard
+  // means an unchanged setting never produces a request, and a pull that just
+  // updated the local settings does not bounce straight back to the server.
+  const pushedPrefs = useRef<string>('');
+  useEffect(() => {
+    if (!token || !auth.user) return;
+    const payload = {
+      theme: settings.theme,
+      voice_preference: settings.hindiVoice || settings.englishVoice || 'natural',
+      preferred_model: settings.model,
+      memory_preference: settings.memoryEnabled ? 'on' : 'off',
+    };
+    const fingerprint = JSON.stringify(payload);
+    if (pushedPrefs.current === fingerprint) return;
+    const timer = setTimeout(() => {
+      pushedPrefs.current = fingerprint;
+      repo.updateProfile(token, payload)
+        .then(() => { state.current = { ...state.current, lastPushAt: Date.now(), error: null }; })
+        .catch((e: unknown) => {
+          pushedPrefs.current = ''; // try again on the next change
+          state.current = { ...state.current, error: e instanceof RepoError ? e.message : 'Preferences not saved' };
+        });
+    }, 1200);
+    return () => clearTimeout(timer);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [settings.theme, settings.hindiVoice, settings.englishVoice, settings.model, settings.memoryEnabled, token]);
+
   // ── PUSH: mirror new conversations/messages ──────────────────────────
   const queue = useRef<Promise<void>>(Promise.resolve());
   useEffect(() => {
