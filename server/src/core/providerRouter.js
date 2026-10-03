@@ -101,7 +101,7 @@ export class ProviderRoutingEngine {
    * Get available credentials for user
    */
   async _getAvailableCredentials(userId) {
-    const credentialProviders = listUserCredentialProviders(userId);
+    const credentialProviders = await listUserCredentialProviders(userId);
     
     return credentialProviders.map(cp => ({
       providerId: cp.providerId,

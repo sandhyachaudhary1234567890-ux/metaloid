@@ -12,6 +12,25 @@ import { getHealthManager, recordProviderCall } from './providerHealth.js';
 import { recordProviderUsage } from './providerMeters.js';
 import { emit } from './events.js';
 
+function sleep(ms) {
+  return new Promise((r) => setTimeout(r, ms));
+}
+
+/** Bounded retry: retryable errors get ONE retry with exponential backoff +
+ * jitter, then we move to the next candidate. Never retries auth/bad-input. */
+async function streamOnce(adapter, userId, args, onToken) {
+  try {
+    return { out: await adapter.stream(userId, null, args, onToken), retried: false };
+  } catch (e) {
+    const retryable = !!(e && (e.retryable === true || e.type === 'RATE_LIMITED' || e.type === 'TIMEOUT' || e.type === 'UNAVAILABLE'));
+    if (!retryable || (args.signal && args.signal.aborted)) throw e;
+    const delay = 400 + Math.floor(Math.random() * 600); // ~400–1000ms jittered
+    await sleep(delay);
+    if (args.signal && args.signal.aborted) throw e;
+    return { out: await adapter.stream(userId, null, args, onToken), retried: true };
+  }
+}
+
 function healthMap(userId) {
   try {
     const m = getHealthManager().getUserHealthStatuses(userId) || {};
@@ -26,8 +45,8 @@ function firstModel(providerId) {
   return models.length ? models[0].modelId : null;
 }
 
-export function orderProviders(userId, prefs = {}) {
-  const creds = listUserCredentialProviders(userId).map((c) => c.providerId);
+export async function orderProviders(userId, prefs = {}) {
+  const creds = (await listUserCredentialProviders(userId)).map((c) => c.providerId);
   const health = healthMap(userId);
   const bad = new Set(
     [...health.entries()].filter(([, h]) => h && (h.status === 'auth_failed' || h.status === 'unavailable')).map(([pid]) => pid)
@@ -57,7 +76,7 @@ function modelFor(providerId, prefs) {
 }
 
 export async function chatWithProviders({ userId, messages, system, prefs = {}, signal, onToken, onAttempt, maxTokens = 1200 }) {
-  const { order, skippedUnhealthy } = orderProviders(userId, prefs);
+  const { order, skippedUnhealthy } = await orderProviders(userId, prefs);
   if (!order.length) {
     const e = new Error('NO_CREDENTIALS');
     e.code = 'NO_CREDENTIALS';
@@ -78,7 +97,7 @@ export async function chatWithProviders({ userId, messages, system, prefs = {}, 
     const t0 = Date.now();
     try {
       if (onAttempt) onAttempt({ providerId: pid, model });
-      const out = await adapter.stream(userId, null, { model, messages, system, maxTokens, signal }, onToken);
+      const { out } = await streamOnce(adapter, userId, { model, messages, system, maxTokens, signal }, onToken);
       const ms = Date.now() - t0;
       recordProviderCall(pid, userId, null, true, ms, null);
       recordProviderUsage(userId, pid, {

@@ -269,11 +269,11 @@ const U = users.createUser({ handle: 'provtest', passcode: 'pass1234' }).user.id
 // ---------- gateway ordering (prefs + health) ----------
 {
   const cv = await import('../src/core/credentialVault.js');
-  cv.storeUserCredential(U, 'openai', 'sk-test-user-key-1234567890');
-  cv.storeUserCredential(U, 'gemini', 'AIza-test-user-key-1234567890');
-  const ord1 = gateway.orderProviders(U, { defaultProvider: 'gemini', fallbackProviders: ['openai'] });
+  await cv.storeUserCredential(U, 'openai', 'sk-test-user-key-1234567890');
+  await cv.storeUserCredential(U, 'gemini', 'AIza-test-user-key-1234567890');
+  const ord1 = await gateway.orderProviders(U, { defaultProvider: 'gemini', fallbackProviders: ['openai'] });
   assert.deepEqual(ord1.order, ['gemini', 'openai'], 'default first, then fallback');
-  const ord2 = gateway.orderProviders(U, {});
+  const ord2 = await gateway.orderProviders(U, {});
   assert.deepEqual(new Set(ord2.order), new Set(['openai', 'gemini']), 'all creds present unordered');
   // unhealthy excluded (covered live via health manager in HTTP tests)
   pass('gateway ordering honors prefs');
@@ -313,24 +313,25 @@ const U = users.createUser({ handle: 'provtest', passcode: 'pass1234' }).user.id
 
 // ---------- security additions (core level) ----------
 {
-  // concurrent credential ops
+  // concurrent credential ops (real decrypt round-trip per user)
   const results = await Promise.all(
     Array.from({ length: 10 }, (_, i) => (async () => {
       const cv = await import('../src/core/credentialVault.js');
       const u = users.createUser({ handle: 'conc' + i, passcode: 'pass1234' }).user.id;
-      cv.storeUserCredential(u, 'openai', 'sk-conc-key-' + i + '-1234567890');
-      const got = cv.getUserCredential(u, 'openai');
-      return !!got && got.credentialId !== undefined ? true : !!got;
+      const key = 'sk-conc-key-' + i + '-1234567890';
+      await cv.storeUserCredential(u, 'openai', key);
+      const got = await cv.getUserCredential(u, 'openai');
+      return !!got && got.credential === key;
     })())
   );
   assert.ok(results.every(Boolean), 'concurrent store/read isolated per user');
   // disconnect race: delete then use → clean not-found (never a leak)
   const cv = await import('../src/core/credentialVault.js');
-  cv.storeUserCredential(U, 'anthropic', 'sk-ant-race-1234567890');
-  cv.deleteUserCredential(U, 'anthropic');
+  await cv.storeUserCredential(U, 'anthropic', 'sk-ant-race-1234567890');
+  await cv.deleteUserCredential(U, 'anthropic');
   const { AnthropicAdapter } = await import('../src/core/providerAdapters.js');
   const a = new AnthropicAdapter({
-    getUserCredential: () => cv.getUserCredential(U, 'anthropic'),
+    getUserCredential: (uid, pid) => cv.getUserCredential(uid, pid),
   });
   const h = await a.healthCheck(U);
   assert.equal(h.status, 'auth_failed', 'deleted cred → auth_failed, no crash');

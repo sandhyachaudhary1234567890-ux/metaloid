@@ -105,19 +105,28 @@ function bucket(userId, kind) {
  * Returns {ok:true} or {ok:false, error} with a user-facing message.
  * When limits hit: pause/defer/ask per policy — never silently spend.
  */
-export function checkBudget(userId, kind, amount = 1) {
+export async function checkBudget(userId, kind, amount = 1) {
   const caps = planCaps(userId);
   const limit = { chat: caps.chatPerDay, missions: caps.missionsPerDay, osint: caps.osintPerDay, 'voice-min': caps.voiceMinutesPerDay }[kind];
   if (limit === undefined) return { ok: true };
   if (!isFinite(limit)) return { ok: true };
-  const b = bucket(userId, kind);
-  if (b.n + amount > limit) {
+  const { dbMode } = await import('./supadb.js');
+  const used = dbMode()
+    ? (await (await import('./supadb.js')).usageCounts(userId, kind)).day
+    : bucket(userId, kind).n;
+  if (used + amount > limit) {
     return { ok: false, error: `Daily ${kind} budget reached on the ${caps.label} plan. It resets tomorrow — or upgrade for more.` };
   }
-  return { ok: true, remaining: limit - b.n - amount };
+  return { ok: true, remaining: limit - used - amount };
 }
 
-export function recordUsage(userId, kind, amount = 1) {
+export async function recordUsage(userId, kind, amount = 1) {
+  const { dbMode, usageRecord, usageCounts } = await import('./supadb.js');
+  if (dbMode()) {
+    await usageRecord(userId, kind, amount);
+    const c = await usageCounts(userId, kind);
+    return { day: c.day, month: c.month };
+  }
   const b = bucket(userId, kind);
   b.n += amount;
   b.m += amount;
@@ -125,18 +134,29 @@ export function recordUsage(userId, kind, amount = 1) {
   return { day: b.n, month: b.m };
 }
 
-export function usageSummary(userId) {
+export async function usageSummary(userId) {
   const caps = planCaps(userId);
   const out = { plan: getPlan(userId), label: caps.label };
+  const { dbMode, usageCounts } = await import('./supadb.js');
+  const supa = dbMode();
   for (const kind of ['chat', 'missions', 'osint', 'voice-min']) {
-    const b = bucket(userId, kind);
     const limit = { chat: caps.chatPerDay, missions: caps.missionsPerDay, osint: caps.osintPerDay, 'voice-min': caps.voiceMinutesPerDay }[kind];
-    out[kind] = { usedToday: b.n, usedMonth: b.m, limit: isFinite(limit) ? limit : 'unlimited' };
+    if (supa) {
+      const c = await usageCounts(userId, kind);
+      out[kind] = { usedToday: c.day, usedMonth: c.month, limit: isFinite(limit) ? limit : 'unlimited' };
+    } else {
+      const b = bucket(userId, kind);
+      out[kind] = { usedToday: b.n, usedMonth: b.m, limit: isFinite(limit) ? limit : 'unlimited' };
+    }
   }
   return out;
 }
 
-export function deleteUsage(userId) {
+export async function deleteUsage(userId) {
+  const { dbMode, usageDelete } = await import('./supadb.js');
+  if (dbMode()) {
+    await usageDelete(userId);
+  }
   delete store.usage[userId];
   delete store.plans[userId];
   persist();

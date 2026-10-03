@@ -148,7 +148,7 @@ defineTool({
     confidence: { type: 'string', required: false },
   },
   outputs: { record: 'object' },
-  handler: async ({ content, cls = 'semantic', confidence = 'medium' }) => remember({ cls, content, source: 'agent', confidence }),
+  handler: async ({ content, cls = 'semantic', confidence = 'medium' }, grants) => remember({ userId: scopedUser(grants), cls, content, source: 'agent', confidence }),
 });
 
 defineTool({
@@ -158,7 +158,7 @@ defineTool({
   risk: 'read', timeoutMs: 3000, verify: 'none',
   inputs: { query: { type: 'string', required: false }, class: { type: 'string', required: false } },
   outputs: { records: 'array' },
-  handler: async ({ query = '', cls } = {}) => ({ records: recall({ query, cls }) }),
+  handler: async ({ query = '', cls } = {}, grants) => ({ records: await recall({ userId: scopedUser(grants), query, cls }) }),
 });
 
 // ---- world-model tools (local, reversible) ----
@@ -169,9 +169,10 @@ defineTool({
   risk: 'reversible', timeoutMs: 3000, verify: 'none',
   inputs: { type: { type: 'string', required: true, max: 40 }, name: { type: 'string', required: true, max: 160 } },
   outputs: { entity: 'object' },
-  handler: async ({ type, name }) => ({ entity: upsertEntity({ type, name, source: 'agent' }) }),
+  handler: async ({ type, name }, grants) => ({ entity: await upsertEntity({ userId: scopedUser(grants), type, name, source: 'agent' }) }),
 });
 
+// ---- world-model tools (local, reversible) ----
 defineTool({
   name: 'world.relate',
   purpose: 'Record a provenance-carrying relationship between two entities.',
@@ -179,7 +180,7 @@ defineTool({
   risk: 'reversible', timeoutMs: 3000, verify: 'none',
   inputs: { from: { type: 'string', required: true }, to: { type: 'string', required: true }, rel: { type: 'string', required: true, max: 60 } },
   outputs: { edge: 'object' },
-  handler: async ({ from, to, rel }) => relate(from, to, rel, { source: 'agent' }),
+  handler: async ({ from, to, rel }, grants) => relate(scopedUser(grants), from, to, rel, { source: 'agent' }),
 });
 
 defineTool({
@@ -189,7 +190,7 @@ defineTool({
   risk: 'read', timeoutMs: 3000, verify: 'none',
   inputs: { id: { type: 'string', required: true }, depth: { type: 'number', required: false } },
   outputs: { graph: 'object' },
-  handler: async ({ id, depth = 1 }) => ({ graph: neighbors(id, Math.min(depth || 1, 3)) }),
+  handler: async ({ id, depth = 1 }, grants) => ({ graph: await neighbors(scopedUser(grants), id, Math.min(depth || 1, 3)) }),
 });
 
 // ---- artifact tools (scoped file creation, user-owned) ----

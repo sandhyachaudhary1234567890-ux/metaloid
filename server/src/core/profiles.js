@@ -57,15 +57,24 @@ const persist = () => {
 
 const ALLOWED_KEYS = new Set(Object.keys(DEFAULTS));
 
-export function getProfile(userId) {
+async function supa() {
+  const m = await import('./supadb.js');
+  return m.dbMode() ? m : null;
+}
+
+export async function getProfile(userId) {
+  const db = await supa();
+  if (db) {
+    const row = await db.profileGet(userId);
+    return { ...DEFAULTS, ...(row || {}), userId };
+  }
   const p = store.profiles[userId];
   return { ...DEFAULTS, ...(p || {}), userId };
 }
 
-/** Only known keys, validated values. Unknown keys are dropped, never stored. */
-export function updateProfile(userId, patch = {}) {
-  const cur = getProfile(userId);
-  const next = { ...cur };
+/** Validate + sanitize a patch (sync, shared by both modes). */
+function sanitizePatch(patch = {}) {
+  const next = {};
   for (const [k, v] of Object.entries(patch)) {
     if (!ALLOWED_KEYS.has(k) || v === undefined) continue;
     if (k === 'tone' && !TONES.includes(v)) continue;
@@ -82,7 +91,22 @@ export function updateProfile(userId, patch = {}) {
     if (typeof v === 'string') next[k] = v.slice(0, 200);
     else if (typeof v === 'number' || typeof v === 'boolean' || v === null) next[k] = v;
   }
-  next.updatedAt = new Date().toISOString();
+  return next;
+}
+
+/** Only known keys, validated values. Unknown keys are dropped, never stored. */
+export async function updateProfile(userId, patch = {}) {
+  const clean = sanitizePatch(patch);
+  clean.updatedAt = new Date().toISOString();
+  if (clean.onboardingDone && !clean.onboardedAt) clean.onboardedAt = clean.updatedAt;
+  const db = await supa();
+  if (db) {
+    await db.profileUpsert(userId, clean);
+    emit('user.profile_updated', { user: userId });
+    return getProfile(userId);
+  }
+  const cur = await getProfile(userId);
+  const next = { ...cur, ...clean };
   delete next.userId;
   store.profiles[userId] = next;
   persist();
@@ -91,7 +115,7 @@ export function updateProfile(userId, patch = {}) {
 }
 
 /** First-run: only what is necessary. Everything else is learned safely. */
-export function completeOnboarding(userId, answers = {}) {
+export async function completeOnboarding(userId, answers = {}) {
   const patch = { onboardingDone: true, onboardedAt: new Date().toISOString() };
   for (const k of ['displayName', 'language', 'timezone', 'tone', 'verbosity', 'voice', 'proactivity', 'autonomy', 'interests', 'goals']) {
     if (answers[k] !== undefined) patch[k] = answers[k];
@@ -99,14 +123,18 @@ export function completeOnboarding(userId, answers = {}) {
   return updateProfile(userId, patch);
 }
 
-export function deleteProfile(userId) {
+export async function deleteProfile(userId) {
+  const { dbMode, profileDelete } = await import('./supadb.js');
+  if (dbMode()) {
+    await profileDelete(userId);
+  }
   delete store.profiles[userId];
   persist();
 }
 
 /** Server-side personalization lines for the system prompt. */
-export function personalizationBlock(userId) {
-  const p = getProfile(userId);
+export async function personalizationBlock(userId) {
+  const p = await getProfile(userId);
   const lines = [];
   if (p.displayName) lines.push(`User's name: ${p.displayName}`);
   if (p.language && p.language !== 'auto') lines.push(`Reply language: ${p.language}`);

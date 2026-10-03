@@ -56,11 +56,11 @@ function scoreSkill(skill, task, words, projectSkills = []) {
   return { score, hits: [...new Set(hits)].slice(0, 8) };
 }
 
-export function discoverFor(userId, task, { workspaceId = null, projectId = null, projectSkills = [], limit = 5 } = {}) {
+export async function discoverFor(userId, task, { workspaceId = null, projectId = null, projectSkills = [], limit = 5 } = {}) {
   const words = tokens(task);
   if (!words.length) return [];
   const out = [];
-  for (const s of visibleSkills(userId, { workspaceId, projectId })) {
+  for (const s of await visibleSkills(userId, { workspaceId, projectId })) {
     if (s.status !== 'enabled') continue;
     const { score, hits } = scoreSkill(s, task, words, projectSkills);
     if (score <= 0) continue;
@@ -103,10 +103,10 @@ export function missingDeps(skill, available = {}) {
   return missing;
 }
 
-export function findByCommand(userId, command) {
+export async function findByCommand(userId, command) {
   const c = String(command || '').replace(/^\//, '').toLowerCase();
   if (!c) return null;
-  for (const s of visibleSkills(userId)) {
+  for (const s of await visibleSkills(userId)) {
     if (s.status === 'enabled' && s.command && s.command.toLowerCase() === c) return s;
   }
   return null;

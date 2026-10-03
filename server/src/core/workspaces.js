@@ -38,18 +38,40 @@ const did = () => `dev-${Date.now().toString(36)}-${crypto.randomBytes(3).toStri
 
 const SYSTEM_WORKSPACES = ['Personal', 'School', 'Work', 'Coding', 'Research', 'Content', 'Business'];
 
+async function supa() {
+  const m = await import('./supadb.js');
+  return m.dbMode() ? m : null;
+}
+
+function needUser(userId) {
+  if (!userId || typeof userId !== 'string') throw new Error('userId required');
+}
+
 // ---------- workspaces ----------
 
-export function listWorkspaces(userId) {
+export async function listWorkspaces(userId) {
+  needUser(userId);
+  const db = await supa();
+  if (db) return db.wsList(userId);
   return workspaces.items.filter((w) => w.userId === userId);
 }
 
-export function getWorkspace(userId, id) {
+export async function getWorkspace(userId, id) {
+  needUser(userId);
+  const db = await supa();
+  if (db) return db.wsGet(userId, id);
   const w = workspaces.items.find((x) => x.id === id);
   return w && w.userId === userId ? w : null;
 }
 
-export function createWorkspace(userId, { name, kind = 'custom', instructions = '' }) {
+export async function createWorkspace(userId, { name, kind = 'custom', instructions = '' } = {}) {
+  needUser(userId);
+  const db = await supa();
+  if (db) {
+    const r = await db.wsCreate(userId, { name, kind, instructions });
+    if (r.ok) emit('workspace.created', { user: userId, id: r.workspace.id });
+    return r;
+  }
   const n = String(name || '').trim().slice(0, 60);
   if (!n) return { ok: false, error: 'Workspace name required.' };
   if (listWorkspaces(userId).length >= 50) return { ok: false, error: 'Workspace limit reached.' };
@@ -65,7 +87,10 @@ export function createWorkspace(userId, { name, kind = 'custom', instructions = 
   return { ok: true, workspace: w };
 }
 
-export function updateWorkspace(userId, id, patch = {}) {
+export async function updateWorkspace(userId, id, patch = {}) {
+  needUser(userId);
+  const db = await supa();
+  if (db) return db.wsUpdate(userId, id, patch);
   const w = getWorkspace(userId, id);
   if (!w) return null;
   if (typeof patch.name === 'string' && patch.name.trim()) w.name = patch.name.trim().slice(0, 60);
@@ -75,7 +100,14 @@ export function updateWorkspace(userId, id, patch = {}) {
   return w;
 }
 
-export function deleteWorkspace(userId, id) {
+export async function deleteWorkspace(userId, id) {
+  needUser(userId);
+  const db = await supa();
+  if (db) {
+    const ok = await db.wsDelete(userId, id);
+    if (ok) emit('workspace.deleted', { user: userId, id });
+    return ok;
+  }
   const i = workspaces.items.findIndex((x) => x.id === id && x.userId === userId);
   if (i < 0) return false;
   workspaces.items.splice(i, 1);
@@ -84,7 +116,9 @@ export function deleteWorkspace(userId, id) {
   return true;
 }
 
-export function deleteUserWorkspaces(userId) {
+export async function deleteUserWorkspaces(userId) {
+  const db = await supa();
+  if (db) return db.wsDeleteUser(userId);
   workspaces.items = workspaces.items.filter((w) => w.userId !== userId);
   persistWS();
 }
@@ -92,7 +126,10 @@ export function deleteUserWorkspaces(userId) {
 // ---------- devices ----------
 
 /** Step 1: device asks for a short pairing code (shown to the signed-in user). */
-export function requestPairing(userId, { deviceName = '', capabilities = [] } = {}) {
+export async function requestPairing(userId, { deviceName = '', capabilities = [] } = {}) {
+  needUser(userId);
+  const db = await supa();
+  if (db) return db.devPairRequest(userId, { deviceName, capabilities });
   const code = String(crypto.randomInt(100000, 999999));
   devices.pairing.push({
     code, userId,
@@ -105,7 +142,14 @@ export function requestPairing(userId, { deviceName = '', capabilities = [] } = 
 }
 
 /** Step 2: signed-in user confirms the code → device becomes authorized. */
-export function confirmPairing(userId, code, { deviceId = null } = {}) {
+export async function confirmPairing(userId, code, { deviceId = null } = {}) {
+  needUser(userId);
+  const db = await supa();
+  if (db) {
+    const r = await db.devPairConfirm(userId, code, { deviceId });
+    if (r.ok) emit('device.paired', { user: userId, device: r.device.id });
+    return r;
+  }
   const i = devices.pairing.findIndex(
     (p) => p.code === String(code) && p.userId === userId && p.expiresAt > Date.now()
   );
@@ -123,11 +167,21 @@ export function confirmPairing(userId, code, { deviceId = null } = {}) {
   return { ok: true, device: d };
 }
 
-export function listDevices(userId) {
+export async function listDevices(userId) {
+  needUser(userId);
+  const db = await supa();
+  if (db) return db.devList(userId);
   return devices.items.filter((d) => d.userId === userId && !d.revoked);
 }
 
-export function revokeDevice(userId, id) {
+export async function revokeDevice(userId, id) {
+  needUser(userId);
+  const db = await supa();
+  if (db) {
+    const ok = await db.devRevoke(userId, id);
+    if (ok) emit('device.revoked', { user: userId, device: id });
+    return ok;
+  }
   const d = devices.items.find((x) => x.id === id && x.userId === userId);
   if (!d) return false;
   d.revoked = true;
@@ -137,7 +191,10 @@ export function revokeDevice(userId, id) {
 }
 
 /** Control-plane gate: (user, device, capability) must all check out. */
-export function authorizeDevice(userId, deviceId, capability) {
+export async function authorizeDevice(userId, deviceId, capability) {
+  needUser(userId);
+  const db = await supa();
+  if (db) return db.devAuthorize(userId, deviceId, capability);
   const d = devices.items.find((x) => x.id === deviceId && x.userId === userId && !x.revoked);
   if (!d) return { ok: false, error: 'Unknown or unpaired device.' };
   if (d.capabilities.length && !d.capabilities.includes(capability)) {
@@ -148,7 +205,9 @@ export function authorizeDevice(userId, deviceId, capability) {
   return { ok: true, device: { id: d.id, name: d.name } };
 }
 
-export function deleteUserDevices(userId) {
+export async function deleteUserDevices(userId) {
+  const db = await supa();
+  if (db) return db.devDeleteUser(userId);
   devices.items = devices.items.filter((d) => d.userId !== userId);
   devices.pairing = devices.pairing.filter((p) => p.userId !== userId);
   persistDev();

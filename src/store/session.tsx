@@ -11,6 +11,7 @@ import {
   getSession, setSession as saveSession, clearSession, onSessionChange,
   type AuthUser,
 } from '../lib/auth';
+import { saveSbSession, loadSbSession, sbAccessToken, sbSignOut, supabaseConfigured } from '../lib/supabaseAuth';
 import { authSignup as apiSignup, authLogin as apiLogin, authLogout as apiLogout, fetchMe as apiMe } from '../lib/transport';
 
 export interface ModalState {
@@ -72,6 +73,7 @@ interface SessionValue {
   onboardingDone: boolean;
   signup: (handle: string, displayName: string, passcode: string) => Promise<void>;
   login: (handle: string, passcode: string) => Promise<void>;
+  loginWithSupabase: (accessToken: string, refreshToken: string) => Promise<void>;
   logout: () => Promise<void>;
   refreshAuth: () => Promise<void>;
 }
@@ -138,11 +140,30 @@ export function SessionProvider({ children }: { children: React.ReactNode }) {
     window.location.reload();
   }, [settings.backendUrl, applySessionUser]);
 
+  // Supabase email session: the sb access_token IS the gateway Bearer token
+  // (gateway accepts it as sb:<uuid>). Validated via /me before reload.
+  const loginWithSupabase = useCallback(async (accessToken: string, refreshToken: string) => {
+    saveSbSession({ access_token: accessToken, refresh_token: refreshToken } as unknown as Parameters<typeof saveSbSession>[0]);
+    saveSession({ access: accessToken, refresh: refreshToken, user: { id: 'sb:pending', handle: 'email', displayName: '', role: 'user', createdAt: '' } });
+    try {
+      const me = await apiMe(settings.backendUrl);
+      saveSession({ access: accessToken, refresh: refreshToken, user: me.user });
+      applySessionUser(me.user, !!(me.profile as { onboardingDone?: boolean } | undefined)?.onboardingDone);
+      window.location.reload();
+    } catch {
+      clearSession();
+      saveSbSession(null);
+      applySessionUser(null, false);
+      throw new Error('Email session was rejected by the gateway.');
+    }
+  }, [settings.backendUrl, applySessionUser]);
+
   const logout = useCallback(async () => {
     try {
       await apiLogout(settings.backendUrl);
     } catch { /* session already dead — still switch locally */ }
     clearSession();
+    await sbSignOut();
     applySessionUser(null, false);
     window.location.reload(); // no stale context from the previous identity
   }, [settings.backendUrl, applySessionUser]);
@@ -162,12 +183,23 @@ export function SessionProvider({ children }: { children: React.ReactNode }) {
     }
   }, [settings.backendUrl, applySessionUser]);
 
-  // boot: namespace stores to the session user, validate the session
+  // boot: namespace stores to the session user, validate the session.
+  // Supabase email sessions are adopted too (sb token → gateway /me).
   useEffect(() => {
+    const adoptSb = async (): Promise<boolean> => {
+      if (getSession() || !supabaseConfigured()) return false;
+      const token = await sbAccessToken().catch(() => null);
+      if (!token) return false;
+      saveSession({ access: token, refresh: loadSbSession()?.refresh_token || '', user: { id: 'sb:pending', handle: 'email', displayName: '', role: 'user', createdAt: '' } });
+      return true;
+    };
     const s = getSession();
     setActiveUser(s?.user.id || null);
     if (!s) {
-      setAuthReady(true);
+      adoptSb().then((adopted) => {
+        if (!adopted) setAuthReady(true);
+        else refreshAuth();
+      });
       return;
     }
     let alive = true;
@@ -288,7 +320,7 @@ export function SessionProvider({ children }: { children: React.ReactNode }) {
     skillsOpen, setSkillsOpen,
     liveTaskId, setLiveTaskId,
     clearAllData,
-    authUser, authReady, onboardingDone, signup, login, logout, refreshAuth,
+    authUser, authReady, onboardingDone, signup, login, loginWithSupabase, logout, refreshAuth,
   };
   return <Ctx.Provider value={value}>{children}</Ctx.Provider>;
 }

@@ -40,9 +40,53 @@ function needUser(userId) {
   if (!userId || typeof userId !== 'string') throw new Error('userId required');
 }
 
-/** Visibility: system+global → everyone; user → owner; workspace/project → owner + matching context. */
-export function visibleSkills(userId, { workspaceId = null, projectId = null } = {}) {
+async function supa() {
+  const m = await import('./supadb.js');
+  return m.dbMode() ? m : null;
+}
+
+/** Load the live mutable skill (either backend). Mutations must sSave(). */
+async function sGet(userId, id, ctx = {}) {
+  const db = await supa();
+  if (db) return db.skillGet(userId, id, ctx);
+  return getSkillForSync(userId, id, ctx);
+}
+
+async function sSave(s) {
+  const db = await supa();
+  if (db) {
+    await db.skillSave(s);
+    return;
+  }
+  persist();
+}
+
+async function sInsert(s) {
+  const db = await supa();
+  if (db) {
+    await db.skillInsert(s);
+    return;
+  }
+  store.skills.push(s);
+  persist();
+}
+
+function getSkillForSync(userId, id, ctx = {}) {
   needUser(userId);
+  const s = store.skills.find((x) => x.id === id && x.status !== 'deleted');
+  if (!s) return null;
+  if (s.scope === 'global') return s;
+  if (s.userId !== userId) return null;
+  if (s.scope === 'workspace' && ctx.workspaceId && s.workspaceId !== ctx.workspaceId) return null;
+  if (s.scope === 'project' && ctx.projectId && s.projectId !== ctx.projectId) return null;
+  return s;
+}
+
+/** Visibility: system+global → everyone; user → owner; workspace/project → owner + matching context. */
+export async function visibleSkills(userId, { workspaceId = null, projectId = null } = {}) {
+  needUser(userId);
+  const db = await supa();
+  if (db) return db.skillList(userId, { workspaceId, projectId });
   return store.skills.filter((s) => {
     if (s.status === 'deleted') return false;
     if (s.scope === 'global') return true;
@@ -54,15 +98,9 @@ export function visibleSkills(userId, { workspaceId = null, projectId = null } =
   });
 }
 
-export function getSkillFor(userId, id, ctx = {}) {
+export async function getSkillFor(userId, id, ctx = {}) {
   needUser(userId);
-  const s = store.skills.find((x) => x.id === id && x.status !== 'deleted');
-  if (!s) return null;
-  if (s.scope === 'global') return s;
-  if (s.userId !== userId) return null;
-  if (s.scope === 'workspace' && ctx.workspaceId && s.workspaceId !== ctx.workspaceId) return null;
-  if (s.scope === 'project' && ctx.projectId && s.projectId !== ctx.projectId) return null;
-  return s;
+  return sGet(userId, id, ctx);
 }
 
 /** L1 — metadata only (progressive disclosure: never dump instructions). */
@@ -72,8 +110,8 @@ export function skillCard(s) {
   return rest;
 }
 
-export function listSkillCards(userId, ctx = {}) {
-  return visibleSkills(userId, ctx).map(skillCard);
+export async function listSkillCards(userId, ctx = {}) {
+  return (await visibleSkills(userId, ctx)).map(skillCard);
 }
 
 function audit(s, event, detail = '') {
@@ -85,7 +123,7 @@ function audit(s, event, detail = '') {
  * Install a VALIDATED package (validate with skillPackage.js first).
  * pkg: { manifest, files, instructions, references, scripts }.
  */
-export function installSkill(userId, pkg, { scope = 'user', workspaceId = null, projectId = null, source = 'imported' } = {}) {
+export async function installSkill(userId, pkg, { scope = 'user', workspaceId = null, projectId = null, source = 'imported' } = {}) {
   needUser(userId);
   const m = pkg.manifest;
   if (!SKILL_SCOPES.includes(scope)) return { ok: false, error: 'Bad scope.' };
@@ -117,14 +155,13 @@ export function installSkill(userId, pkg, { scope = 'user', workspaceId = null, 
     audit: [],
   };
   audit(s, 'installed', `${source} scope=${scope}`);
-  store.skills.push(s);
-  persist();
+  await sInsert(s);
   emit('skill.installed', { id: s.id, user: userId, scope });
   return { ok: true, skill: skillCard(s) };
 }
 
-export function updateSkill(userId, id, pkg, note = '') {
-  const s = getSkillFor(userId, id);
+export async function updateSkill(userId, id, pkg, note = '') {
+  const s = await getSkillFor(userId, id);
   if (!s) return { ok: false, error: 'Unknown skill.' };
   if (s.source === 'system') return { ok: false, error: 'System skills are not editable.' };
   // validate → scan → preserve previous version (rollback safety).
@@ -158,7 +195,7 @@ export function updateSkill(userId, id, pkg, note = '') {
   s.versions.push({ version: s.version, at: s.updatedAt, note: note || 'updated', manifest: { ...m }, instructions: s.instructions, scripts: s.scripts });
   if (s.versions.length > 20) s.versions.splice(0, s.versions.length - 20);
   audit(s, 'updated', `v${s.version} ${note}`.slice(0, 120));
-  persist();
+  await sSave(s);
   emit('skill.updated', { id, user: userId });
   return { ok: true, skill: skillCard(s) };
 }
@@ -170,8 +207,8 @@ function bumpPatch(v) {
 }
 
 /** Rollback to a preserved version snapshot. */
-export function rollbackSkill(userId, id, version) {
-  const s = getSkillFor(userId, id);
+export async function rollbackSkill(userId, id, version) {
+  const s = await getSkillFor(userId, id);
   if (!s) return { ok: false, error: 'Unknown skill.' };
   const snap = [...s.versions].reverse().find((v) => v.version === version && v.instructions !== undefined);
   if (!snap) return { ok: false, error: 'Version not found.' };
@@ -181,36 +218,36 @@ export function rollbackSkill(userId, id, version) {
   s.scripts = snap.scripts || {};
   s.updatedAt = new Date().toISOString();
   audit(s, 'rollback', `to v${version}`);
-  persist();
+  await sSave(s);
   emit('skill.rollback', { id, user: userId, version });
   return { ok: true, skill: skillCard(s) };
 }
 
-export function setSkillStatus(userId, id, enabled) {
-  const s = getSkillFor(userId, id);
+export async function setSkillStatus(userId, id, enabled) {
+  const s = await getSkillFor(userId, id);
   if (!s) return { ok: false, error: 'Unknown skill.' };
   if (s.source === 'system' && !enabled) return { ok: false, error: 'System skills stay enabled.' };
   s.status = enabled ? 'enabled' : 'disabled';
   s.updatedAt = new Date().toISOString();
   audit(s, enabled ? 'enabled' : 'disabled', '');
-  persist();
+  await sSave(s);
   return { ok: true, skill: skillCard(s) };
 }
 
-export function deleteSkill(userId, id) {
-  const s = getSkillFor(userId, id);
+export async function deleteSkill(userId, id) {
+  const s = await getSkillFor(userId, id);
   if (!s) return false;
   if (s.source === 'system') return false;
   s.status = 'deleted'; // tombstone keeps audit + versions recoverable
   audit(s, 'deleted', '');
-  persist();
+  await sSave(s);
   emit('skill.deleted', { id, user: userId });
   return true;
 }
 
 /** Duplicate into the caller's own scope (share-by-copy, explicit). */
-export function duplicateSkill(userId, id) {
-  const s = getSkillFor(userId, id);
+export async function duplicateSkill(userId, id) {
+  const s = await getSkillFor(userId, id);
   if (!s || s.source === 'system') return { ok: false, error: 'Cannot duplicate that skill.' };
   return installSkill(userId, {
     manifest: {
@@ -225,11 +262,11 @@ export function duplicateSkill(userId, id) {
 }
 
 /** L2 — instructions + reference NAMES (content per-file on demand). */
-export function inspectSkill(userId, id) {
-  const s = getSkillFor(userId, id);
+export async function inspectSkill(userId, id) {
+  const s = await getSkillFor(userId, id);
   if (!s) return null;
   audit(s, 'inspected', '');
-  persist();
+  await sSave(s);
   return {
     ...skillCard(s),
     instructions: s.instructions,
@@ -241,34 +278,34 @@ export function inspectSkill(userId, id) {
 }
 
 /** L3 — single reference/script file content (audited). */
-export function readSkillFile(userId, id, kind, name) {
-  const s = getSkillFor(userId, id);
+export async function readSkillFile(userId, id, kind, name) {
+  const s = await getSkillFor(userId, id);
   if (!s) return null;
   const bag = kind === 'reference' ? s.references : s.scripts;
   if (!bag || typeof bag[name] !== 'string') return null;
   audit(s, 'file_read', `${kind}:${name}`);
-  persist();
+  await sSave(s);
   return { name, content: bag[name].slice(0, 60000) };
 }
 
-export function markSkillUsed(userId, id, detail = '') {
-  const s = getSkillFor(userId, id);
+export async function markSkillUsed(userId, id, detail = '') {
+  const s = await getSkillFor(userId, id);
   if (!s) return;
   s.lastUsedAt = new Date().toISOString();
   s.useCount += 1;
   audit(s, 'invoked', detail);
-  persist();
+  await sSave(s);
 }
 
-export function skillAudit(userId, id) {
-  const s = getSkillFor(userId, id);
+export async function skillAudit(userId, id) {
+  const s = await getSkillFor(userId, id);
   if (!s) return null;
   return s.audit;
 }
 
 /** Inspectable update diff between two preserved versions (or version→current). */
-export function diffVersions(userId, id, from, to = null) {
-  const s = getSkillFor(userId, id);
+export async function diffVersions(userId, id, from, to = null) {
+  const s = await getSkillFor(userId, id);
   if (!s) return null;
   const byV = (v) => [...s.versions].reverse().find((x) => x.version === v);
   const a = byV(from);
@@ -340,31 +377,37 @@ function diffManifests(a, b) {
 }
 
 /** Register a code-defined system skill as a visible GLOBAL package. */
-export function registerSystemSkill(def) {
-  let s = store.skills.find((x) => x.id === `sys-${def.id}` && x.status !== 'deleted');
-  if (!s) {
-    const now = new Date().toISOString();
-    s = {
-      id: `sys-${def.id}`, name: def.name, description: def.description || '',
-      version: def.version || '1.0.0', author: 'Metaloid',
-      userId: null, scope: 'global', workspaceId: null, projectId: null,
-      source: 'system', status: 'enabled',
-      types: ['agent'], capabilities: def.capabilities || [], permissions: { note: 'platform-internal' },
-      dependencies: { tools: def.tools || [], plugins: [], providers: [], packages: [] },
-      tools: def.tools || [], triggers: def.keywords || [],
-      verification: { policy: def.verificationPolicy || 'self-check', checks: [] },
-      command: null, instructions: '', references: {}, scripts: {},
-      examples: [], security: { risk: 'low', findings: [] }, files: {},
-      versions: [{ version: def.version || '1.0.0', at: now, note: 'system' }],
-      createdAt: now, updatedAt: now, lastUsedAt: null, useCount: 0, audit: [],
-    };
-    store.skills.push(s);
-    persist();
+export async function registerSystemSkill(def) {
+  const db = await supa();
+  if (db) {
+    const existing = await db.skillGet('system', `sys-${def.id}`, {});
+    if (existing) return skillCard(existing);
+  } else {
+    const found = store.skills.find((x) => x.id === `sys-${def.id}` && x.status !== 'deleted');
+    if (found) return skillCard(found);
   }
+  const now = new Date().toISOString();
+  const s = {
+    id: `sys-${def.id}`, name: def.name, description: def.description || '',
+    version: def.version || '1.0.0', author: 'Metaloid',
+    userId: 'system', scope: 'global', workspaceId: null, projectId: null,
+    source: 'system', status: 'enabled',
+    types: ['agent'], capabilities: def.capabilities || [], permissions: { note: 'platform-internal' },
+    dependencies: { tools: def.tools || [], plugins: [], providers: [], packages: [] },
+    tools: def.tools || [], triggers: def.keywords || [],
+    verification: { policy: def.verificationPolicy || 'self-check', checks: [] },
+    command: null, instructions: '', references: {}, scripts: {},
+    examples: [], security: { risk: 'low', findings: [] }, files: {},
+    versions: [{ version: def.version || '1.0.0', at: now, note: 'system' }],
+    createdAt: now, updatedAt: now, lastUsedAt: null, useCount: 0, audit: [],
+  };
+  await sInsert(s);
   return skillCard(s);
 }
 
-export function deleteUserSkills(userId) {
+export async function deleteUserSkills(userId) {
+  const db = await supa();
+  if (db) return db.skillDeleteUser(userId);
   const before = store.skills.length;
   store.skills = store.skills.filter((s) => s.userId !== userId);
   persist();

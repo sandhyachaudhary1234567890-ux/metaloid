@@ -90,8 +90,8 @@ async function readErrorText(res) {
   }
 }
 
-function credOf(adapter, userId) {
-  const c = adapter.credentialVault.getUserCredential(userId, adapter.providerId);
+async function credOf(adapter, userId) {
+  const c = await adapter.credentialVault.getUserCredential(userId, adapter.providerId);
   if (!c) {
     const e = new Error('Credential not found. Connect this provider first.');
     e.code = 'NO_CREDENTIAL';
@@ -133,7 +133,7 @@ export class OpenAIAdapter extends ProviderAdapter {
   }
 
   async authenticate(userId) {
-    const key = this.credentialVault.getUserCredential(userId, this.providerId);
+    const key = await this.credentialVault.getUserCredential(userId, this.providerId);
     if (!key) return { valid: false, error: 'Credential not found' };
     try {
       const res = await fetch(`${this.baseUrl}/models`, {
@@ -149,7 +149,7 @@ export class OpenAIAdapter extends ProviderAdapter {
   }
 
   async listModels(userId) {
-    const key = this.credentialVault.getUserCredential(userId, this.providerId);
+    const key = await this.credentialVault.getUserCredential(userId, this.providerId);
     try {
       if (!key) throw new Error('no-credential');
       const res = await fetch(`${this.baseUrl}/models`, {
@@ -206,7 +206,7 @@ export class OpenAIAdapter extends ProviderAdapter {
   }
 
   async execute(userId, credentialId, request) {
-    const key = credOf(this, userId);
+    const key = await credOf(this, userId);
     const { model, messages, system, maxTokens = 1200 } = request;
     let res;
     try {
@@ -234,7 +234,7 @@ export class OpenAIAdapter extends ProviderAdapter {
   }
 
   async stream(userId, credentialId, request, onToken) {
-    const key = credOf(this, userId);
+    const key = await credOf(this, userId);
     const { model, messages, system, maxTokens = 1200 } = request;
     let res;
     try {
@@ -263,7 +263,7 @@ export class OpenAIAdapter extends ProviderAdapter {
 
   async healthCheck(userId) {
     const start = Date.now();
-    const key = this.credentialVault.getUserCredential(userId, this.providerId);
+    const key = await this.credentialVault.getUserCredential(userId, this.providerId);
     if (!key) return { status: 'auth_failed', latency: Date.now() - start };
     try {
       const res = await fetch(`${this.baseUrl}/models`, {
@@ -334,7 +334,7 @@ export class AnthropicAdapter extends ProviderAdapter {
   }
 
   async authenticate(userId) {
-    const key = this.credentialVault.getUserCredential(userId, this.providerId);
+    const key = await this.credentialVault.getUserCredential(userId, this.providerId);
     if (!key) return { valid: false, error: 'Credential not found' };
     try {
       const res = await fetch(`${this.baseUrl}/models`, {
@@ -350,7 +350,7 @@ export class AnthropicAdapter extends ProviderAdapter {
   }
 
   async listModels(userId) {
-    const key = this.credentialVault.getUserCredential(userId, this.providerId);
+    const key = await this.credentialVault.getUserCredential(userId, this.providerId);
     try {
       if (!key) throw new Error('no-credential');
       const res = await fetch(`${this.baseUrl}/models`, {
@@ -398,7 +398,7 @@ export class AnthropicAdapter extends ProviderAdapter {
   }
 
   async execute(userId, credentialId, request) {
-    const key = credOf(this, userId);
+    const key = await credOf(this, userId);
     const { model, messages, system, maxTokens = 1200 } = request;
     let res;
     try {
@@ -427,7 +427,7 @@ export class AnthropicAdapter extends ProviderAdapter {
   }
 
   async stream(userId, credentialId, request, onToken) {
-    const key = credOf(this, userId);
+    const key = await credOf(this, userId);
     const { model, messages, system, maxTokens = 1200 } = request;
     let res;
     try {
@@ -457,7 +457,7 @@ export class AnthropicAdapter extends ProviderAdapter {
 
   async healthCheck(userId) {
     const start = Date.now();
-    const key = this.credentialVault.getUserCredential(userId, this.providerId);
+    const key = await this.credentialVault.getUserCredential(userId, this.providerId);
     if (!key) return { status: 'auth_failed', latency: Date.now() - start };
     try {
       const res = await fetch(`${this.baseUrl}/models`, {
@@ -509,7 +509,7 @@ export class GeminiAdapter extends ProviderAdapter {
   }
 
   async authenticate(userId) {
-    const key = this.credentialVault.getUserCredential(userId, this.providerId);
+    const key = await this.credentialVault.getUserCredential(userId, this.providerId);
     if (!key) return { valid: false, error: 'Credential not found' };
     try {
       const res = await fetch(`${this.baseUrl}/models?key=${encodeURIComponent(key.credential)}`, {
@@ -527,7 +527,7 @@ export class GeminiAdapter extends ProviderAdapter {
   }
 
   async listModels(userId) {
-    const key = this.credentialVault.getUserCredential(userId, this.providerId);
+    const key = await this.credentialVault.getUserCredential(userId, this.providerId);
     try {
       if (!key) throw new Error('no-credential');
       const res = await fetch(`${this.baseUrl}/models?key=${encodeURIComponent(key.credential)}`, {
@@ -582,7 +582,7 @@ export class GeminiAdapter extends ProviderAdapter {
   }
 
   async execute(userId, credentialId, request) {
-    const key = credOf(this, userId);
+    const key = await credOf(this, userId);
     const { model, messages, system, maxTokens = 1200 } = request;
     const body = { ...geminiContents(messages, system), generationConfig: { maxOutputTokens: maxTokens } };
     let res;
@@ -612,7 +612,7 @@ export class GeminiAdapter extends ProviderAdapter {
   }
 
   async stream(userId, credentialId, request, onToken) {
-    const key = credOf(this, userId);
+    const key = await credOf(this, userId);
     const { model, messages, system, maxTokens = 1200 } = request;
     const body = { ...geminiContents(messages, system), generationConfig: { maxOutputTokens: maxTokens } };
     let res;
@@ -642,7 +642,7 @@ export class GeminiAdapter extends ProviderAdapter {
 
   async healthCheck(userId) {
     const start = Date.now();
-    const key = this.credentialVault.getUserCredential(userId, this.providerId);
+    const key = await this.credentialVault.getUserCredential(userId, this.providerId);
     if (!key) return { status: 'auth_failed', latency: Date.now() - start };
     try {
       const res = await fetch(`${this.baseUrl}/models?key=${encodeURIComponent(key.credential)}`, {

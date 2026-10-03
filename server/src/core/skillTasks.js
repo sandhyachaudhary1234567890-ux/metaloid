@@ -70,9 +70,9 @@ export function removeSchedule(userId, id) {
 export async function runScheduled({ invokeSkill, checkBudget }, userId, id) {
   const s = store.schedules.find((x) => x.id === id && x.userId === userId && x.enabled);
   if (!s) return { ok: false, error: 'Unknown or disabled schedule.' };
-  const budget = checkBudget ? checkBudget(userId, 'missions') : { ok: true };
+  const budget = checkBudget ? await checkBudget(userId, 'missions') : { ok: true };
   if (!budget.ok) return { ok: false, error: budget.error };
-  const r = invokeSkill(userId, s.id ? s.skillId : s.skillId, { input: s.input, reason: `schedule:${s.id}` });
+  const r = await invokeSkill(userId, s.id ? s.skillId : s.skillId, { input: s.input, reason: `schedule:${s.id}` });
   s.lastRunAt = new Date().toISOString();
   s.runs += 1;
   persist();

@@ -53,17 +53,17 @@ assert.equal(users.validateAccess(r1.access), null, 'revoked access dead');
 pass('sessions: validate/rotation/revoke');
 
 // ---- memory isolation ----
-const ma = memory.remember({ userId: A, content: 'Alice secret plan' });
+const ma = await memory.remember({ userId: A, content: 'Alice secret plan' });
 assert.equal(ma.ok, true);
-assert.deepEqual(memory.recall(B, {}), [], 'B sees nothing of A');
-assert.equal(memory.recall(A, {}).length, 1);
-assert.equal(memory.forget(B, ma.record.id).ok, false, 'B cannot delete A memory');
-assert.equal(memory.updateMemory(B, ma.record.id, { content: 'hijack' }).ok, false);
-const up = memory.updateMemory(A, ma.record.id, { content: 'Alice updated plan' });
+assert.deepEqual(await memory.recall(B, {}), [], 'B sees nothing of A');
+assert.equal((await memory.recall(A, {})).length, 1);
+assert.equal((await memory.forget(B, ma.record.id)).ok, false, 'B cannot delete A memory');
+assert.equal((await memory.updateMemory(B, ma.record.id, { content: 'hijack' })).ok, false);
+const up = await memory.updateMemory(A, ma.record.id, { content: 'Alice updated plan' });
 assert.equal(up.ok && up.record.content, 'Alice updated plan');
-const mb = memory.remember({ userId: B, content: 'Bob note' });
-assert.equal(memory.recall(B, {}).length, 1);
-assert.equal(memory.stats(A).total, 1);
+const mb = await memory.remember({ userId: B, content: 'Bob note' });
+assert.equal((await memory.recall(B, {})).length, 1);
+assert.equal((await memory.stats(A)).total, 1);
 pass('memory isolation + user control');
 
 // ---- missions isolation ----
@@ -121,11 +121,11 @@ pass('profiles validation + personalization');
 assert.equal(ent.getPlan(A), 'free');
 assert.equal(ent.can(A, 'chat'), true);
 assert.equal(ent.can(A, 'teleport'), false);
-for (let i = 0; i < 100; i++) ent.recordUsage(B, 'chat');
-const over = ent.checkBudget(B, 'chat');
+for (let i = 0; i < 100; i++) await ent.recordUsage(B, 'chat');
+const over = await ent.checkBudget(B, 'chat');
 assert.equal(over.ok, false, 'free daily chat budget enforced');
-assert.ok(ent.checkBudget(A, 'chat').ok);
-const u = ent.usageSummary(A);
+assert.ok((await ent.checkBudget(A, 'chat')).ok);
+const u = await ent.usageSummary(A);
 assert.equal(u.plan, 'free');
 assert.equal(u.chat.limit, 100);
 pass('entitlements + budgets');
@@ -146,20 +146,20 @@ assert.equal(ws.revokeDevice(A, conf.device.id), true);
 pass('workspaces + devices');
 
 // ---- delete cascade ----
-const del = (() => {
-  memory.deleteUserMemories(B);
+await memory.deleteUserMemories(B);
+{
   missions.deleteUserMissions(B);
   world.deleteUserWorld(B);
   osint.deleteUserInvestigations(B);
   perms.deleteUserApprovals(B);
   ws.deleteUserWorkspaces(B);
   ws.deleteUserDevices(B);
-  ent.deleteUsage(B);
+  await ent.deleteUsage(B);
   profiles.deleteProfile(B);
-  return users.deleteUserCascade(B);
-})();
+}
+const del = users.deleteUserCascade(B);
 assert.equal(del, true);
-assert.deepEqual(memory.recall(A, {}).length, 1, 'A data survives B deletion');
+assert.deepEqual((await memory.recall(A, {})).length, 1, 'A data survives B deletion');
 assert.equal(users.getUser(B), null);
 pass('delete cascade, A intact');
 

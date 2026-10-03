@@ -73,6 +73,7 @@ import {
 } from './core/skillStore.js';
 import { adapterStatus } from './core/skillRuntimes.js';
 import { registerSchedule, listSchedules, removeSchedule, runScheduled, deleteUserSchedules } from './core/skillTasks.js';
+import { submitJob, getJob, listJobs, queueStats, deleteUserJobs } from './core/jobs.js';
 import { validatePackage, packageFromFields } from './core/skillPackage.js';
 import { discoverFor, findByCommand, missingDeps } from './core/skillDiscovery.js';
 import { testSkill, invokeSkill } from './core/skillRuntime.js';
@@ -131,6 +132,7 @@ try {
 } catch { /* env optional */ }
 
 const PORT = Number(process.env.PORT || 8787);
+const DATA_DIR = process.env.METALOID_DATA_DIR || path.join(__dirname, '..', 'data');
 // BIND_HOST=0.0.0.0 exposes the gateway on the LAN/web (for phone testing and web hosting).
 // Local-only is the default; LAN mode prints an explicit warning at boot.
 const BIND_HOST = process.env.BIND_HOST || '0.0.0.0';
@@ -201,20 +203,58 @@ app.use((req, res, next) => {
 
 app.use(express.json({ limit: '3mb' })); // 256kb would 413 skill-ZIP payloads (1.5MB archive cap enforced inside skillZip.js); rate limits still apply per route
 
+// ---- request IDs + structured access log (method/path/status/ms/user —
+// NEVER secrets, tokens, keys, or bodies) ----
+let reqSeq = 0;
+app.use((req, res, next) => {
+  const id = `rq-${Date.now().toString(36)}-${(++reqSeq).toString(36)}`;
+  req.requestId = id;
+  res.setHeader('X-Request-ID', id);
+  const t0 = Date.now();
+  res.on('finish', () => {
+    const user = req.auth?.userId || '-';
+    console.log(`[req] ${id} ${req.method} ${req.path} ${res.statusCode} ${Date.now() - t0}ms user=${user}`);
+  });
+  next();
+});
+
+/** Normalized error categories (client gets category + action, never stacks). */
+export function categorizeError(e, fallback = 'UNKNOWN_ERROR') {
+  const msg = String((e && e.message) || e || '');
+  if (/AUTH_REQUIRED|sign in|401/.test(msg)) return { category: 'AUTH_ERROR', message: 'Sign in required.', retryable: false };
+  if (e && e.code === 'ALL_PROVIDERS_FAILED') return { category: 'PROVIDER_ERROR', message: msg.slice(0, 220), retryable: true };
+  if (/quota|429|rate/i.test(msg)) return { category: 'RATE_LIMIT', message: 'Rate limited — wait a moment and retry.', retryable: true };
+  if (/timeout|abort|ECONN|ENOTFOUND|socket/i.test(msg)) return { category: 'NETWORK_ERROR', message: 'Network issue reaching the provider. Retry.', retryable: true };
+  if (/budget/i.test(msg)) return { category: 'RATE_LIMIT', message: msg.slice(0, 200), retryable: false };
+  if (/validation|invalid|bad request/i.test(msg)) return { category: 'MODEL_ERROR', message: msg.slice(0, 200), retryable: false };
+  return { category: fallback, message: 'Something went wrong. Retry.', retryable: false };
+}
+
 // ---- tiny in-memory rate limiter (per-route buckets: every rateLimit()
-// instance owns its map, keyed by IP — a shared map would let mixed
-// activity on one IP trip unrelated routes) ----
+// instance owns its map — a shared map would let mixed activity on one IP
+// trip unrelated routes. Keyed by authed user when present so one NAT IP
+// never throttles every user behind it.) ----
 function rateLimit(max, windowMs) {
   const hits = new Map();
   return (req, res, next) => {
-    const ip = req.ip || 'local';
+    const key = (req.auth && req.auth.userId) ? `u:${req.auth.userId}` : `ip:${req.ip || 'local'}`;
     const now = Date.now();
-    const arr = (hits.get(ip) || []).filter((t) => now - t < windowMs);
+    const arr = (hits.get(key) || []).filter((t) => now - t < windowMs);
     arr.push(now);
-    hits.set(ip, arr);
-    if (arr.length > max) return res.status(429).json({ error: 'Rate limited. Slow down.' });
+    hits.set(key, arr);
+    if (arr.length > max) return res.status(429).json({ error: 'Rate limited. Slow down.', category: 'RATE_LIMIT', requestId: req.requestId });
     next();
   };
+}
+
+/** Cursor-free pagination for list endpoints: ?limit=&offset= (capped).
+ * Defaults preserve old behavior (full list) unless the client pages. */
+export function paginate(arr, req, maxLimit = 100) {
+  const raw = Number(req.query.limit);
+  if (!Number.isFinite(raw) || raw <= 0) return { items: arr, total: arr.length, paged: false };
+  const limit = Math.min(Math.floor(raw), maxLimit);
+  const offset = Math.max(0, Number(req.query.offset) || 0);
+  return { items: arr.slice(offset, offset + limit), total: arr.length, limit, offset, paged: true };
 }
 
 // ---- observability wiring (user UI stays clean; debug surface here) ----
@@ -257,11 +297,26 @@ app.get('/api/health', async (req, res) => {
   });
 });
 
+// ---- readiness: alive AND actually ready (deps OK), unlike /health ----
+app.get('/api/ready', (req, res) => {
+  const checks = { process: true, dataDir: false, registry: false };
+  try {
+    fs.mkdirSync(DATA_DIR, { recursive: true });
+    fs.accessSync(DATA_DIR, fs.constants.W_OK);
+    checks.dataDir = true;
+  } catch { /* not writable */ }
+  try {
+    checks.registry = supportedProviders().length > 0 && listProviders().length > 0;
+  } catch { /* registry broken */ }
+  const ready = checks.process && checks.dataDir && checks.registry;
+  res.status(ready ? 200 : 503).json({ ready, checks });
+});
+
 // ================= AUTH (public) =================
 
 const authLimit = rateLimit(Number(process.env.METALOID_AUTH_LIMIT || 10), 60000);
 
-app.post('/api/auth/signup', authLimit, (req, res) => {
+app.post('/api/auth/signup', authLimit, async (req, res) => {
   const { handle, displayName, passcode, deviceName } = req.body || {};
   const r = createUser({ handle, displayName, passcode });
   if (!r.ok) return res.status(400).json({ error: r.error });
@@ -272,17 +327,17 @@ app.post('/api/auth/signup', authLimit, (req, res) => {
     adoptLegacyWorld(r.user.id);
   }
   const s = createSession(r.user.id, { deviceName });
-  res.status(201).json({ user: r.user, profile: getProfile(r.user.id), ...s });
+  res.status(201).json({ user: r.user, profile: await getProfile(r.user.id), ...s });
 });
 
-app.post('/api/auth/login', authLimit, (req, res) => {
+app.post('/api/auth/login', authLimit, async (req, res) => {
   const { handle, passcode, deviceId, deviceName } = req.body || {};
   const v = verifyUser(handle, passcode);
   if (!v.ok) return res.status(401).json({ error: v.error });
   const s = createSession(v.user.id, { deviceId, deviceName });
   const { passHash, salt, ...pub } = v.user;
   void passHash; void salt;
-  res.json({ user: pub, profile: getProfile(v.user.id), ...s });
+  res.json({ user: pub, profile: await getProfile(v.user.id), ...s });
 });
 
 app.post('/api/auth/refresh', authLimit, (req, res) => {
@@ -301,12 +356,20 @@ app.post('/api/auth/logout-all', requireAuth, (req, res) => {
   res.json({ ok: true, revoked: revokeAllSessions(req.auth.userId) });
 });
 
-app.get('/api/auth/me', requireAuth, (req, res) => {
+app.get('/api/auth/me', requireAuth, async (req, res) => {
+  if (req.auth.via === 'supabase') {
+    return res.json({
+      user: { id: req.auth.userId, handle: (req.auth.email || 'supabase-user').split('@')[0], displayName: '', role: 'user', via: 'supabase', email: req.auth.email || null },
+      profile: await getProfile(req.auth.userId),
+      session: req.auth,
+      usage: await usageSummary(req.auth.userId),
+    });
+  }
   const u = getUser(req.auth.userId);
   if (!u) return res.status(401).json({ error: 'Sign in required.', code: 'AUTH_REQUIRED' });
   const { passHash, salt, ...pub } = u;
   void passHash; void salt;
-  res.json({ user: pub, profile: getProfile(u.id), session: req.auth, usage: usageSummary(u.id) });
+  res.json({ user: pub, profile: await getProfile(u.id), session: req.auth, usage: await usageSummary(u.id) });
 });
 
 app.get('/api/auth/sessions', requireAuth, (req, res) => {
@@ -324,13 +387,13 @@ app.get('/api/models', async (req, res) => {
 });
 
 // ---- chat: model router + streaming (SSE), per-user metered ----
-app.post('/api/chat', optionalAuth, rateLimit(60, 60000), async (req, res) => {
+app.post('/api/chat', requireAuth, rateLimit(60, 60000), async (req, res) => {
   const { message, history = [], task } = req.body || {};
   if (typeof message !== 'string' || !message.trim() || message.length > 8000) {
     return res.status(400).json({ error: 'Invalid message.' });
   }
   if (!OR_KEY && !NV_KEY) return res.status(503).json({ error: 'No model provider configured.' });
-  const budget = checkBudget(req.auth.userId, 'chat');
+  const budget = await checkBudget(req.auth.userId, 'chat');
   if (!budget.ok) return res.status(429).json({ error: budget.error });
 
   const messages = [
@@ -340,10 +403,10 @@ app.post('/api/chat', optionalAuth, rateLimit(60, 60000), async (req, res) => {
   ];
   const tier = task && ['fast', 'smart', 'vision', 'coding', 'voice'].includes(task) ? task : classifyTask(message);
   // identity comes from the session, not the client: profile name wins.
-  const profile = getProfile(req.auth.userId);
+  const profile = await getProfile(req.auth.userId);
   const ctx = { ...(req.body?.context || {}) };
   if (profile.displayName) ctx.userName = profile.displayName;
-  const system = buildRuntimeContext(ctx, personalizationBlock(req.auth.userId))
+  const system = buildRuntimeContext(ctx, await personalizationBlock(req.auth.userId))
     + (tier === 'voice'
       ? '\n\nVOICE MODE: this reply will be SPOKEN aloud. Keep it to 1–3 short sentences, conversational, no markdown, no lists, no URLs, no code. Say numbers and units in words. If the full answer needs detail, speak the key point first in one sentence.'
       : '');
@@ -384,7 +447,7 @@ app.post('/api/chat', optionalAuth, rateLimit(60, 60000), async (req, res) => {
   // routing prefs + health) stream here; platform keys stay as fallback.
   let byokError = null;
   try {
-    const prefs = getProfile(req.auth.userId);
+    const prefs = await getProfile(req.auth.userId);
     const out = await chatWithProviders({
       userId: req.auth.userId, messages, system, prefs,
       signal: controller.signal,
@@ -394,7 +457,7 @@ app.post('/api/chat', optionalAuth, rateLimit(60, 60000), async (req, res) => {
     usedModel = out.model;
     usedProvider = out.providerId;
     trackModel({ provider: out.providerId, model: out.model, tier, ms: Date.now() - t0, ok: true });
-    recordUsage(req.auth.userId, 'chat');
+    await recordUsage(req.auth.userId, 'chat');
     send({ done: true });
     clearTimeout(timer);
     res.end();
@@ -436,7 +499,7 @@ app.post('/api/chat', optionalAuth, rateLimit(60, 60000), async (req, res) => {
     }
     if (!streamed) throw lastErr || new Error('openrouter failed');
     trackModel({ provider: 'openrouter', model: usedModel, tier, ms: Date.now() - t0, ok: true });
-    recordUsage(req.auth.userId, 'chat');
+    await recordUsage(req.auth.userId, 'chat');
     send({ done: true });
   } catch (e) {
     // NVIDIA fallback only when entitled (see NV_ON)
@@ -467,13 +530,13 @@ app.post('/api/chat', optionalAuth, rateLimit(60, 60000), async (req, res) => {
 });
 
 // ---- OSINT investigations (user-scoped) ----
-app.post('/api/osint/investigations', requireAuth, rateLimit(10, 60000), (req, res) => {
+app.post('/api/osint/investigations', requireAuth, rateLimit(10, 60000), async (req, res) => {
   const v = validateTarget(req.body?.target);
   if (!v.ok) return res.status(400).json({ error: v.error });
-  const budget = checkBudget(req.auth.userId, 'osint');
+  const budget = await checkBudget(req.auth.userId, 'osint');
   if (!budget.ok) return res.status(429).json({ error: budget.error });
   const job = createInvestigation(v.target, v.type, req.auth.userId);
-  recordUsage(req.auth.userId, 'osint');
+  await recordUsage(req.auth.userId, 'osint');
   res.status(201).json({ id: job.id, target: job.target, type: job.type, status: job.status });
 });
 
@@ -484,8 +547,8 @@ app.get('/api/osint/investigations', requireAuth, (req, res) => {
 app.post('/api/osint/investigations/:id/run', requireAuth, rateLimit(5, 60000), (req, res) => {
   const job = getInvestigationFor(req.auth.userId, req.params.id);
   if (!job) return res.status(404).json({ error: 'Unknown investigation.' });
-  res.status(202).json({ id: job.id, status: 'collecting' });
-  runInvestigation(job.id).catch(() => {});
+  const j = submitJob(req.auth.userId, 'osint', `investigate ${job.target}`, () => runInvestigation(job.id));
+  res.status(202).json({ id: job.id, status: 'collecting', jobId: j.id });
 });
 
 app.get('/api/osint/investigations/:id', requireAuth, (req, res) => {
@@ -535,7 +598,7 @@ function toolCoverage(declared = []) {
     unknown: declared.filter((t) => !known.has(t)),
   };
 }
-function mergedSkills(userId, ctx = {}) {
+async function mergedSkills(userId, ctx = {}) {
   const sys = listSkills().map((s) => ({
     id: `sys-${s.id}`, name: s.name, description: s.description,
     version: s.version, author: 'Metaloid', userId: null,
@@ -543,12 +606,12 @@ function mergedSkills(userId, ctx = {}) {
     types: ['agent'], capabilities: s.capabilities, tools: s.tools,
     triggers: [], createdAt: null, updatedAt: null, lastUsedAt: null,
   }));
-  for (const s of listSkills()) registerSystemSkill(s);
+  for (const s of listSkills()) await registerSystemSkill(s);
   const seen = new Set(sys.map((s) => s.id));
-  return [...sys, ...listSkillCards(userId, ctx).filter((s) => !seen.has(s.id))];
+  return [...sys, ...(await listSkillCards(userId, ctx)).filter((s) => !seen.has(s.id))];
 }
-app.get('/api/skills', requireAuth, (req, res) => res.json({
-  skills: mergedSkills(req.auth.userId, { workspaceId: req.query.workspaceId, projectId: req.query.projectId }),
+app.get('/api/skills', requireAuth, async (req, res) => res.json({
+  skills: await mergedSkills(req.auth.userId, { workspaceId: req.query.workspaceId, projectId: req.query.projectId }),
 }));
 app.get('/api/skills/discover', requireAuth, (req, res) => {
   const ids = discoverSkills(String(req.query.q || ''));
@@ -558,11 +621,11 @@ app.get('/api/skills/discover', requireAuth, (req, res) => {
 // ================= UNIVERSAL SKILLS =================
 
 // Discovery: task → ranked candidates (relevance + missing deps).
-app.post('/api/skills/discover', requireAuth, rateLimit(30, 60000), (req, res) => {
+app.post('/api/skills/discover', requireAuth, rateLimit(30, 60000), async (req, res) => {
   const { task, workspaceId, projectId, projectSkills } = req.body || {};
   if (typeof task !== 'string' || !task.trim()) return res.status(400).json({ error: 'task required.' });
   res.json({
-    candidates: discoverFor(req.auth.userId, task, {
+    candidates: await discoverFor(req.auth.userId, task, {
       workspaceId: workspaceId || undefined, projectId: projectId || undefined,
       projectSkills: Array.isArray(projectSkills) ? projectSkills : [],
     }),
@@ -570,21 +633,21 @@ app.post('/api/skills/discover', requireAuth, rateLimit(30, 60000), (req, res) =
 });
 
 // Create from instructions (wizard) — same validation pipeline as import.
-app.post('/api/skills', requireAuth, rateLimit(20, 60000), (req, res) => {
+app.post('/api/skills', requireAuth, rateLimit(20, 60000), async (req, res) => {
   const { name, description, instructions, types, triggers, tools, command, scope, workspaceId, projectId } = req.body || {};
   const v = validatePackage(packageFromFields({ name, description, instructions, types, triggers, tools, command }));
   if (!v.ok) return res.status(400).json({ error: v.errors.join(' '), warnings: v.warnings });
-  const r = installSkill(req.auth.userId, v.package, { scope: scope || 'user', workspaceId, projectId, source: 'created' });
+  const r = await installSkill(req.auth.userId, v.package, { scope: scope || 'user', workspaceId, projectId, source: 'created' });
   if (!r.ok) return res.status(400).json({ error: r.error });
   res.status(201).json({ skill: r.skill, warnings: v.warnings });
 });
 
 // Import package {skill.md, files} — validated + scanned BEFORE install.
-app.post('/api/skills/import', requireAuth, rateLimit(20, 60000), (req, res) => {
+app.post('/api/skills/import', requireAuth, rateLimit(20, 60000), async (req, res) => {
   const v = validatePackage(req.body || {});
   if (!v.ok) return res.status(400).json({ error: v.errors.join(' '), warnings: v.warnings, security: v.security });
   const { scope, workspaceId, projectId } = req.body || {};
-  const r = installSkill(req.auth.userId, v.package, { scope: scope || 'user', workspaceId, projectId, source: 'imported' });
+  const r = await installSkill(req.auth.userId, v.package, { scope: scope || 'user', workspaceId, projectId, source: 'imported' });
   if (!r.ok) return res.status(400).json({ error: r.error });
   res.status(201).json({ skill: r.skill, warnings: v.warnings });
 });
@@ -618,8 +681,8 @@ app.get('/api/skills/runtimes', requireAuth, (req, res) => {
   res.json({ runtimes: adapterStatus() });
 });
 
-app.get('/api/skills/:id', requireAuth, (req, res) => {
-  const s = inspectSkill(req.auth.userId, req.params.id);
+app.get('/api/skills/:id', requireAuth, async (req, res) => {
+  const s = await inspectSkill(req.auth.userId, req.params.id);
   if (!s) {
     // system skill? metadata-only card
     const sys = listSkills().find((x) => `sys-${x.id}` === req.params.id);
@@ -629,59 +692,59 @@ app.get('/api/skills/:id', requireAuth, (req, res) => {
   res.json({ skill: s });
 });
 
-app.get('/api/skills/:id/file', requireAuth, (req, res) => {
-  const f = readSkillFile(req.auth.userId, req.params.id, req.query.kind === 'script' ? 'script' : 'reference', String(req.query.name || ''));
+app.get('/api/skills/:id/file', requireAuth, async (req, res) => {
+  const f = await readSkillFile(req.auth.userId, req.params.id, req.query.kind === 'script' ? 'script' : 'reference', String(req.query.name || ''));
   if (!f) return res.status(404).json({ error: 'Unknown skill or file.' });
   res.json(f);
 });
 
-app.put('/api/skills/:id', requireAuth, rateLimit(20, 60000), (req, res) => {
+app.put('/api/skills/:id', requireAuth, rateLimit(20, 60000), async (req, res) => {
   const v = validatePackage(req.body || {});
   if (!v.ok) return res.status(400).json({ error: v.errors.join(' '), warnings: v.warnings, security: v.security });
-  const r = updateSkill(req.auth.userId, req.params.id, v.package, req.body?.note || '');
+  const r = await updateSkill(req.auth.userId, req.params.id, v.package, req.body?.note || '');
   if (!r.ok) return res.status(404).json({ error: r.error });
   res.json({ skill: r.skill, warnings: v.warnings });
 });
 
-app.post('/api/skills/:id/rollback/:version', requireAuth, rateLimit(10, 60000), (req, res) => {
-  const r = rollbackSkill(req.auth.userId, req.params.id, req.params.version);
+app.post('/api/skills/:id/rollback/:version', requireAuth, rateLimit(10, 60000), async (req, res) => {
+  const r = await rollbackSkill(req.auth.userId, req.params.id, req.params.version);
   if (!r.ok) return res.status(404).json({ error: r.error });
   res.json({ skill: r.skill });
 });
 
-app.post('/api/skills/:id/enable', requireAuth, (req, res) => {
-  const r = setSkillStatus(req.auth.userId, req.params.id, true);
+app.post('/api/skills/:id/enable', requireAuth, async (req, res) => {
+  const r = await setSkillStatus(req.auth.userId, req.params.id, true);
   if (!r.ok) return res.status(404).json({ error: r.error });
   res.json({ skill: r.skill });
 });
 
-app.post('/api/skills/:id/disable', requireAuth, (req, res) => {
-  const r = setSkillStatus(req.auth.userId, req.params.id, false);
+app.post('/api/skills/:id/disable', requireAuth, async (req, res) => {
+  const r = await setSkillStatus(req.auth.userId, req.params.id, false);
   if (!r.ok) return res.status(404).json({ error: r.error });
   res.json({ skill: r.skill });
 });
 
-app.post('/api/skills/:id/duplicate', requireAuth, rateLimit(10, 60000), (req, res) => {
-  const r = duplicateSkill(req.auth.userId, req.params.id);
+app.post('/api/skills/:id/duplicate', requireAuth, rateLimit(10, 60000), async (req, res) => {
+  const r = await duplicateSkill(req.auth.userId, req.params.id);
   if (!r.ok) return res.status(404).json({ error: r.error });
   res.status(201).json({ skill: r.skill });
 });
 
-app.delete('/api/skills/:id', requireAuth, (req, res) => {
-  if (!deleteSkill(req.auth.userId, req.params.id)) return res.status(404).json({ error: 'Unknown skill.' });
+app.delete('/api/skills/:id', requireAuth, async (req, res) => {
+  if (!(await deleteSkill(req.auth.userId, req.params.id))) return res.status(404).json({ error: 'Unknown skill.' });
   res.json({ ok: true });
 });
 
 // Test mode → PASS / FAIL / WARN.
-app.post('/api/skills/:id/test', requireAuth, rateLimit(20, 60000), (req, res) => {
-  const r = testSkill(req.auth.userId, req.params.id, { input: req.body?.input || {} });
+app.post('/api/skills/:id/test', requireAuth, rateLimit(20, 60000), async (req, res) => {
+  const r = await testSkill(req.auth.userId, req.params.id, { input: req.body?.input || {} });
   if (!r.ok) return res.status(404).json({ error: r.error });
   res.json(r);
 });
 
 // Invoke: explicit (/command) or discovery-driven. Dep-checked, audited.
-app.post('/api/skills/:id/invoke', requireAuth, rateLimit(20, 60000), (req, res) => {
-  const r = invokeSkill(req.auth.userId, req.params.id, {
+app.post('/api/skills/:id/invoke', requireAuth, rateLimit(20, 60000), async (req, res) => {
+  const r = await invokeSkill(req.auth.userId, req.params.id, {
     input: req.body?.input || {},
     available: req.body?.available || {},
     reason: req.body?.reason || '',
@@ -692,24 +755,24 @@ app.post('/api/skills/:id/invoke', requireAuth, rateLimit(20, 60000), (req, res)
 });
 
 // Explicit /command invocation.
-app.post('/api/skills/invoke-command', requireAuth, rateLimit(20, 60000), (req, res) => {
-  const s = findByCommand(req.auth.userId, req.body?.command);
+app.post('/api/skills/invoke-command', requireAuth, rateLimit(20, 60000), async (req, res) => {
+  const s = await findByCommand(req.auth.userId, req.body?.command);
   if (!s) return res.status(404).json({ error: 'Unknown skill command.' });
-  const r = invokeSkill(req.auth.userId, s.id, { input: req.body?.input || {}, available: req.body?.available || {}, reason: `/${s.command}` });
+  const r = await invokeSkill(req.auth.userId, s.id, { input: req.body?.input || {}, available: req.body?.available || {}, reason: `/${s.command}` });
   if (!r.ok && !r.missing) return res.status(400).json({ error: r.error });
   if (!r.ok) return res.status(409).json(r);
   res.json(r);
 });
 
-app.get('/api/skills/:id/audit', requireAuth, (req, res) => {
-  const a = skillAudit(req.auth.userId, req.params.id);
+app.get('/api/skills/:id/audit', requireAuth, async (req, res) => {
+  const a = await skillAudit(req.auth.userId, req.params.id);
   if (!a) return res.status(404).json({ error: 'Unknown skill.' });
   res.json({ audit: a });
 });
 
 // Update diff: instructions/files/permissions/tools/deps changes between versions.
-app.get('/api/skills/:id/diff', requireAuth, (req, res) => {
-  const d = diffVersions(req.auth.userId, req.params.id, String(req.query.from || ''), req.query.to ? String(req.query.to) : null);
+app.get('/api/skills/:id/diff', requireAuth, async (req, res) => {
+  const d = await diffVersions(req.auth.userId, req.params.id, String(req.query.from || ''), req.query.to ? String(req.query.to) : null);
   if (!d) return res.status(404).json({ error: 'Unknown skill.' });
   if (d.ok === false) return res.status(404).json({ error: d.error });
   res.json(d);
@@ -737,15 +800,29 @@ app.delete('/api/skill-schedules/:id', requireAuth, (req, res) => {
   res.json({ ok: true });
 });
 
+// ================= BACKGROUND JOBS (bounded queue) =================
+
+app.get('/api/jobs', requireAuth, (req, res) => {
+  const all = listJobs(req.auth.userId);
+  const page = paginate(all, req, 50);
+  res.json({ jobs: page.items, ...(page.paged ? { total: page.total, limit: page.limit, offset: page.offset } : {}), queue: queueStats() });
+});
+
+app.get('/api/jobs/:id', requireAuth, (req, res) => {
+  const j = getJob(req.auth.userId, req.params.id);
+  if (!j) return res.status(404).json({ error: 'Unknown job.' });
+  res.json({ job: j });
+});
+
 // ================= ARTIFACTS (user-scoped real files) =================
 
 app.get('/api/artifacts', optionalAuth, (req, res) => {
-  res.json({
-    artifacts: listArtifacts(req.auth.userId, {
-      projectId: req.query.projectId || undefined,
-      workspaceId: req.query.workspaceId || undefined,
-    }),
+  const all = listArtifacts(req.auth.userId, {
+    projectId: req.query.projectId || undefined,
+    workspaceId: req.query.workspaceId || undefined,
   });
+  const page = paginate(all, req);
+  res.json({ artifacts: page.items, ...(page.paged ? { total: page.total, limit: page.limit, offset: page.offset } : {}) });
 });
 
 app.post('/api/artifacts', optionalAuth, rateLimit(10, 60000), (req, res) => {
@@ -974,10 +1051,10 @@ app.post('/api/approvals/:id', requireAuth, rateLimit(20, 60000), (req, res) => 
 });
 
 // Missions (user-scoped, metered)
-app.post('/api/missions', requireAuth, rateLimit(10, 60000), (req, res) => {
+app.post('/api/missions', requireAuth, rateLimit(10, 60000), async (req, res) => {
   const { objective, constraints, skillIds } = req.body || {};
   if (typeof objective !== 'string' || !objective.trim()) return res.status(400).json({ error: 'Objective required.' });
-  const budget = checkBudget(req.auth.userId, 'missions');
+  const budget = await checkBudget(req.auth.userId, 'missions');
   if (!budget.ok) return res.status(429).json({ error: budget.error });
   const caps = planCaps(req.auth.userId);
   const codeSkills = Array.isArray(skillIds) && skillIds.length ? skillIds : discoverSkills(objective);
@@ -989,36 +1066,39 @@ app.post('/api/missions', requireAuth, rateLimit(10, 60000), (req, res) => {
     userId: req.auth.userId, objective, constraints, tasks, skillIds: allSkills,
     budgets: { maxMs: caps.maxMissionMs, maxSteps: caps.maxMissionSteps },
   });
-  recordUsage(req.auth.userId, 'missions');
+  await recordUsage(req.auth.userId, 'missions');
   res.status(201).json({ mission: m });
 });
-app.get('/api/missions', requireAuth, (req, res) => res.json({ missions: listMissions(req.auth.userId) }));
-app.get('/api/missions/active', requireAuth, (req, res) => {
-  res.json({ mission: latestActive(req.auth.userId) });
+app.get('/api/missions', requireAuth, async (req, res) => {
+  const page = paginate(await listMissions(req.auth.userId), req);
+  res.json({ missions: page.items, ...(page.paged ? { total: page.total, limit: page.limit, offset: page.offset } : {}) });
 });
-app.get('/api/missions/:id', requireAuth, (req, res) => {
-  const m = getMission(req.auth.userId, req.params.id);
+app.get('/api/missions/active', requireAuth, async (req, res) => {
+  res.json({ mission: await latestActive(req.auth.userId) });
+});
+app.get('/api/missions/:id', requireAuth, async (req, res) => {
+  const m = await getMission(req.auth.userId, req.params.id);
   if (!m) return res.status(404).json({ error: 'Unknown mission.' });
   res.json({ mission: m });
 });
-app.post('/api/missions/:id/run', requireAuth, rateLimit(10, 60000), (req, res) => {
-  const m = getMission(req.auth.userId, req.params.id);
+app.post('/api/missions/:id/run', requireAuth, rateLimit(10, 60000), async (req, res) => {
+  const m = await getMission(req.auth.userId, req.params.id);
   if (!m) return res.status(404).json({ error: 'Unknown mission.' });
-  res.status(202).json({ id: m.id, status: 'RUNNING' });
-  runMission(req.auth.userId, m.id, { userId: req.auth.userId }).catch(() => {});
+  const j = submitJob(req.auth.userId, 'mission', m.objective, () => runMission(req.auth.userId, m.id, { userId: req.auth.userId }));
+  res.status(202).json({ id: m.id, status: 'RUNNING', jobId: j.id });
 });
-app.post('/api/missions/:id/pause', requireAuth, (req, res) => {
-  const m = pauseMission(req.auth.userId, req.params.id);
-  if (!m) return res.status(404).json({ error: 'Unknown mission.' });
-  res.json({ mission: m });
-});
-app.post('/api/missions/:id/cancel', requireAuth, (req, res) => {
-  const m = cancelMission(req.auth.userId, req.params.id);
+app.post('/api/missions/:id/pause', requireAuth, async (req, res) => {
+  const m = await pauseMission(req.auth.userId, req.params.id);
   if (!m) return res.status(404).json({ error: 'Unknown mission.' });
   res.json({ mission: m });
 });
-app.post('/api/missions/:id/verify', requireAuth, (req, res) => {
-  const m = markVerified(req.auth.userId, req.params.id, req.body?.note || '');
+app.post('/api/missions/:id/cancel', requireAuth, async (req, res) => {
+  const m = await cancelMission(req.auth.userId, req.params.id);
+  if (!m) return res.status(404).json({ error: 'Unknown mission.' });
+  res.json({ mission: m });
+});
+app.post('/api/missions/:id/verify', requireAuth, async (req, res) => {
+  const m = await markVerified(req.auth.userId, req.params.id, req.body?.note || '');
   if (!m) return res.status(404).json({ error: 'Only COMPLETED missions can be verified.' });
   res.json({ mission: m });
 });
@@ -1027,14 +1107,14 @@ app.post('/api/missions/:id/verify', requireAuth, (req, res) => {
 app.post('/api/agent/mission', requireAuth, rateLimit(10, 60000), async (req, res) => {
   const { objective, constraints } = req.body || {};
   if (typeof objective !== 'string' || !objective.trim()) return res.status(400).json({ error: 'Objective required.' });
-  const budget = checkBudget(req.auth.userId, 'missions');
+  const budget = await checkBudget(req.auth.userId, 'missions');
   if (!budget.ok) return res.status(429).json({ error: budget.error });
   const models = await listFreeModels().catch(() => []);
   const model = pickModel(models, 'smart');
-  const profile = getProfile(req.auth.userId);
+  const profile = await getProfile(req.auth.userId);
   const m = await startMission({ userId: req.auth.userId, objective, constraints, apiKey: OR_KEY, model, userName: profile.displayName });
-  recordUsage(req.auth.userId, 'missions');
-  res.status(201).json({ mission: m });
+  await recordUsage(req.auth.userId, 'missions');
+  res.status(201).json({ mission: m.mission, jobId: m.jobId });
 });
 app.post('/api/agent/continue', requireAuth, rateLimit(10, 60000), async (req, res) => {
   res.json(await continueMission(req.auth.userId));
@@ -1048,50 +1128,53 @@ app.get('/api/agent/intent', requireAuth, (req, res) => {
 });
 
 // Memory (user-scoped; full user control: view/edit/delete/forget-all/export)
-app.post('/api/memory', requireAuth, rateLimit(30, 60000), (req, res) => {
-  const r = remember({ userId: req.auth.userId, cls: req.body?.class, content: req.body?.content, source: 'api', confidence: req.body?.confidence, workspaceId: req.body?.workspaceId });
+app.post('/api/memory', requireAuth, rateLimit(30, 60000), async (req, res) => {
+  const r = await remember({ userId: req.auth.userId, cls: req.body?.class, content: req.body?.content, source: 'api', confidence: req.body?.confidence, workspaceId: req.body?.workspaceId });
   if (!r.ok) return res.status(400).json({ error: r.error });
   res.status(201).json({ record: r.record });
 });
-app.get('/api/memory', requireAuth, (req, res) => {
+app.get('/api/memory', requireAuth, async (req, res) => {
+  const all = await recall(req.auth.userId, { cls: req.query.class, query: String(req.query.q || ''), workspaceId: req.query.workspaceId });
+  const page = paginate(all, req);
   res.json({
-    records: recall(req.auth.userId, { cls: req.query.class, query: String(req.query.q || ''), workspaceId: req.query.workspaceId }),
-    stats: memoryStats(req.auth.userId),
+    records: page.items,
+    ...(page.paged ? { total: page.total, limit: page.limit, offset: page.offset } : {}),
+    stats: await memoryStats(req.auth.userId),
   });
 });
-app.put('/api/memory/:id', requireAuth, rateLimit(30, 60000), (req, res) => {
-  const r = updateMemory(req.auth.userId, req.params.id, { content: req.body?.content, confidence: req.body?.confidence });
+app.put('/api/memory/:id', requireAuth, rateLimit(30, 60000), async (req, res) => {
+  const r = await updateMemory(req.auth.userId, req.params.id, { content: req.body?.content, confidence: req.body?.confidence });
   if (!r.ok) return res.status(404).json({ error: r.error });
   res.json({ record: r.record });
 });
-app.delete('/api/memory/:id', requireAuth, (req, res) => {
-  const r = forget(req.auth.userId, req.params.id);
+app.delete('/api/memory/:id', requireAuth, async (req, res) => {
+  const r = await forget(req.auth.userId, req.params.id);
   if (!r.ok) return res.status(404).json({ error: r.error });
   res.json({ ok: true });
 });
 /** Forget everything this user is remembered as. */
-app.delete('/api/memory', requireAuth, (req, res) => {
+app.delete('/api/memory', requireAuth, async (req, res) => {
   if (req.body?.all !== true) return res.status(400).json({ error: 'Pass {all:true} to forget everything.' });
-  res.json(forgetAll(req.auth.userId));
+  res.json(await forgetAll(req.auth.userId));
 });
 
 // World model (user-scoped knowledge graph)
-app.post('/api/world/entities', requireAuth, rateLimit(30, 60000), (req, res) => {
+app.post('/api/world/entities', requireAuth, rateLimit(30, 60000), async (req, res) => {
   const { type, name, aliases } = req.body || {};
   if (!type || !name) return res.status(400).json({ error: 'type + name required.' });
-  res.status(201).json({ entity: upsertEntity({ userId: req.auth.userId, type, name, aliases, source: 'api' }) });
+  res.status(201).json({ entity: await upsertEntity({ userId: req.auth.userId, type, name, aliases, source: 'api' }) });
 });
-app.get('/api/world/entities', requireAuth, (req, res) => {
-  res.json({ entities: findEntities(req.auth.userId, String(req.query.q || ''), req.query.type) });
+app.get('/api/world/entities', requireAuth, async (req, res) => {
+  res.json({ entities: await findEntities(req.auth.userId, String(req.query.q || ''), req.query.type) });
 });
-app.post('/api/world/relate', requireAuth, rateLimit(30, 60000), (req, res) => {
-  const r = relate(req.auth.userId, req.body?.from, req.body?.to, req.body?.rel, { source: 'api', evidence: req.body?.evidence });
+app.post('/api/world/relate', requireAuth, rateLimit(30, 60000), async (req, res) => {
+  const r = await relate(req.auth.userId, req.body?.from, req.body?.to, req.body?.rel, { source: 'api', evidence: req.body?.evidence });
   if (!r.ok) return res.status(400).json({ error: r.error });
   res.status(201).json({ edge: r.edge });
 });
-app.get('/api/world/graph', requireAuth, (req, res) => {
-  if (!req.query.id) return res.json({ stats: worldStats(req.auth.userId) });
-  res.json(neighbors(req.auth.userId, String(req.query.id), Math.min(Number(req.query.depth || 1), 3)));
+app.get('/api/world/graph', requireAuth, async (req, res) => {
+  if (!req.query.id) return res.json({ stats: await worldStats(req.auth.userId) });
+  res.json(await neighbors(req.auth.userId, String(req.query.id), Math.min(Number(req.query.depth || 1), 3)));
 });
 app.get('/api/world/resolve', requireAuth, (req, res) => {
   res.json({ level: resolveLevel(String(req.query.a || ''), String(req.query.b || '')) });
@@ -1108,10 +1191,10 @@ app.post('/api/research/correlate', requireAuth, rateLimit(30, 60000), (req, res
 });
 
 // OSINT → world ingestion (own investigation only)
-app.post('/api/osint/investigations/:id/ingest', requireAuth, rateLimit(10, 60000), (req, res) => {
+app.post('/api/osint/investigations/:id/ingest', requireAuth, rateLimit(10, 60000), async (req, res) => {
   const job = getInvestigationFor(req.auth.userId, req.params.id);
   if (!job) return res.status(404).json({ error: 'Unknown investigation.' });
-  res.json(ingestFindings(req.auth.userId, job.target, job.findings));
+  res.json(await ingestFindings(req.auth.userId, job.target, job.findings));
 });
 
 // Observability (admin only — aggregates are not per-user safe to expose)
@@ -1122,55 +1205,55 @@ app.get('/api/debug/summary', requireAuth, requireAdmin, (req, res) => {
 // ================= USER LAYER =================
 
 // Profile + preferences (user-confirmed; inferred stays in memory w/ confidence)
-app.get('/api/profile', requireAuth, (req, res) => {
-  res.json({ profile: getProfile(req.auth.userId), plan: getPlan(req.auth.userId) });
+app.get('/api/profile', requireAuth, async (req, res) => {
+  res.json({ profile: await getProfile(req.auth.userId), plan: getPlan(req.auth.userId) });
 });
-app.put('/api/profile', requireAuth, rateLimit(30, 60000), (req, res) => {
-  res.json({ profile: updateProfile(req.auth.userId, req.body || {}) });
+app.put('/api/profile', requireAuth, rateLimit(30, 60000), async (req, res) => {
+  res.json({ profile: await updateProfile(req.auth.userId, req.body || {}) });
 });
 /** Premium first-run: name, language, style, voice, proactivity. Nothing more. */
-app.post('/api/onboarding', requireAuth, rateLimit(10, 60000), (req, res) => {
-  res.json({ profile: completeOnboarding(req.auth.userId, req.body || {}) });
+app.post('/api/onboarding', requireAuth, rateLimit(10, 60000), async (req, res) => {
+  res.json({ profile: await completeOnboarding(req.auth.userId, req.body || {}) });
 });
 
 // Usage + entitlements (read-only for users)
-app.get('/api/usage', requireAuth, (req, res) => {
-  res.json(usageSummary(req.auth.userId));
+app.get('/api/usage', requireAuth, async (req, res) => {
+  res.json(await usageSummary(req.auth.userId));
 });
 
 // Workspaces (isolated contexts; no automatic cross-workspace leakage)
-app.get('/api/workspaces', requireAuth, (req, res) => {
-  res.json({ workspaces: listWorkspaces(req.auth.userId) });
+app.get('/api/workspaces', requireAuth, async (req, res) => {
+  res.json({ workspaces: await listWorkspaces(req.auth.userId) });
 });
-app.post('/api/workspaces', requireAuth, rateLimit(20, 60000), (req, res) => {
-  const r = createWorkspace(req.auth.userId, req.body || {});
+app.post('/api/workspaces', requireAuth, rateLimit(20, 60000), async (req, res) => {
+  const r = await createWorkspace(req.auth.userId, req.body || {});
   if (!r.ok) return res.status(400).json({ error: r.error });
   res.status(201).json({ workspace: r.workspace });
 });
-app.put('/api/workspaces/:id', requireAuth, rateLimit(20, 60000), (req, res) => {
-  const w = updateWorkspace(req.auth.userId, req.params.id, req.body || {});
+app.put('/api/workspaces/:id', requireAuth, rateLimit(20, 60000), async (req, res) => {
+  const w = await updateWorkspace(req.auth.userId, req.params.id, req.body || {});
   if (!w) return res.status(404).json({ error: 'Unknown workspace.' });
   res.json({ workspace: w });
 });
-app.delete('/api/workspaces/:id', requireAuth, (req, res) => {
-  if (!deleteWorkspace(req.auth.userId, req.params.id)) return res.status(404).json({ error: 'Unknown workspace.' });
+app.delete('/api/workspaces/:id', requireAuth, async (req, res) => {
+  if (!(await deleteWorkspace(req.auth.userId, req.params.id))) return res.status(404).json({ error: 'Unknown workspace.' });
   res.json({ ok: true });
 });
 
 // Devices (explicit pairing; per-(user, device, capability) authorization)
-app.get('/api/devices', requireAuth, (req, res) => {
-  res.json({ devices: listDevices(req.auth.userId) });
+app.get('/api/devices', requireAuth, async (req, res) => {
+  res.json({ devices: await listDevices(req.auth.userId) });
 });
-app.post('/api/devices/pair', requireAuth, rateLimit(10, 60000), (req, res) => {
-  res.json(requestPairing(req.auth.userId, req.body || {}));
+app.post('/api/devices/pair', requireAuth, rateLimit(10, 60000), async (req, res) => {
+  res.json(await requestPairing(req.auth.userId, req.body || {}));
 });
-app.post('/api/devices/confirm', requireAuth, rateLimit(10, 60000), (req, res) => {
-  const r = confirmPairing(req.auth.userId, req.body?.code, { deviceId: req.body?.deviceId });
+app.post('/api/devices/confirm', requireAuth, rateLimit(10, 60000), async (req, res) => {
+  const r = await confirmPairing(req.auth.userId, req.body?.code, { deviceId: req.body?.deviceId });
   if (!r.ok) return res.status(400).json({ error: r.error });
   res.json({ device: r.device });
 });
-app.delete('/api/devices/:id', requireAuth, (req, res) => {
-  if (!revokeDevice(req.auth.userId, req.params.id)) return res.status(404).json({ error: 'Unknown device.' });
+app.delete('/api/devices/:id', requireAuth, async (req, res) => {
+  if (!(await revokeDevice(req.auth.userId, req.params.id))) return res.status(404).json({ error: 'Unknown device.' });
   res.json({ ok: true });
 });
 
@@ -1197,35 +1280,35 @@ app.get('/api/providers/:providerId/models', requireAuth, (req, res) => {
 });
 
 // Credential Management
-app.post('/api/providers/credentials', requireAuth, rateLimit(10, 60000), (req, res) => {
+app.post('/api/providers/credentials', requireAuth, rateLimit(10, 60000), async (req, res) => {
   const { providerId, credential, metadata } = req.body || {};
   if (!providerId || !credential) {
     return res.status(400).json({ error: 'providerId and credential required.' });
   }
-  
+
   try {
-    const result = storeUserCredential(req.auth.userId, providerId, credential, metadata);
+    const result = await storeUserCredential(req.auth.userId, providerId, credential, metadata);
     res.status(201).json(result);
   } catch (error) {
     res.status(400).json({ error: error.message });
   }
 });
 
-app.get('/api/providers/credentials', requireAuth, (req, res) => {
-  const credentials = listUserCredentialProviders(req.auth.userId);
+app.get('/api/providers/credentials', requireAuth, async (req, res) => {
+  const credentials = await listUserCredentialProviders(req.auth.userId);
   res.json({ credentials });
 });
 
-app.get('/api/providers/credentials/:credentialId', requireAuth, (req, res) => {
+app.get('/api/providers/credentials/:credentialId', requireAuth, async (req, res) => {
   // Only return metadata, never the actual credential
-  const credentials = listUserCredentialProviders(req.auth.userId);
+  const credentials = await listUserCredentialProviders(req.auth.userId);
   const credential = credentials.find(c => c.id === req.params.credentialId);
   if (!credential) return res.status(404).json({ error: 'Credential not found.' });
   res.json({ credential });
 });
 
 app.post('/api/providers/credentials/:credentialId/test', requireAuth, rateLimit(20, 60000), async (req, res) => {
-  const credentials = listUserCredentialProviders(req.auth.userId);
+  const credentials = await listUserCredentialProviders(req.auth.userId);
   const credential = credentials.find(c => c.id === req.params.credentialId);
   if (!credential) return res.status(404).json({ error: 'Credential not found.' });
 
@@ -1235,7 +1318,7 @@ app.post('/api/providers/credentials/:credentialId/test', requireAuth, rateLimit
     const adapter = getAdapter(credential.providerId);
     if (!adapter) return res.status(400).json({ error: 'No adapter installed for this provider yet.' });
     const h = await adapter.healthCheck(req.auth.userId);
-    setCredentialTestStatus(req.auth.userId, credential.providerId, h.status === 'healthy' ? 'valid' : 'invalid', {
+    await setCredentialTestStatus(req.auth.userId, credential.providerId, h.status === 'healthy' ? 'valid' : 'invalid', {
       adapter: adapter.constructor.name,
       latencyMs: h.latency,
       status: h.status,
@@ -1248,18 +1331,18 @@ app.post('/api/providers/credentials/:credentialId/test', requireAuth, rateLimit
   }
 });
 
-app.put('/api/providers/credentials/:credentialId', requireAuth, rateLimit(10, 60000), (req, res) => {
+app.put('/api/providers/credentials/:credentialId', requireAuth, rateLimit(10, 60000), async (req, res) => {
   const { credential } = req.body || {};
   if (!credential) {
     return res.status(400).json({ error: 'credential required.' });
   }
-  
-  const credentials = listUserCredentialProviders(req.auth.userId);
+
+  const credentials = await listUserCredentialProviders(req.auth.userId);
   const credRecord = credentials.find(c => c.id === req.params.credentialId);
   if (!credRecord) return res.status(404).json({ error: 'Credential not found.' });
-  
+
   try {
-    const result = rotateUserCredentialById(req.auth.userId, req.params.credentialId, credential);
+    const result = await rotateUserCredentialById(req.auth.userId, req.params.credentialId, credential);
     if (!result.ok) return res.status(400).json({ error: result.error });
     res.json(result);
   } catch (error) {
@@ -1267,22 +1350,22 @@ app.put('/api/providers/credentials/:credentialId', requireAuth, rateLimit(10, 6
   }
 });
 
-app.delete('/api/providers/credentials/:credentialId', requireAuth, (req, res) => {
-  const credentials = listUserCredentialProviders(req.auth.userId);
+app.delete('/api/providers/credentials/:credentialId', requireAuth, async (req, res) => {
+  const credentials = await listUserCredentialProviders(req.auth.userId);
   const credRecord = credentials.find(c => c.id === req.params.credentialId);
   if (!credRecord) return res.status(404).json({ error: 'Credential not found.' });
-  
-  const result = deleteUserCredential(req.auth.userId, credRecord.providerId);
+
+  const result = await deleteUserCredential(req.auth.userId, credRecord.providerId);
   if (!result.ok) return res.status(400).json({ error: result.error });
   res.json({ ok: true });
 });
 
-app.get('/api/providers/credentials/:credentialId/audit', requireAuth, (req, res) => {
-  const credentials = listUserCredentialProviders(req.auth.userId);
+app.get('/api/providers/credentials/:credentialId/audit', requireAuth, async (req, res) => {
+  const credentials = await listUserCredentialProviders(req.auth.userId);
   const credRecord = credentials.find(c => c.id === req.params.credentialId);
   if (!credRecord) return res.status(404).json({ error: 'Credential not found.' });
-  
-  const auditLog = getCredentialAuditLog(req.auth.userId, credRecord.providerId);
+
+  const auditLog = await getCredentialAuditLog(req.auth.userId, credRecord.providerId);
   res.json({ auditLog });
 });
 
@@ -1327,8 +1410,8 @@ app.get('/api/providers/health/user', requireAuth, (req, res) => {
 
 // Routing prefs: default provider, ordered fallbacks, favorite models.
 // Normal users leave everything Auto; advanced users pin providers/models.
-app.get('/api/providers/routing', requireAuth, (req, res) => {
-  const p = getProfile(req.auth.userId);
+app.get('/api/providers/routing', requireAuth, async (req, res) => {
+  const p = await getProfile(req.auth.userId);
   res.json({
     routing: {
       defaultProvider: p.defaultProvider || null,
@@ -1339,7 +1422,7 @@ app.get('/api/providers/routing', requireAuth, (req, res) => {
   });
 });
 
-app.put('/api/providers/routing', requireAuth, rateLimit(20, 60000), (req, res) => {
+app.put('/api/providers/routing', requireAuth, rateLimit(20, 60000), async (req, res) => {
   const { defaultProvider, fallbackProviders, favoriteModels, defaultModel } = req.body || {};
   if (defaultProvider !== undefined && defaultProvider !== null && !getProvider(defaultProvider)) {
     return res.status(400).json({ error: 'Unknown provider.' });
@@ -1350,7 +1433,7 @@ app.put('/api/providers/routing', requireAuth, rateLimit(20, 60000), (req, res) 
   if (fallbackProviders && fallbackProviders.some((p) => !getProvider(p))) {
     return res.status(400).json({ error: 'Unknown provider in fallbacks.' });
   }
-  const profile = updateProfile(req.auth.userId, {
+  const profile = await updateProfile(req.auth.userId, {
     ...(defaultProvider !== undefined ? { defaultProvider } : {}),
     ...(fallbackProviders !== undefined ? { fallbackProviders } : {}),
     ...(favoriteModels !== undefined ? { favoriteModels } : {}),
@@ -1426,44 +1509,44 @@ app.get('/api/providers/:providerId', requireAuth, (req, res) => {
 });
 
 // Account: export everything, then delete everything (documented cascade)
-app.get('/api/account/export', requireAuth, (req, res) => {
+app.get('/api/account/export', requireAuth, async (req, res) => {
   const u = getUser(req.auth.userId);
   const { passHash, salt, ...pub } = u || {};
   void passHash; void salt;
   res.json({
     exportedAt: new Date().toISOString(),
     user: pub || null,
-    profile: getProfile(req.auth.userId),
+    profile: await getProfile(req.auth.userId),
     plan: getPlan(req.auth.userId),
-    usage: usageSummary(req.auth.userId),
-    memories: exportMemories(req.auth.userId),
-    missions: listMissions(req.auth.userId),
+    usage: await usageSummary(req.auth.userId),
+    memories: await exportMemories(req.auth.userId),
+    missions: await listMissions(req.auth.userId),
     investigations: listInvestigations(req.auth.userId),
-    workspaces: listWorkspaces(req.auth.userId),
-    devices: listDevices(req.auth.userId),
+    workspaces: await listWorkspaces(req.auth.userId),
+    devices: await listDevices(req.auth.userId),
     sessions: listSessions(req.auth.userId),
   });
 });
-app.delete('/api/account', requireAuth, rateLimit(5, 60000), (req, res) => {
+app.delete('/api/account', requireAuth, rateLimit(5, 60000), async (req, res) => {
   if (req.body?.confirm !== 'DELETE') return res.status(400).json({ error: 'Pass {confirm:"DELETE"} to delete the account.' });
   const uid = req.auth.userId;
-  deleteUserMemories(uid);
+  await deleteUserMemories(uid);
   deleteUserMissions(uid);
   deleteUserWorld(uid);
   deleteUserInvestigations(uid);
   deleteUserApprovals(uid);
   deleteUserSkills(uid);
   deleteUserSchedules(uid);
+  deleteUserJobs(uid);
   deleteUserArtifacts(uid);
   try {
-    deleteUserCredentials(uid);
+    await deleteUserCredentials(uid); // provider credentials (mode-aware)
   } catch { /* none stored */ }
   deleteProviderUsage(uid);
-  deleteUserWorkspaces(uid);
-  deleteUserDevices(uid);
-  deleteUserCredentials(uid); // Delete provider credentials
-  deleteUsage(uid);
-  deleteProfile(uid);
+  await deleteUserWorkspaces(uid);
+  await deleteUserDevices(uid);
+  await deleteUsage(uid);
+  await deleteProfile(uid);
   deleteUserCascade(uid);
   res.json({ ok: true, deleted: uid });
 });

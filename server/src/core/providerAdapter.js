@@ -40,7 +40,7 @@ export class ProviderAdapter {
    */
   async authenticate(userId, credentialId) {
     try {
-      const credential = this.credentialVault.getUserCredential(userId, this.providerId);
+      const credential = await this.credentialVault.getUserCredential(userId, this.providerId);
       if (!credential) {
         return { valid: false, error: 'Credential not found' };
       }
@@ -49,7 +49,7 @@ export class ProviderAdapter {
       // Subclasses should override with actual provider validation
       const result = await this.validateCredential(credential.credential);
       
-      setCredentialTestStatus(userId, this.providerId, result.valid ? 'valid' : 'invalid', {
+      await setCredentialTestStatus(userId, this.providerId, result.valid ? 'valid' : 'invalid', {
         adapter: this.constructor.name,
         timestamp: new Date().toISOString()
       });
@@ -202,7 +202,7 @@ export class ProviderAdapter {
     const start = Date.now();
     
     try {
-      const credential = this.credentialVault.getUserCredential(userId, this.providerId);
+      const credential = await this.credentialVault.getUserCredential(userId, this.providerId);
       if (!credential) {
         return { status: 'auth_failed', latency: Date.now() - start };
       }
@@ -239,7 +239,7 @@ export class OpenRouterAdapter extends ProviderAdapter {
   
   async listModels(userId, credentialId) {
     try {
-      const credential = this.credentialVault.getUserCredential(userId, this.providerId);
+      const credential = await this.credentialVault.getUserCredential(userId, this.providerId);
       if (!credential) {
         throw new Error('Credential not found');
       }
@@ -293,7 +293,7 @@ export class OpenRouterAdapter extends ProviderAdapter {
   
   async execute(userId, credentialId, request) {
     try {
-      const credential = this.credentialVault.getUserCredential(userId, this.providerId);
+      const credential = await this.credentialVault.getUserCredential(userId, this.providerId);
       if (!credential) {
         throw new Error('Credential not found');
       }
@@ -340,7 +340,7 @@ export class OpenRouterAdapter extends ProviderAdapter {
   
   async stream(userId, credentialId, request, onToken) {
     try {
-      const credential = this.credentialVault.getUserCredential(userId, this.providerId);
+      const credential = await this.credentialVault.getUserCredential(userId, this.providerId);
       if (!credential) {
         throw new Error('Credential not found');
       }
@@ -414,7 +414,7 @@ export class OpenRouterAdapter extends ProviderAdapter {
     const start = Date.now();
     
     try {
-      const credential = this.credentialVault.getUserCredential(userId, this.providerId);
+      const credential = await this.credentialVault.getUserCredential(userId, this.providerId);
       if (!credential) {
         return { status: 'auth_failed', latency: Date.now() - start };
       }
@@ -463,7 +463,7 @@ export class NvidiaAdapter extends ProviderAdapter {
   
   async execute(userId, credentialId, request) {
     try {
-      const credential = this.credentialVault.getUserCredential(userId, this.providerId);
+      const credential = await this.credentialVault.getUserCredential(userId, this.providerId);
       if (!credential) {
         throw new Error('Credential not found');
       }
@@ -510,7 +510,7 @@ export class NvidiaAdapter extends ProviderAdapter {
   
   async stream(userId, credentialId, request, onToken) {
     try {
-      const credential = this.credentialVault.getUserCredential(userId, this.providerId);
+      const credential = await this.credentialVault.getUserCredential(userId, this.providerId);
       if (!credential) {
         throw new Error('Credential not found');
       }
@@ -583,7 +583,7 @@ export class NvidiaAdapter extends ProviderAdapter {
     const start = Date.now();
     
     try {
-      const credential = this.credentialVault.getUserCredential(userId, this.providerId);
+      const credential = await this.credentialVault.getUserCredential(userId, this.providerId);
       if (!credential) {
         return { status: 'auth_failed', latency: Date.now() - start };
       }

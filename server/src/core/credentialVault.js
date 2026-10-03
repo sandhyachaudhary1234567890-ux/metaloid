@@ -10,19 +10,16 @@ import fs from 'node:fs';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { emit } from './events.js';
+import { encrypt, decrypt, redactCredential, MASTER_KEY, ENCRYPTION_ALGORITHM } from './crypto.js';
 
 const DIR = process.env.METALOID_DATA_DIR || path.join(path.dirname(fileURLToPath(import.meta.url)), '..', '..', 'data');
 const CREDENTIALS_FILE = path.join(DIR, 'credentials.json');
 const AUDIT_FILE = path.join(DIR, 'credential_audit.json');
 
-// Encryption configuration
-const ENCRYPTION_ALGORITHM = 'aes-256-gcm';
-const KEY_LENGTH = 32; // 256 bits
-const IV_LENGTH = 16; // 128 bits
-const SALT_LENGTH = 64; // 512 bits
-
-// Master encryption key (should be from environment in production)
-const MASTER_KEY = process.env.METALOID_CREDENTIAL_KEY || crypto.randomBytes(KEY_LENGTH).toString('hex');
+// Encryption: single implementation in ./crypto.js (file mode and Supabase
+// mode produce identical ciphertext shapes). MASTER_KEY from environment in
+// production (see vaultHealth().masterKeyConfigured).
+void MASTER_KEY;
 
 let credentials = { userCredentials: [], platformCredentials: [] };
 let auditLog = [];
@@ -56,60 +53,9 @@ function needUser(userId) {
   if (!userId || typeof userId !== 'string') throw new Error('userId required');
 }
 
-/**
- * Derive encryption key from master key and salt
- */
-function deriveKey(masterKey, salt) {
-  return crypto.pbkdf2Sync(masterKey, salt, 100000, KEY_LENGTH, 'sha256');
-}
-
-/**
- * Encrypt credential value
- */
-function encrypt(plaintext, masterKey = MASTER_KEY) {
-  const salt = crypto.randomBytes(SALT_LENGTH);
-  const key = deriveKey(masterKey, salt);
-  const iv = crypto.randomBytes(IV_LENGTH);
-  const cipher = crypto.createCipheriv(ENCRYPTION_ALGORITHM, key, iv);
-  
-  let encrypted = cipher.update(plaintext, 'utf8', 'hex');
-  encrypted += cipher.final('hex');
-  
-  const authTag = cipher.getAuthTag();
-  
-  return {
-    salt: salt.toString('hex'),
-    iv: iv.toString('hex'),
-    encrypted,
-    authTag: authTag.toString('hex')
-  };
-}
-
-/**
- * Decrypt credential value
- */
-function decrypt(encryptedData, masterKey = MASTER_KEY) {
-  const salt = Buffer.from(encryptedData.salt, 'hex');
-  const key = deriveKey(masterKey, salt);
-  const iv = Buffer.from(encryptedData.iv, 'hex');
-  const authTag = Buffer.from(encryptedData.authTag, 'hex');
-  
-  const decipher = crypto.createDecipheriv(ENCRYPTION_ALGORITHM, key, iv);
-  decipher.setAuthTag(authTag);
-  
-  let decrypted = decipher.update(encryptedData.encrypted, 'hex', 'utf8');
-  decrypted += decipher.final('utf8');
-  
-  return decrypted;
-}
-
-/**
- * Redact credential value for logging
- */
-function redactCredential(value) {
-  if (!value || typeof value !== 'string') return '[REDACTED]';
-  if (value.length <= 8) return '****';
-  return value.substring(0, 4) + '****' + value.substring(value.length - 4);
+async function supa() {
+  const m = await import('./supadb.js');
+  return m.dbMode() ? m : null;
 }
 
 /**
@@ -138,15 +84,20 @@ function recordAudit(entry) {
 /**
  * Store user credential
  */
-export function storeUserCredential(userId, providerId, credential, metadata = {}) {
+export async function storeUserCredential(userId, providerId, credential, metadata = {}) {
   needUser(userId);
-  
+
   // Validate inputs
   if (!providerId || typeof providerId !== 'string') {
     throw new Error('providerId required');
   }
   if (!credential || typeof credential !== 'string') {
     throw new Error('credential required');
+  }
+
+  const db = await supa();
+  if (db) {
+    return db.credStore(userId, providerId, encrypt(credential), metadata, redactCredential(credential));
   }
   
   // Check if credential already exists
@@ -211,8 +162,28 @@ export function storeUserCredential(userId, providerId, credential, metadata = {
 /**
  * Get user credential (decrypted)
  */
-export function getUserCredential(userId, providerId) {
+export async function getUserCredential(userId, providerId) {
   needUser(userId);
+
+  const db = await supa();
+  if (db) {
+    const row = await db.credGet(userId, providerId);
+    if (!row) return null;
+    try {
+      const data = db.decField(row.credential);
+      if (!data) throw new Error('bad shape');
+      const decrypted = decrypt(data);
+      await db.credAudit(userId, providerId, 'CREDENTIAL_ACCESSED', { id: row.id });
+      return {
+        id: row.id, providerId, credential: decrypted,
+        metadata: {}, isActive: true,
+        lastRotatedAt: null, rotationCount: 0,
+      };
+    } catch {
+      await db.credAudit(userId, providerId, 'CREDENTIAL_DECRYPTION_FAILED', {});
+      throw new Error('Failed to decrypt credential');
+    }
+  }
   
   const credential = credentials.userCredentials.find(
     c => c.userId === userId && c.providerId === providerId && c.isActive
@@ -257,8 +228,11 @@ export function getUserCredential(userId, providerId) {
 /**
  * Delete user credential
  */
-export function deleteUserCredential(userId, providerId) {
+export async function deleteUserCredential(userId, providerId) {
   needUser(userId);
+
+  const db = await supa();
+  if (db) return db.credDelete(userId, providerId);
   
   const index = credentials.userCredentials.findIndex(
     c => c.userId === userId && c.providerId === providerId
@@ -286,8 +260,13 @@ export function deleteUserCredential(userId, providerId) {
 /**
  * Rotate user credential by credential ID
  */
-export function rotateUserCredentialById(userId, credentialId, newCredential) {
+export async function rotateUserCredentialById(userId, credentialId, newCredential) {
   needUser(userId);
+
+  const db = await supa();
+  if (db) {
+    return db.credRotateById(userId, credentialId, encrypt(newCredential), redactCredential(newCredential));
+  }
   
   const index = credentials.userCredentials.findIndex(
     c => c.userId === userId && c.id === credentialId
@@ -332,8 +311,16 @@ export function rotateUserCredentialById(userId, credentialId, newCredential) {
 /**
  * Rotate user credential (legacy - by providerId)
  */
-export function rotateUserCredential(userId, providerId, newCredential) {
+export async function rotateUserCredential(userId, providerId, newCredential) {
   needUser(userId);
+
+  const db = await supa();
+  if (db) {
+    const list = await db.credList(userId);
+    const found = list.find((c) => c.providerId === providerId);
+    if (!found) return { ok: false, error: 'Credential not found' };
+    return db.credRotateById(userId, found.id, encrypt(newCredential), redactCredential(newCredential));
+  }
   
   const index = credentials.userCredentials.findIndex(
     c => c.userId === userId && c.providerId === providerId
@@ -378,8 +365,11 @@ export function rotateUserCredential(userId, providerId, newCredential) {
 /**
  * List user's credential providers (no actual credentials)
  */
-export function listUserCredentialProviders(userId) {
+export async function listUserCredentialProviders(userId) {
   needUser(userId);
+
+  const db = await supa();
+  if (db) return db.credList(userId);
   
   return credentials.userCredentials
     .filter(c => c.userId === userId && c.isActive)
@@ -606,8 +596,11 @@ export function getProjectCredential(userId, projectId, providerId) {
 /**
  * Get credential audit log
  */
-export function getCredentialAuditLog(userId, providerId) {
+export async function getCredentialAuditLog(userId, providerId) {
   needUser(userId);
+
+  const db = await supa();
+  if (db) return db.credAuditLog(userId, providerId);
   
   let filtered = auditLog;
   
@@ -629,8 +622,11 @@ export function getCredentialAuditLog(userId, providerId) {
 /**
  * Delete all user credentials (user deletion cascade)
  */
-export function deleteUserCredentials(userId) {
+export async function deleteUserCredentials(userId) {
   needUser(userId);
+
+  const db = await supa();
+  if (db) return db.credDeleteAll(userId);
   
   const before = credentials.userCredentials.length;
   credentials.userCredentials = credentials.userCredentials.filter(c => c.userId !== userId);
@@ -651,8 +647,14 @@ export function deleteUserCredentials(userId) {
  * This function doesn't actually test the provider - it just records the test status
  * Actual provider testing should be done by the ProviderAdapter
  */
-export function setCredentialTestStatus(userId, providerId, status, metadata = {}) {
+export async function setCredentialTestStatus(userId, providerId, status, metadata = {}) {
   needUser(userId);
+
+  const db = await supa();
+  if (db) {
+    const r = await db.credTestStatus(userId, providerId, status, metadata);
+    return r;
+  }
   
   const index = credentials.userCredentials.findIndex(
     c => c.userId === userId && c.providerId === providerId
@@ -686,8 +688,11 @@ export function setCredentialTestStatus(userId, providerId, status, metadata = {
 /**
  * Get credential test status
  */
-export function getCredentialTestStatus(userId, providerId) {
+export async function getCredentialTestStatus(userId, providerId) {
   needUser(userId);
+
+  const db = await supa();
+  if (db) return db.credTestGet(userId, providerId);
   
   const credential = credentials.userCredentials.find(
     c => c.userId === userId && c.providerId === providerId

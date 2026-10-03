@@ -10,6 +10,11 @@ import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { emit } from './events.js';
 
+async function supa() {
+  const m = await import('./supadb.js');
+  return m.dbMode() ? m : null;
+}
+
 const DIR = process.env.METALOID_DATA_DIR || path.join(path.dirname(fileURLToPath(import.meta.url)), '..', '..', 'data');
 const FILE = path.join(DIR, 'memory.json');
 const SECRET_RE = /sk-or-[\w-]+|nvapi-[\w-]+|api[_-]?key\s*[:=]|password\s*[:=]|bearer\s+[\w.-]+/i;
@@ -32,13 +37,19 @@ function needUser(userId) {
   if (!userId || typeof userId !== 'string') throw new Error('userId required');
 }
 
-export function remember({ userId, cls = 'semantic', content, source = 'user', confidence = 'medium', scope = 'personal', workspaceId = null }) {
+export async function remember({ userId, cls = 'semantic', content, source = 'user', confidence = 'medium', scope = 'personal', workspaceId = null }) {
   needUser(userId);
   const text = String(content || '').slice(0, 1000);
   if (!text) return { ok: false, error: 'Empty content.' };
   if (SECRET_RE.test(text)) {
     emit('security.denied_write', { cls, reason: 'secret-shaped content' });
     return { ok: false, error: 'Refused: looks like a secret/credential. Rotate it if exposed.' };
+  }
+  const db = await supa();
+  if (db) {
+    const r = await db.memRemember({ userId, cls, content: text, source, confidence, scope, workspaceId });
+    if (r.ok) emit('memory.saved', { id: r.record.id, class: cls });
+    return r;
   }
   const rec = {
     id: `mem-${Date.now().toString(36)}-${(++seq).toString(36)}`,
@@ -54,8 +65,10 @@ export function remember({ userId, cls = 'semantic', content, source = 'user', c
   return { ok: true, record: rec };
 }
 
-export function recall(userId, { cls, query = '', limit = 20, workspaceId } = {}) {
+export async function recall(userId, { cls, query = '', limit = 20, workspaceId } = {}) {
   needUser(userId);
+  const db = await supa();
+  if (db) return db.memRecall(userId, { cls, query, limit, workspaceId });
   const q = String(query || '').toLowerCase();
   const out = store.records
     .filter((r) => r.userId === userId)
@@ -68,8 +81,17 @@ export function recall(userId, { cls, query = '', limit = 20, workspaceId } = {}
 }
 
 /** User control: edit what MetaIoid remembers (content/confidence only). */
-export function updateMemory(userId, id, patch = {}) {
+export async function updateMemory(userId, id, patch = {}) {
   needUser(userId);
+  if (typeof patch.content === 'string' && patch.content.trim() && SECRET_RE.test(patch.content)) {
+    return { ok: false, error: 'Refused: looks like a secret/credential.' };
+  }
+  const db = await supa();
+  if (db) {
+    const r = await db.memUpdate(userId, id, patch);
+    if (r.ok) emit('memory.updated', { id });
+    return r;
+  }
   const r = store.records.find((x) => x.id === id && x.userId === userId);
   if (!r) return { ok: false, error: 'Unknown memory.' };
   if (typeof patch.content === 'string' && patch.content.trim()) {
@@ -82,8 +104,14 @@ export function updateMemory(userId, id, patch = {}) {
   return { ok: true, record: r };
 }
 
-export function forget(userId, id) {
+export async function forget(userId, id) {
   needUser(userId);
+  const db = await supa();
+  if (db) {
+    const r = await db.memForget(userId, id);
+    if (r.ok) emit('memory.forgotten', { id });
+    return r;
+  }
   const i = store.records.findIndex((r) => r.id === id && r.userId === userId);
   if (i < 0) return { ok: false, error: 'Unknown memory.' };
   store.records.splice(i, 1);
@@ -93,8 +121,14 @@ export function forget(userId, id) {
 }
 
 /** Forget everything (account wipe path + user control). */
-export function forgetAll(userId) {
+export async function forgetAll(userId) {
   needUser(userId);
+  const db = await supa();
+  if (db) {
+    const r = await db.memForgetAll(userId);
+    if (r.ok) emit('memory.forgotten_all', { user: userId, count: r.deleted });
+    return r;
+  }
   const before = store.records.length;
   store.records = store.records.filter((r) => r.userId !== userId);
   persist();
@@ -102,13 +136,17 @@ export function forgetAll(userId) {
   return { ok: true, deleted: before - store.records.length };
 }
 
-export function exportMemories(userId) {
+export async function exportMemories(userId) {
   needUser(userId);
+  const db = await supa();
+  if (db) return db.memExport(userId);
   return store.records.filter((r) => r.userId === userId);
 }
 
-export function stats(userId) {
+export async function stats(userId) {
   needUser(userId);
+  const db = await supa();
+  if (db) return db.memStats(userId);
   const byClass = {};
   let total = 0;
   for (const r of store.records) {

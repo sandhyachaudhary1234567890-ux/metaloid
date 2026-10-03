@@ -192,14 +192,30 @@ export function deleteUserCascade(userId) {
 
 // ---------- express middleware ----------
 
-/** Attaches req.auth or rejects 401. Never trusts frontend ownership claims. */
-export function requireAuth(req, res, next) {
+/** Attaches req.auth or rejects 401. Never trusts frontend ownership claims.
+ * Local sessions first (fast path); Supabase Auth JWTs accepted as fallback
+ * so Supabase-authenticated users work end-to-end. Supabase user ids are
+ * namespaced `sb:<uuid>` to never collide with local `usr-…` ids. */
+export async function requireAuth(req, res, next) {
   const h = req.headers.authorization || '';
   const m = h.match(/^Bearer\s+(.+)$/i);
-  const auth = m ? validateAccess(m[1].trim()) : null;
-  if (!auth) return res.status(401).json({ error: 'Sign in required.', code: 'AUTH_REQUIRED' });
-  req.auth = auth;
-  next();
+  const token = m ? m[1].trim() : '';
+  const auth = token ? validateAccess(token) : null;
+  if (auth) {
+    req.auth = auth;
+    return next();
+  }
+  if (token) {
+    try {
+      const { supabaseUser } = await import('./supabase.js');
+      const su = await supabaseUser(token);
+      if (su) {
+        req.auth = { userId: 'sb:' + su.id, accountId: 'sb:' + su.id, sessionId: 'sb-session', deviceId: null, via: 'supabase', email: su.email };
+        return next();
+      }
+    } catch { /* fall through to 401 */ }
+  }
+  return res.status(401).json({ error: 'Sign in required.', code: 'AUTH_REQUIRED' });
 }
 
 /** Attaches req.auth from Bearer token if valid, otherwise falls back to guest context. */

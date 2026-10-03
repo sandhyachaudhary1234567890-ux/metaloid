@@ -9,6 +9,11 @@ import { emit } from './events.js';
 const DIR = process.env.METALOID_DATA_DIR || path.join(path.dirname(fileURLToPath(import.meta.url)), '..', '..', 'data');
 const FILE = path.join(DIR, 'world.json');
 
+async function supa() {
+  const m = await import('./supadb.js');
+  return m.dbMode() ? m : null;
+}
+
 let store = { entities: [], relations: [] };
 try {
   fs.mkdirSync(DIR, { recursive: true });
@@ -50,8 +55,10 @@ function needUser(userId) {
   if (!userId || typeof userId !== 'string') throw new Error('userId required');
 }
 
-export function upsertEntity({ userId, type, name, aliases = [], source = 'unknown', confidence = 'medium' }) {
+export async function upsertEntity({ userId, type, name, aliases = [], source = 'unknown', confidence = 'medium' }) {
   needUser(userId);
+  const db = await supa();
+  if (db) return db.worldUpsert(userId, { type, name, aliases, source, confidence });
   const norm = normalizeName(name);
   let ent = store.entities.find((e) => e.userId === userId && e.type === type && normalizeName(e.name) === norm);
   const now = new Date().toISOString();
@@ -70,8 +77,10 @@ export function upsertEntity({ userId, type, name, aliases = [], source = 'unkno
   return ent;
 }
 
-export function relate(userId, fromId, toId, rel, { source = 'unknown', confidence = 'medium', evidence = '' } = {}) {
+export async function relate(userId, fromId, toId, rel, { source = 'unknown', confidence = 'medium', evidence = '' } = {}) {
   needUser(userId);
+  const db = await supa();
+  if (db) return db.worldRelate(userId, fromId, toId, rel, { source, confidence, evidence });
   const from = store.entities.find((e) => e.id === fromId && e.userId === userId);
   const to = store.entities.find((e) => e.id === toId && e.userId === userId);
   if (!from || !to) return { ok: false, error: 'Unknown entity.' };
@@ -82,8 +91,10 @@ export function relate(userId, fromId, toId, rel, { source = 'unknown', confiden
   return { ok: true, edge };
 }
 
-export function neighbors(userId, id, depth = 1) {
+export async function neighbors(userId, id, depth = 1) {
   needUser(userId);
+  const db = await supa();
+  if (db) return db.worldNeighbors(userId, id, depth);
   const root = store.entities.find((e) => e.id === id && e.userId === userId);
   if (!root) return { entities: [], relations: [] };
   const seen = new Set([id]);
@@ -104,16 +115,20 @@ export function neighbors(userId, id, depth = 1) {
   };
 }
 
-export function worldStats(userId) {
+export async function worldStats(userId) {
   needUser(userId);
+  const db = await supa();
+  if (db) return db.worldStats(userId);
   return {
     entities: store.entities.filter((e) => e.userId === userId).length,
     relations: store.relations.filter((e) => e.userId === userId).length,
   };
 }
 
-export function findEntities(userId, query = '', type) {
+export async function findEntities(userId, query = '', type) {
   needUser(userId);
+  const db = await supa();
+  if (db) return db.worldFind(userId, query, type);
   const q = String(query || '').toLowerCase();
   return store.entities
     .filter((e) => e.userId === userId)
@@ -134,7 +149,9 @@ export function adoptLegacyWorld(userId) {
   return n;
 }
 
-export function deleteUserWorld(userId) {
+export async function deleteUserWorld(userId) {
+  const db = await supa();
+  if (db) return db.worldDeleteUser(userId);
   const before = store.entities.length + store.relations.length;
   store.entities = store.entities.filter((e) => e.userId !== userId);
   store.relations = store.relations.filter((e) => e.userId !== userId);

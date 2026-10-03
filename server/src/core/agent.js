@@ -14,6 +14,7 @@ import { proposeFollowups } from './skillInitiatives.js';
 import { getProfile } from './profiles.js';
 import { checkBudget, recordUsage, planCaps } from './entitlements.js';
 import { resolveIntentCapability } from './intentCapabilityResolver.js';
+import { submitJob } from './jobs.js';
 
 export function classifyIntent(text = '') {
   const t = text.toLowerCase().trim();
@@ -84,9 +85,10 @@ export async function startMission({ userId, objective, constraints = [], apiKey
   if (!userId) throw new Error('userId required');
   const skillIds = discoverSkills(objective);
   const tasks = planMission(objective, skillIds);
-  const m = createMission({ userId, objective, constraints, tasks, skillIds });
-  // run async; frontend polls
-  runMission(userId, m.id, { userId }).then(async (done) => {
+  const m = await createMission({ userId, objective, constraints, tasks, skillIds });
+  // run as a bounded background job; frontend polls mission + job status
+  const job = submitJob(userId, 'mission', objective, async () => {
+    const done = await runMission(userId, m.id, { userId });
     if (done && done.status === 'COMPLETED' && apiKey) {
       try {
         const briefs = skillIds.map(skillBrief).filter(Boolean);
@@ -113,46 +115,48 @@ export async function startMission({ userId, objective, constraints = [], apiKey
         });
         const { verify: verifyOutcomes } = await import('./verify.js');
         const v = await verifyOutcomes(text, ['nonempty', 'no-placeholders']);
-        attachReport(userId, m.id, text, v);
+        await attachReport(userId, m.id, text, v);
         // Initiative hook: relevant skills become ELIGIBLE follow-ups —
         // policy + budgets decide (suggest / queue / run). Never auto-act
         // on match alone.
         try {
-          const prop = proposeFollowups({ getProfile }, userId, done);
+          const prop = await proposeFollowups({ getProfile }, userId, done);
           if (prop.suggestions?.length) {
-            appendDecision(userId, m.id, `Initiative: ${prop.suggestions.map((s) => s.name).join(', ')} relevant to outputs (policy: ${getProfile(userId).autonomy}, action: ${prop.action}).`);
+            const prof = await getProfile(userId);
+            await appendDecision(userId, m.id, `Initiative: ${prop.suggestions.map((s) => s.name).join(', ')} relevant to outputs (policy: ${prof.autonomy}, action: ${prop.action}).`);
           }
           if ((prop.action === 'queue' || prop.action === 'run') && prop.framed?.length) {
             for (const f of prop.framed.slice(0, 1)) {
-              const b = checkBudget(userId, 'missions');
+              const b = await checkBudget(userId, 'missions');
               if (!b.ok) {
-                appendDecision(userId, m.id, `Initiative follow-up deferred: ${b.error}`);
+                await appendDecision(userId, m.id, `Initiative follow-up deferred: ${b.error}`);
                 break;
               }
               const caps = planCaps(userId);
-              const fm = createMission({
+              const fm = await createMission({
                 userId, objective: f.objective, skillIds: f.skillIds, tasks: planMission(f.objective, []),
                 budgets: { maxMs: caps.maxMissionMs, maxSteps: caps.maxMissionSteps },
               });
-              recordUsage(userId, 'missions');
-              appendDecision(userId, m.id, `Initiative follow-up ${prop.action === 'run' ? 'started' : 'queued'}: ${fm.id} (${f.skillIds.join(',')}).`);
-              if (prop.action === 'run') runMission(userId, fm.id, { userId }).catch(() => {});
+              await recordUsage(userId, 'missions');
+              await appendDecision(userId, m.id, `Initiative follow-up ${prop.action === 'run' ? 'started' : 'queued'}: ${fm.id} (${f.skillIds.join(',')}).`);
+              if (prop.action === 'run') submitJob(userId, 'mission', f.objective, () => runMission(userId, fm.id, { userId }));
             }
           }
         } catch { /* initiative is advisory — mission stands alone */ }
       } catch { /* synthesis is best-effort; tasks stand alone */ }
     }
-  }).catch(() => {});
+    return { missionId: m.id, status: done ? done.status : 'UNKNOWN' };
+  });
   emit('agent.mission_started', { id: m.id });
-  return m;
+  return { mission: m, jobId: job.id };
 }
 
 export async function continueMission(userId) {
   if (!userId) throw new Error('userId required');
-  const m = latestActive(userId);
+  const m = await latestActive(userId);
   if (!m) return { ok: false, error: 'No active mission. Start one with "mission: <objective>".' };
-  runMission(userId, m.id, { userId }).catch(() => {});
-  return { ok: true, mission: m };
+  const job = submitJob(userId, 'mission', `continue ${m.objective}`.slice(0, 160), () => runMission(userId, m.id, { userId }));
+  return { ok: true, mission: m, jobId: job.id };
 }
 
 /** Critic pass over a draft: propose → attack → revise notes (deterministic checks). */

@@ -72,6 +72,26 @@ export default function App() {
     }
   }, [view]);
 
+  // Email-link handler: ?code= from Supabase verify/recovery links.
+  // Exchanges once, saves the session, cleans the URL; boot adopts it.
+  useEffect(() => {
+    const params = new URLSearchParams(window.location.search);
+    if (!params.has('code')) return;
+    (async () => {
+      try {
+        const { supabase, supabaseConfigured, saveSbSession } = await import('./lib/supabaseAuth');
+        if (!supabaseConfigured()) return;
+        const { data, error } = await supabase().auth.exchangeCodeForSession(window.location.search);
+        if (error || !data.session) return;
+        saveSbSession(data.session);
+        window.history.replaceState({}, '', window.location.pathname);
+        window.location.reload(); // boot adopts the sb session via /me
+      } catch {
+        window.history.replaceState({}, '', window.location.pathname);
+      }
+    })();
+  }, []);
+
   const meta: Record<string, { title: string; sub: string }> = {
     projects: { title: 'Projects', sub: 'Persistent workspaces' },
     library: { title: 'Library', sub: 'Created files and artifacts' },

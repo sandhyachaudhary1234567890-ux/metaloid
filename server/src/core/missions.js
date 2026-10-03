@@ -33,6 +33,28 @@ function persist() {
   } catch { /* ignore */ }
 }
 
+async function supa() {
+  const m = await import('./supadb.js');
+  return m.dbMode() ? m : null;
+}
+
+/** Load the live mutable mission object (either backend). */
+async function loadMission(userId, id) {
+  const db = await supa();
+  if (db) return db.msnGet(userId, id);
+  return owned(store.missions.find((m) => m.id === id), userId);
+}
+
+/** Persist a mutated live mission object (either backend). */
+async function saveMission(m) {
+  const db = await supa();
+  if (db) {
+    await db.msnSave(m);
+    return;
+  }
+  persist();
+}
+
 let seq = 0;
 const mid = () => `msn-${Date.now().toString(36)}-${(++seq).toString(36)}`;
 const tid = () => `tsk-${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 6)}`;
@@ -41,7 +63,7 @@ function needUser(userId) {
   if (!userId || typeof userId !== 'string') throw new Error('userId required');
 }
 
-export function createMission({ userId, objective, constraints = [], priority = 'normal', tasks = [], skillIds = [], budgets = null }) {
+export async function createMission({ userId, objective, constraints = [], priority = 'normal', tasks = [], skillIds = [], budgets = null }) {
   needUser(userId);
   // assign ids first so positional depIdx can resolve to real ids
   const withIds = tasks.map((t) => ({ id: tid(), ...t }));
@@ -76,9 +98,14 @@ export function createMission({ userId, objective, constraints = [], priority = 
     createdAt: new Date().toISOString(), updatedAt: new Date().toISOString(),
     _flags: { paused: false, cancelled: false },
   };
-  store.missions.unshift(m);
-  if (store.missions.length > 100) store.missions.length = 100;
-  persist();
+  const db = await supa();
+  if (db) {
+    await db.msnInsert(m);
+  } else {
+    store.missions.unshift(m);
+    if (store.missions.length > 100) store.missions.length = 100;
+    persist();
+  }
   emit('mission.created', { id: m.id, objective: m.objective.slice(0, 80) });
   return publicMission(m);
 }
@@ -87,18 +114,22 @@ function owned(m, userId) {
   return m && m.userId === userId ? m : null;
 }
 
-export function getMission(userId, id) {
+export async function getMission(userId, id) {
   needUser(userId);
-  return owned(store.missions.find((m) => m.id === id), userId);
+  return loadMission(userId, id);
 }
 
-export function listMissions(userId) {
+export async function listMissions(userId) {
   needUser(userId);
+  const db = await supa();
+  if (db) return (await db.msnList(userId)).map(publicMission);
   return store.missions.filter((m) => m.userId === userId).map(publicMission);
 }
 
-export function latestActive(userId) {
+export async function latestActive(userId) {
   needUser(userId);
+  const db = await supa();
+  if (db) return db.msnLatestActive(userId);
   return store.missions.find((m) => m.userId === userId && ['QUEUED', 'RUNNING', 'PAUSED', 'BLOCKED'].includes(m.status)) || null;
 }
 
@@ -114,7 +145,7 @@ function log(m, event, detail = '') {
 
 function checkpoint(m, note) {
   m.checkpoints.push({ at: new Date().toISOString(), note, done: m.tasks.filter((t) => t.status === 'COMPLETED').length, total: m.tasks.length });
-  persist();
+  return saveMission(m);
 }
 
 function readyTasks(m) {
@@ -128,14 +159,14 @@ async function runTask(m, t, grants) {
   t.attempts += 1;
   log(m, 'Task started', t.name);
   emit('mission.task_started', { mission: m.id, task: t.name });
-  persist();
+  await saveMission(m);
 
   if (!t.tool) {
     // planning/notes task with no tool — mark complete with its brief
     t.status = 'COMPLETED';
     t.result = { note: t.name, brief: t.skill ? skillBrief(t.skill) : null };
     t.endedAt = new Date().toISOString();
-    persist();
+    await saveMission(m);
     return;
   }
   const r = await executeTool(t.tool, t.args, grants);
@@ -164,7 +195,7 @@ async function runTask(m, t, grants) {
 
 /** Run until done/paused/cancelled/blocked. Resumable via runMission(id). */
 export async function runMission(userId, id, grants = {}) {
-  const m = getMission(userId, id);
+  const m = await getMission(userId, id);
   if (!m) return null;
   if (!['QUEUED', 'PAUSED', 'BLOCKED'].includes(m.status)) return publicMission(m);
   m.status = 'RUNNING';
@@ -172,11 +203,20 @@ export async function runMission(userId, id, grants = {}) {
   m._flags.cancelled = false;
   log(m, m.timeline.length > 1 ? 'Resumed' : 'Running', `${m.tasks.length} tasks`);
   emit('mission.started', { id: m.id });
-  persist();
+  await saveMission(m);
+  const db = await supa();
 
   const t0 = Date.now();
   let steps = 0;
   while (true) {
+    if (db) {
+      // cross-process pause/cancel: re-read live flags each level
+      const flags = await db.msnFlags(userId, id);
+      if (flags) {
+        m._flags.paused = !!flags.paused;
+        m._flags.cancelled = !!flags.cancelled;
+      }
+    }
     if (m._flags.cancelled) {
       m.status = 'PAUSED';
       log(m, 'Cancelled', 'checkpoint saved; resume with continue');
@@ -203,7 +243,7 @@ export async function runMission(userId, id, grants = {}) {
     }
     steps += ready.length;
     await Promise.all(ready.slice(0, 3).map((t) => runTask(m, t, grants)));
-    checkpoint(m, `level complete (${steps} steps)`);
+    await checkpoint(m, `level complete (${steps} steps)`);
     if (m.tasks.some((t) => t.status === 'BLOCKED')) {
       m.status = 'BLOCKED';
       break;
@@ -221,18 +261,18 @@ export async function runMission(userId, id, grants = {}) {
     log(m, 'Failed', `${failed.length} tasks failed after retry — see errors`);
     emit('mission.failed', { id: m.id, failed: failed.length });
   }
-  checkpoint(m, `terminal:${m.status}`);
-  persist();
+  await checkpoint(m, `terminal:${m.status}`);
+  await saveMission(m);
   return publicMission(m);
 }
 
 /** Append an agent/initiative decision note (persisted, auditable). */
-export function appendDecision(userId, id, text) {
-  const m = getMission(userId, id);
+export async function appendDecision(userId, id, text) {
+  const m = await getMission(userId, id);
   if (!m) return null;
   m.decisions.push(String(text).slice(0, 300));
   log(m, 'Decision', String(text).slice(0, 160));
-  persist();
+  await saveMission(m);
   return publicMission(m);
 }
 
@@ -249,39 +289,43 @@ export function adoptLegacyMissions(userId) {
   return n;
 }
 
-export function deleteUserMissions(userId) {
+export async function deleteUserMissions(userId) {
+  const db = await supa();
+  if (db) return db.msnDeleteUser(userId);
   const before = store.missions.length;
   store.missions = store.missions.filter((m) => m.userId !== userId);
   persist();
   return before - store.missions.length;
 }
 
-export function pauseMission(userId, id) {
-  const m = getMission(userId, id);
+export async function pauseMission(userId, id) {
+  const m = await getMission(userId, id);
   if (!m) return null;
   m._flags.paused = true;
+  await saveMission(m);
   return publicMission(m);
 }
 
-export function cancelMission(userId, id) {
-  const m = getMission(userId, id);
+export async function cancelMission(userId, id) {
+  const m = await getMission(userId, id);
   if (!m) return null;
   m._flags.cancelled = true;
+  await saveMission(m);
   return publicMission(m);
 }
 
-export function markVerified(userId, id, note = '') {
-  const m = getMission(userId, id);
+export async function markVerified(userId, id, note = '') {
+  const m = await getMission(userId, id);
   if (!m || m.status !== 'COMPLETED') return null;
   m.status = 'VERIFIED';
   log(m, 'Verified', note || 'Outcome independently checked');
-  persist();
+  await saveMission(m);
   return publicMission(m);
 }
 
 /** Attach model synthesis + verification to a finished mission. */
-export function attachReport(userId, id, report, verification) {
-  const m = getMission(userId, id);
+export async function attachReport(userId, id, report, verification) {
+  const m = await getMission(userId, id);
   if (!m) return null;
   m.outputs.report = report;
   m.decisions.push('Synthesis by model over verified task evidence');
@@ -290,6 +334,6 @@ export function attachReport(userId, id, report, verification) {
     m.status = 'VERIFIED';
     log(m, 'Verified', 'Report passed self-checks');
   }
-  persist();
+  await saveMission(m);
   return publicMission(m);
 }

@@ -9,8 +9,8 @@
 import { discoverFor } from './skillDiscovery.js';
 import { emit } from './events.js';
 
-export function proposeFollowups({ getProfile, createMissionFn }, userId, mission) {
-  const profile = getProfile ? getProfile(userId) : { autonomy: 'assisted' };
+export async function proposeFollowups({ getProfile, createMissionFn }, userId, mission) {
+  const profile = getProfile ? await getProfile(userId) : { autonomy: 'assisted' };
   const autonomy = profile.autonomy || 'assisted';
   const ctx = `Report on completed mission: ${mission.objective}. Deliverables, presentation, document, summary, next steps, verify, publish, share.`;
   const cands = discoverFor(userId, ctx, {}).filter((c) => c.auto).slice(0, 2);

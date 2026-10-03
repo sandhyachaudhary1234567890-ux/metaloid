@@ -45,6 +45,11 @@ function needUser(userId) {
   if (!userId || typeof userId !== 'string') throw new Error('userId required');
 }
 
+async function supa() {
+  const m = await import('./supadb.js');
+  return m.dbMode() ? m : null;
+}
+
 const SAFE_NAME = /^[a-z0-9][a-z0-9 _.-]{0,80}$/i;
 export function safeFilename(name, kind) {
   const base = String(name || 'untitled').replace(/\.[a-z0-9]+$/i, '').trim().slice(0, 60) || 'untitled';
@@ -56,13 +61,57 @@ function bytesPath(a, v) {
   return path.join(BYTES, `${a.id}.v${v}.bin`);
 }
 
-function writeBytes(a, v, buf) {
+async function writeBytes(userId, a, v, buf) {
   if (buf.length > MAX_BYTES) throw new Error('Artifact too large (10MB cap).');
+  const db = await supa();
+  if (db) {
+    await db.artBytesPut(userId, a.id, v, buf, MIME[a.kind] || 'application/octet-stream');
+    return;
+  }
   fs.writeFileSync(bytesPath(a, v), buf);
+}
+
+async function readVersionBytes(userId, a, v) {
+  const db = await supa();
+  if (db) return db.artBytesGet(userId, a.id, v == null ? a.version : v);
+  return fs.readFileSync(bytesPath(a, v == null ? a.version : v));
 }
 
 export function readBytes(a, v) {
   return fs.readFileSync(bytesPath(a, v == null ? a.version : v));
+}
+
+/** Load the live mutable artifact (either backend). Mutations must sSave(). */
+async function loadArtifact(userId, id, scope = {}) {
+  const db = await supa();
+  if (db) {
+    const a = await db.artGet(userId, id);
+    if (!a) return null;
+    if (scope.projectId && a.projectId !== scope.projectId) return null;
+    if (scope.workspaceId && a.workspaceId !== scope.workspaceId) return null;
+    return a;
+  }
+  return owned(store.artifacts.find((a) => a.id === id), userId, scope);
+}
+
+async function saveArtifact(a) {
+  const db = await supa();
+  if (db) {
+    await db.artSave(a);
+    return;
+  }
+  persist();
+}
+
+async function insertArtifact(a) {
+  const db = await supa();
+  if (db) {
+    await db.artInsert(a);
+    return;
+  }
+  store.artifacts.unshift(a);
+  if (store.artifacts.length > 500) store.artifacts.length = 500;
+  persist();
 }
 
 function owned(a, userId, scope = {}) {
@@ -73,13 +122,15 @@ function owned(a, userId, scope = {}) {
   return a;
 }
 
-export function getArtifact(userId, id, scope = {}) {
+export async function getArtifact(userId, id, scope = {}) {
   needUser(userId);
-  return owned(store.artifacts.find((a) => a.id === id), userId, scope);
+  return loadArtifact(userId, id, scope);
 }
 
-export function listArtifacts(userId, scope = {}) {
+export async function listArtifacts(userId, scope = {}) {
   needUser(userId);
+  const db = await supa();
+  if (db) return (await db.artList(userId, scope)).map((a) => publicArtifact(a));
   return store.artifacts
     .filter((a) => owned(a, userId, scope))
     .map((a) => publicArtifact(a))
@@ -103,7 +154,7 @@ function setState(a, status, detail = '') {
 }
 
 /** Create from a deck/doc/markdown spec. No fake bytes — builders throw. */
-export function createArtifact({ userId, kind, name, spec, projectId = null, workspaceId = null, taskId = null, conversationId = null }) {
+export async function createArtifact({ userId, kind, name, spec, projectId = null, workspaceId = null, taskId = null, conversationId = null }) {
   needUser(userId);
   if (!ARTIFACT_KINDS.includes(kind)) return { ok: false, error: `Unsupported kind "${kind}". Available: pptx, docx, md, txt.` };
   const a = {
@@ -119,19 +170,16 @@ export function createArtifact({ userId, kind, name, spec, projectId = null, wor
   setState(a, 'CREATING', `kind=${kind}`);
   try {
     const buf = renderBytes(kind, spec);
-    writeBytes(a, 1, buf);
+    await writeBytes(userId, a, 1, buf);
     a.versions.push({ version: 1, at: a.updatedAt, note: 'created', status: 'CREATED', bytes: buf.length });
     setState(a, 'CREATED', `${buf.length} bytes`);
   } catch (e) {
     setState(a, 'FAILED', String((e && e.message) || e).slice(0, 160));
-    store.artifacts.unshift(a);
-    persist();
+    await insertArtifact(a);
     emit('artifact.failed', { id: a.id, user: userId });
     return { ok: false, error: String((e && e.message) || e).slice(0, 200), artifact: publicArtifact(a) };
   }
-  store.artifacts.unshift(a);
-  if (store.artifacts.length > 500) store.artifacts.length = 500;
-  persist();
+  await insertArtifact(a);
   emit('artifact.created', { id: a.id, user: userId, kind });
   return { ok: true, artifact: publicArtifact(a) };
 }
@@ -148,8 +196,8 @@ export function renderBytes(kind, spec) {
 }
 
 /** New version from edited spec (v1 → v2 …). Previous versions preserved. */
-export function editArtifact(userId, id, spec, note = '') {
-  const a = getArtifact(userId, id);
+export async function editArtifact(userId, id, spec, note = '') {
+  const a = await loadArtifact(userId, id);
   if (!a) return { ok: false, error: 'Unknown artifact.' };
   if (!['CREATED', 'REVIEWING', 'VERIFIED', 'FINALIZED', 'FAILED'].includes(a.status)) {
     return { ok: false, error: `Cannot edit while ${a.status}.` };
@@ -157,11 +205,11 @@ export function editArtifact(userId, id, spec, note = '') {
   try {
     const buf = renderBytes(a.kind, spec);
     a.version += 1;
-    writeBytes(a, a.version, buf);
+    await writeBytes(userId, a, a.version, buf);
     a.versions.push({ version: a.version, at: new Date().toISOString(), note: note.slice(0, 120) || 'edited', status: 'CREATED', bytes: buf.length });
     setState(a, 'CREATED', `v${a.version} (${buf.length} bytes)`);
     a.verification = null;
-    persist();
+    await saveArtifact(a);
     emit('artifact.edited', { id, user: userId, version: a.version });
     return { ok: true, artifact: publicArtifact(a) };
   } catch (e) {
@@ -170,13 +218,13 @@ export function editArtifact(userId, id, spec, note = '') {
 }
 
 /** Structural validation (never just the extension). */
-export function validateArtifact(userId, id) {
-  const a = getArtifact(userId, id);
+export async function validateArtifact(userId, id) {
+  const a = await loadArtifact(userId, id);
   if (!a) return { ok: false, error: 'Unknown artifact.' };
   setState(a, 'VALIDATING', `v${a.version}`);
   let result;
   try {
-    const buf = readBytes(a, a.version);
+    const buf = await readVersionBytes(userId, a, a.version);
     if (a.kind === 'pptx') {
       const v = validatePptxBytes(buf);
       result = { passed: v.ok, checks: v.ok ? ['pkzip', 'content-types', 'presentation-xml', `slides:${v.slideCount}`, 'slide-text'] : [], issues: v.issues, slideCount: v.slideCount, bytes: v.bytes };
@@ -196,7 +244,7 @@ export function validateArtifact(userId, id) {
   const vEntry = a.versions.find((v) => v.version === a.version);
   if (vEntry) vEntry.status = result.passed ? 'VALIDATED' : 'FAILED';
   setState(a, result.passed ? 'REVIEWING' : 'FAILED', result.passed ? 'structural checks passed' : result.issues.join('; ').slice(0, 160));
-  persist();
+  await saveArtifact(a);
   emit('artifact.validated', { id, user: userId, passed: result.passed });
   return { ok: true, verification: a.verification, artifact: publicArtifact(a) };
 }
@@ -223,7 +271,7 @@ export function detectRenderer() {
  * honestly unavailable — structural validation stands on its own.
  */
 export async function renderArtifact(userId, id) {
-  const a = getArtifact(userId, id);
+  const a = await loadArtifact(userId, id);
   if (!a) return { ok: false, error: 'Unknown artifact.' };
   if (!['CREATED', 'REVIEWING', 'VERIFIED', 'FINALIZED'].includes(a.status) && !(a.status === 'REVIEWING')) {
     // allow re-render from any non-transient state
@@ -233,7 +281,7 @@ export async function renderArtifact(userId, id) {
   if (!det.available) {
     a.renders.push({ at: new Date().toISOString(), ok: false, reason: 'visual rendering unavailable in this environment' });
     setState(a, 'REVIEWING', 'render skipped — structural validation stands');
-    persist();
+    await saveArtifact(a);
     return {
       ok: true, rendered: false,
       message: `${a.kind.toUpperCase()} created and structurally validated, but visual rendering is unavailable in this environment.`,
@@ -243,7 +291,7 @@ export async function renderArtifact(userId, id) {
   const work = fs.mkdtempSync(path.join(os.tmpdir(), 'metaloid-render-'));
   try {
     const src = path.join(work, `src.${a.kind}`);
-    fs.writeFileSync(src, readBytes(a, a.version));
+    fs.writeFileSync(src, await readVersionBytes(userId, a, a.version));
     await new Promise((resolve, reject) => {
       execFile('soffice', ['--headless', '--convert-to', 'pdf', '--outdir', work, src], { timeout: 60000, windowsHide: true }, (err) => {
         if (err) reject(new Error('convert failed: ' + String(err.message || err).slice(0, 120)));
@@ -268,13 +316,13 @@ export async function renderArtifact(userId, id) {
     }
     a.renders.push({ at: new Date().toISOString(), ok: true, pdfBytes: pdf.length, previews: previews.length, pages: previews.map((p) => p.page) });
     setState(a, 'REVIEWING', `pdf proof (${pdf.length}B)${previews.length ? ` + ${previews.length} previews` : ', no page images'}`);
-    persist();
+    await saveArtifact(a);
     emit('artifact.rendered', { id, user: userId, previews: previews.length });
     return { ok: true, rendered: true, pdfBytes: pdf.length, previews: previews.length, artifact: publicArtifact(a) };
   } catch (e) {
     a.renders.push({ at: new Date().toISOString(), ok: false, reason: String((e && e.message) || e).slice(0, 160) });
     setState(a, 'REVIEWING', 'render failed — structural validation stands');
-    persist();
+    await saveArtifact(a);
     return { ok: true, rendered: false, message: `Render failed (${String((e && e.message) || e).slice(0, 120)}). File remains structurally validated.`, artifact: publicArtifact(a) };
   } finally {
     try {
@@ -284,12 +332,12 @@ export async function renderArtifact(userId, id) {
 }
 
 /** XML-level visual QA (works without renderer) + render-aware notes. */
-export function visualQA(userId, id) {
-  const a = getArtifact(userId, id);
+export async function visualQA(userId, id) {
+  const a = await loadArtifact(userId, id);
   if (!a) return { ok: false, error: 'Unknown artifact.' };
   const issues = [];
   try {
-    const buf = readBytes(a, a.version);
+    const buf = await readVersionBytes(userId, a, a.version);
     if (a.kind === 'pptx') {
       const slides = extractSlides(buf);
       for (const s of slides) {
@@ -321,14 +369,15 @@ export function visualQA(userId, id) {
   };
 }
 
-/** Bound repair: trim overcrowded slides (pptx) then re-validate. */export function repairArtifact(userId, id) {
-  const a = getArtifact(userId, id);
+/** Bound repair: trim overcrowded slides (pptx) then re-validate. */
+export async function repairArtifact(userId, id) {
+  const a = await loadArtifact(userId, id);
   if (!a) return { ok: false, error: 'Unknown artifact.' };
   if (a.kind !== 'pptx') return { ok: false, error: 'Auto-repair currently supports pptx only.' };
   const repairs = Number(a.repairs || 0);
   if (repairs >= 2) return { ok: false, error: 'Repair budget exhausted (2 attempts).' };
   try {
-    const slides = extractSlides(readBytes(a, a.version));
+    const slides = extractSlides(await readVersionBytes(userId, a, a.version));
     // rebuild spec from current XML: titles + trimmed bullets
     const spec = { title: a.name.replace(/\.pptx$/i, ''), slides: [] };
     const titleOf = (xml) => {
@@ -344,27 +393,27 @@ export function visualQA(userId, id) {
     }
     const buf = renderBytes('pptx', spec);
     a.version += 1;
-    writeBytes(a, a.version, buf);
+    await writeBytes(userId, a, a.version, buf);
     a.repairs = repairs + 1;
     a.versions.push({ version: a.version, at: new Date().toISOString(), note: 'auto-repair: trimmed overcrowded slides', status: 'CREATED', bytes: buf.length });
     setState(a, 'REPAIRING', `v${a.version}`);
-    persist();
-    const v = validateArtifact(userId, id);
-    return { ok: true, repairs: a.repairs, verification: v.verification, artifact: publicArtifact(getArtifact(userId, id)) };
+    await saveArtifact(a);
+    const v = await validateArtifact(userId, id);
+    return { ok: true, repairs: a.repairs, verification: v.verification, artifact: publicArtifact(await loadArtifact(userId, id)) };
   } catch (e) {
     return { ok: false, error: String((e && e.message) || e).slice(0, 200) };
   }
 }
 
 /** Targeted slide edit (pptx): replace title/bullets of slide N, new version. */
-export function editSlide(userId, id, n, { title, bullets } = {}) {
-  const a = getArtifact(userId, id);
+export async function editSlide(userId, id, n, { title, bullets } = {}) {
+  const a = await loadArtifact(userId, id);
   if (!a) return { ok: false, error: 'Unknown artifact.' };
   if (a.kind !== 'pptx') return { ok: false, error: 'Slide editing supports pptx only.' };
   const num = Number(n);
   if (!Number.isInteger(num) || num < 1 || num > 40) return { ok: false, error: 'Slide number must be 1–40.' };
   try {
-    const slides = extractSlides(readBytes(a, a.version));
+    const slides = extractSlides(await readVersionBytes(userId, a, a.version));
     if (num > slides.length) return { ok: false, error: `Deck has ${slides.length} slides — no slide ${num}.` };
     const un = (t) => String(t).replace(/&lt;/g, '<').replace(/&gt;/g, '>').replace(/&amp;/g, '&').replace(/&quot;/g, '"').replace(/&apos;/g, "'");
     const spec = {
@@ -382,11 +431,11 @@ export function editSlide(userId, id, n, { title, bullets } = {}) {
     };
     const buf = renderBytes('pptx', spec);
     a.version += 1;
-    writeBytes(a, a.version, buf);
+    await writeBytes(userId, a, a.version, buf);
     a.versions.push({ version: a.version, at: new Date().toISOString(), note: `edited slide ${num}`, status: 'CREATED', bytes: buf.length });
     setState(a, 'CREATED', `v${a.version} (slide ${num} edited)`);
     a.verification = null;
-    persist();
+    await saveArtifact(a);
     emit('artifact.slide_edited', { id, user: userId, slide: num });
     return { ok: true, artifact: publicArtifact(a) };
   } catch (e) {
@@ -395,8 +444,8 @@ export function editSlide(userId, id, n, { title, bullets } = {}) {
 }
 
 /** Finalize only from VERIFIED (or REVIEWING with passed verification). */
-export function finalizeArtifact(userId, id, projectId = null) {
-  const a = getArtifact(userId, id);
+export async function finalizeArtifact(userId, id, projectId = null) {
+  const a = await loadArtifact(userId, id);
   if (!a) return { ok: false, error: 'Unknown artifact.' };
   const v = a.verification;
   if (!v || !v.passed || v.version !== a.version) {
@@ -404,40 +453,58 @@ export function finalizeArtifact(userId, id, projectId = null) {
   }
   if (projectId) a.projectId = String(projectId).slice(0, 80);
   setState(a, 'FINALIZED', projectId ? `project=${a.projectId}` : 'no project');
-  persist();
+  await saveArtifact(a);
   emit('artifact.finalized', { id, user: userId, project: a.projectId });
   return { ok: true, artifact: publicArtifact(a) };
 }
 
 /** Records a terminal failure without exposing filesystem details to callers. */
-export function failArtifact(userId, id, reason = 'Artifact verification failed.') {
-  const a = getArtifact(userId, id);
+export async function failArtifact(userId, id, reason = 'Artifact verification failed.') {
+  const a = await loadArtifact(userId, id);
   if (!a) return null;
   setState(a, 'FAILED', String(reason).slice(0, 180));
   a.errors = [...(a.errors || []), { at: a.updatedAt, message: String(reason).slice(0, 300) }].slice(-12);
-  persist();
+  await saveArtifact(a);
   emit('artifact.failed', { id, user: userId, reason: String(reason).slice(0, 80) });
   return publicArtifact(a);
 }
 
-export function deleteArtifact(userId, id) {
-  const a = getArtifact(userId, id);
+export async function deleteArtifact(userId, id) {
+  const a = await loadArtifact(userId, id);
   if (!a) return false;
   a.deleted = true;
   setState(a, 'FAILED', 'deleted by user');
-  persist();
+  await saveArtifact(a);
+  // bytes: tombstoned metadata stays for audit; version bytes removed
+  try {
+    const db = await supa();
+    if (db) {
+      await db.artBytesDel(userId, [id]);
+    } else {
+      for (const v of a.versions || []) {
+        try {
+          fs.unlinkSync(bytesPath(a, v.version));
+        } catch { /* ignore */ }
+      }
+    }
+  } catch { /* ignore */ }
   emit('artifact.deleted', { id, user: userId });
   return true;
 }
 
-export function downloadArtifact(userId, id) {
-  const a = getArtifact(userId, id);
+export async function downloadArtifact(userId, id) {
+  const a = await loadArtifact(userId, id);
   if (!a) return null;
-  return { artifact: publicArtifact(a), bytes: readBytes(a, a.version) };
+  return { artifact: publicArtifact(a), bytes: await readVersionBytes(userId, a, a.version) };
 }
 
-export function deleteUserArtifacts(userId) {
-  const mine = store.artifacts.filter((a) => a.userId === userId);
+export async function deleteUserArtifacts(userId) {
+  const db = await supa();
+  if (db) {
+    const ids = await db.artDeleteUser(userId);
+    if (ids.length) await db.artBytesDel(userId, ids).catch(() => {});
+    return ids.length;
+  }
   for (const a of mine) {
     for (const v of a.versions || []) {
       try {

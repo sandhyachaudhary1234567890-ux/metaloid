@@ -22,8 +22,8 @@ const FORBIDDEN_INTENT = [
 ];
 
 /** Test mode: static checks + sandboxed dry-run → PASS/FAIL/WARN list. */
-export function testSkill(userId, id, { input = {} } = {}) {
-  const s = getSkillFor(userId, id);
+export async function testSkill(userId, id, { input = {} } = {}) {
+  const s = await getSkillFor(userId, id);
   if (!s) return { ok: false, error: 'Unknown skill.' };
   const checks = [];
   const push = (name, verdict, detail = '') => checks.push({ name, verdict, detail });
@@ -62,8 +62,8 @@ export function scanForbidden(text) {
  * Returns executed result (JS skill) or an honest guided plan (others).
  * NEVER claims execution that did not happen.
  */
-export function invokeSkill(userId, id, { input = {}, available = {}, reason = '' } = {}) {
-  const s = getSkillFor(userId, id);
+export async function invokeSkill(userId, id, { input = {}, available = {}, reason = '' } = {}) {
+  const s = await getSkillFor(userId, id);
   if (!s) return { ok: false, error: 'Unknown skill.' };
   if (s.status !== 'enabled') return { ok: false, error: 'Skill is disabled.' };
   const forbidden = scanForbidden(s.instructions);
@@ -80,7 +80,7 @@ export function invokeSkill(userId, id, { input = {}, available = {}, reason = '
   const unknownDeclared = (s.tools || []).filter((t) => !knownTools.has(t));
   const jsEntries = Object.keys(s.scripts || {}).filter((p) => p.endsWith('.js')).sort();
   const otherEntries = Object.keys(s.scripts || {}).filter((p) => !p.endsWith('.js')).sort();
-  markSkillUsed(userId, id, reason.slice(0, 120));
+  await markSkillUsed(userId, id, reason.slice(0, 120));
   if (jsEntries.length) {
     const r = runEntry(jsEntries[0], s.scripts[jsEntries[0]], { input });
     if (!r.ok) return { ok: false, error: `Skill script failed: ${r.error}`, logs: r.logs, executed: true, entry: jsEntries[0] };
