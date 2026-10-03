@@ -6,9 +6,18 @@ import { planResponse } from './mockAgent';
 import { streamText } from './mockStreaming';
 import type { ConnectionState } from './types';
 
+// Explicit VITE_API_URL always wins. Otherwise: on localhost, talk to the
+// local gateway directly; on any other host (tunnel / preview / reverse
+// proxy) fall back to the page's OWN ORIGIN (relative URLs), so a proxied
+// /api (see vite.config.ts) works without hardcoding a host the remote
+// browser could never reach.
+const LOCAL_HOSTS = /^(localhost|127\.0\.0\.1|\[::1\]|::1)$/i;
+const onLocalhost =
+  typeof window === 'undefined' || LOCAL_HOSTS.test(window.location.hostname);
+
 export const API_URL =
   (import.meta as unknown as { env?: Record<string, string> }).env?.VITE_API_URL ||
-  'https://127.0.0.1:8787';
+  (onLocalhost ? 'https://127.0.0.1:8787' : '');
 
 export interface ServiceHealth {
   server: boolean;
@@ -23,8 +32,22 @@ export const allDown: ServiceHealth = {
   server: false, ai: false, voice: false, vision: false, realtime: false, database: false,
 };
 
+// On a remote host a stored *loopback* URL (the default) can never work —
+// the browser would call its own machine — so it degrades to a relative,
+// same-origin base (proxied /api in dev/preview, see vite.config.ts).
+function remoteSafe(configured: string): string {
+  if (onLocalhost) return configured;
+  const c = (configured || '').trim();
+  if (!c) return '';
+  try {
+    return LOCAL_HOSTS.test(new URL(c).hostname) ? '' : c;
+  } catch {
+    return c;
+  }
+}
+
 function rawBase(configured: string): string {
-  const u = (configured || '').trim().replace(/\/$/, '');
+  const u = remoteSafe(configured).trim().replace(/\/$/, '');
   return u || API_URL;
 }
 
