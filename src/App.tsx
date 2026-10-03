@@ -26,7 +26,7 @@ import { WifiOff, Smartphone } from 'lucide-react';
 import { MetaIoidLockup, MetaIoidFavicon } from './components/brand';
 import { AuthScreen } from './screens/AuthScreen';
 import { useAuth } from './lib/auth';
-import { useAccountSync } from './lib/sync';
+import { SyncProvider } from './lib/sync';
 
 function MobileTopBar({ onDeviceMorph }: { onDeviceMorph: () => void }) {
   return (
@@ -47,11 +47,8 @@ function MobileTopBar({ onDeviceMorph }: { onDeviceMorph: () => void }) {
   );
 }
 
-export default function App() {
+function AppShell() {
   const auth = useAuth();
-  // Keeps the account copy in step with the local stores. A no-op when
-  // signed out — the sandbox demo never needs an account.
-  useAccountSync();
 
   // Gate on the session only when an auth service is actually configured:
   // an unconfigured build must remain fully usable offline.
@@ -190,5 +187,18 @@ export default function App() {
         onComplete={() => setSwitchingView(false)}
       />
     </div>
+  );
+}
+
+/**
+ * The sync loop runs above the shell so the shell (and Settings) can read its
+ * state. It is a no-op when signed out — the sandbox demo never needs an
+ * account, and an unconfigured build never sees a login it cannot pass.
+ */
+export default function App() {
+  return (
+    <SyncProvider>
+      <AppShell />
+    </SyncProvider>
   );
 }

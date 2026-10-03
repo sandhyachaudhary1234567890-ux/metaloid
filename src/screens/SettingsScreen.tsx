@@ -2,6 +2,7 @@ import { Palette, Mic2, Globe2, Cpu, Brain, ShieldCheck, Plug, Server, Keyboard,
 import { useApp } from '../lib/store';
 import { SettingsSection, SettingsRow, Seg, Toggle } from '../components/SettingsGroup';
 import { SystemStatus } from '../components/SystemStatus';
+import { AccountSection } from '../components/AccountPanel';
 import { LANGUAGES, MODELS } from '../lib/i18n';
 import { getVoices } from '../providers/tts';
 import { THEME_PRESETS, ACCENT_PALETTES, type ThemePreset } from '../lib/theme';
@@ -26,6 +27,9 @@ export function SettingsScreen() {
           Configure {settings.agentName} &middot; All preferences are preserved locally on this device.
         </p>
       </div>
+
+      {/* ============ ACCOUNT + PROVIDER KEYS ============ */}
+      <AccountSection />
 
       {/* ============ APPEARANCE ============ */}
       <SettingsSection icon={Palette} title="Appearance & Visual System" desc="Curated theme presets, signature accents, and border geometry">

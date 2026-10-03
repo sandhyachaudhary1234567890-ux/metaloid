@@ -20,7 +20,8 @@
 // Deliberately not done here: rewriting store internals. The sync layer
 // observes state, so it cannot break the streaming path.
 
-import { useEffect, useRef } from 'react';
+import { createContext, useContext, useEffect, useRef } from 'react';
+import type { ReactNode } from 'react';
 import { useApp } from './store';
 import { useAuth } from './auth';
 import { repo, RepoError, type ConversationRow, type MemoryRow } from './repo';
@@ -36,6 +37,24 @@ export interface SyncState {
   lastPushAt: number | null;
   pending: number;
   error: string | null;
+}
+
+export const EMPTY_SYNC: SyncState = { lastPullAt: null, lastPushAt: null, pending: 0, error: null };
+
+const SyncContext = createContext<SyncState>(EMPTY_SYNC);
+
+/**
+ * Runs the sync loop once, high in the tree, and publishes its state so any
+ * screen can describe it (Settings shows "up to date" / "N pending" / paused).
+ */
+export function SyncProvider({ children }: { children: ReactNode }) {
+  const state = useAccountSync();
+  return <SyncContext.Provider value={state}>{children}</SyncContext.Provider>;
+}
+
+/** Read the sync state wherever it is displayed. Safe outside the provider. */
+export function useSyncState(): SyncState {
+  return useContext(SyncContext);
 }
 
 /**
