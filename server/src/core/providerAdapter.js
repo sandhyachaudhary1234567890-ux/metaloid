@@ -23,6 +23,17 @@ export const ErrorTypes = {
 /**
  * Base Provider Adapter - Abstract class that all providers must extend
  */
+/**
+ * Normalise a configured API base: strip trailing slashes so path joins never
+ * produce `//chat/completions`, which some gateways 404 on. Written as a loop
+ * rather than a regex so there is no escaping to get subtly wrong.
+ */
+function trimBase(url) {
+  let out = String(url || '');
+  while (out.endsWith('/')) out = out.slice(0, -1);
+  return out;
+}
+
 export class ProviderAdapter {
   constructor(providerId, credentialVault) {
     this.providerId = providerId;
@@ -227,7 +238,11 @@ export class ProviderAdapter {
 export class OpenRouterAdapter extends ProviderAdapter {
   constructor(credentialVault) {
     super('openrouter', credentialVault);
-    this.baseUrl = 'https://openrouter.ai/api/v1';
+    // Same override the catalogue and the platform-key path already honour
+    // (openrouter.js). Hardcoding it here meant a deployment pointed at an
+    // OpenAI-compatible proxy — or a test pointed at a fake — had its BYOK
+    // traffic leave for the real vendor while everything else used the proxy.
+    this.baseUrl = trimBase(process.env.OPENROUTER_BASE || 'https://openrouter.ai/api/v1');
   }
   
   async validateCredential(credential) {
@@ -451,7 +466,7 @@ export class OpenRouterAdapter extends ProviderAdapter {
 export class NvidiaAdapter extends ProviderAdapter {
   constructor(credentialVault) {
     super('nvidia', credentialVault);
-    this.baseUrl = 'https://integrate.api.nvidia.com/v1';
+    this.baseUrl = trimBase(process.env.NVIDIA_BASE || 'https://integrate.api.nvidia.com/v1');
   }
   
   async validateCredential(credential) {
