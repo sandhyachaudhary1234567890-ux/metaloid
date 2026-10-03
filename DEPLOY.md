@@ -107,15 +107,33 @@ deployment — editing variables does not retroactively fix a running one.
 3. Verify the deployment, then confirm against the real URL:
 
 ```bash
-node server/tools/preflight.mjs                 # 0 blockers, using the real env
+node server/tools/preflight.mjs --production   # 0 blockers, using the real env
 APP_ORIGIN=https://<production-url> \
   JWT_SECRET=<the gateway's SUPABASE_JWT_SECRET> \
   node scripts/live-smoke.mjs
 ```
 
+For a current asymmetric Supabase project, do not forge HS256 tokens. Supply
+two dedicated smoke-user access tokens through the secure environment instead:
+
+```bash
+APP_ORIGIN=https://<production-url> \
+  LIVE_SMOKE_TOKEN_A=<secure-session-token-a> \
+  LIVE_SMOKE_TOKEN_B=<secure-session-token-b> \
+  node scripts/live-smoke.mjs
+```
+
+The script also supports secure password sign-in for dedicated smoke accounts
+with `LIVE_SMOKE_EMAIL_A/B` and `LIVE_SMOKE_PASSWORD_A/B`, plus
+`SUPABASE_URL` and `SUPABASE_ANON_KEY` in the environment. It never prints
+passwords, access tokens, or provider credentials. A production smoke run must
+use two different real Supabase users so ownership and RLS checks exercise real
+`auth.users` rows.
+
 `live-smoke.mjs` reports `PASS` (exit 0), `FAIL` (exit 1) or `UNVERIFIED`
-(exit 2). **`UNVERIFIED` is not a pass** — it means the target could not be
-reached, so the run proved nothing.
+(exit 2). **`UNVERIFIED` is not a pass** — it means the target or required
+secure authentication setup could not be fully exercised, so the run proved
+nothing.
 
 ## Database bootstrap
 

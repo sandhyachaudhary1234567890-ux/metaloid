@@ -140,7 +140,7 @@ function tiersFor(task) {
  * ENV override first, then same-tier → other tiers, then anything live.
  * Quarantined slugs are never returned.
  */
-export function pickCandidates(models, task, max = 4) {
+export function pickCandidates(models, task, max = 4, preferredModel = '') {
   const live = models.filter((m) => !isQuarantined(m.id));
   const out = [];
   const push = (m) => {
@@ -150,6 +150,11 @@ export function pickCandidates(models, task, max = 4) {
     const envModel = models.find((m) => m.id === ENV_MODEL) || { id: ENV_MODEL, name: ENV_MODEL, tier: task };
     push(envModel);
   }
+  // A signed-in user's saved model is an explicit choice, so honour it before
+  // task-tier ordering when it is still present in the live free catalogue.
+  // Never manufacture a candidate for a stale slug: falling back to the live
+  // free list is safer than sending a retired or paid model to the provider.
+  if (preferredModel) push(live.find((m) => m.id === preferredModel));
   for (const tier of tiersFor(task)) {
     for (const m of live) {
       if (m.tier === tier) push(m);

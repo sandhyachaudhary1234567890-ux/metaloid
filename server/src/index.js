@@ -40,6 +40,7 @@ import { storeUserCredential, getUserCredential, deleteUserCredential, rotateUse
 import { OpenRouterAdapter, NvidiaAdapter, ErrorTypes } from './core/providerAdapter.js';
 import { getAdapter, supportedProviders } from './core/providerAdapters.js';
 import { chatWithProviders } from './core/providerGateway.js';
+import { prefsFor } from './core/accountBridge.js';
 import { providerUsageSummary, deleteProviderUsage } from './core/providerMeters.js';
 import { createRoutingEngine } from './core/providerRouter.js';
 import { getHealthManager, getProviderHealth, recordProviderCall } from './core/providerHealth.js';
@@ -607,7 +608,12 @@ app.post('/api/chat', requireAuth, rateLimit(60, 60000), async (req, res) => {
 
   try {
     const models = await listFreeModels();
-    const candidates = pickCandidates(models, tier, 3);
+    // The account preference must reach the shared platform-key path too. BYOK
+    // routing already reads it through providerGateway; without this bridge a
+    // user who had no connected key saw the saved model in Settings but the
+    // next request silently reverted to task-tier order.
+    const accountPrefs = await prefsFor(userId);
+    const candidates = pickCandidates(models, tier, 3, accountPrefs.defaultModel);
     const model = candidates[0] || pickModel(models, tier);
     usedModel = model.id;
     usedProvider = 'openrouter';
