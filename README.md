@@ -189,7 +189,9 @@ npm run showcase            # landing at /, app at /app/, gateway on 8787
 | Model router | `server/src/openrouter.js` | task routing, failover, dead-slug quarantine, honest errors |
 | Skills & tools | `server/src/skills`, `server/src/tools` | OSINT collectors, research helpers, tool catalogue |
 
-Deeper documents: [`ARCHITECTURE.md`](ARCHITECTURE.md) ·
+Deeper documents: [`docs/ANDROID_API.md`](docs/ANDROID_API.md) (the API contract
+both clients build against, plus measured load characteristics) ·
+[`ARCHITECTURE.md`](ARCHITECTURE.md) ·
 [`VOICE_ARCHITECTURE.md`](VOICE_ARCHITECTURE.md) ·
 [`voicetest/RESULTS.md`](voicetest/RESULTS.md)
 
