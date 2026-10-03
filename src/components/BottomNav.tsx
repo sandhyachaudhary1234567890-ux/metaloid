@@ -29,7 +29,7 @@ export function BottomNav() {
 
   return (
     <nav
-      className="md:hidden fixed bottom-0 inset-x-0 z-40 border-t border-[var(--border)] bg-[var(--surface)]/95 backdrop-blur-xl text-[var(--fg)]"
+      className="md:hidden fixed bottom-0 inset-x-0 z-40 border-t border-[var(--border)] bg-[color-mix(in_srgb,var(--surface)_95%,transparent)] backdrop-blur-xl text-[var(--fg)]"
       style={{ paddingBottom: 'env(safe-area-inset-bottom)' }}
       aria-label="Primary"
     >
@@ -41,7 +41,7 @@ export function BottomNav() {
           <button
             onClick={() => setVoiceOpen(true)}
             aria-label="Start voice mode"
-            className="w-[52px] h-[52px] -mt-1 rounded-full bg-[var(--accent)] text-white flex items-center justify-center shadow-md active:scale-95 transition-transform"
+            className="w-[52px] h-[52px] -mt-1 rounded-full bg-[var(--accent-solid)] text-[var(--accent-on-solid)] flex items-center justify-center shadow-md active:scale-95 transition-transform"
           >
             <Mic size={21} />
           </button>
@@ -64,7 +64,7 @@ function NavBtn({ label, icon: Icon, active, onClick }: { label: string; icon: t
     >
       {active && <motion.span layoutId="mnav-dot" className="absolute top-0 w-5 h-[2px] rounded-full bg-[var(--accent)]" />}
       <Icon size={20} strokeWidth={active ? 2 : 1.7} className={active ? 'text-[var(--accent)]' : 'text-[var(--fg-muted)]'} />
-      <span className={cn('text-[10.5px] font-medium leading-none', active ? 'text-[var(--fg)]' : 'text-[var(--fg-muted)]')}>{label}</span>
+      <span className={cn('text-micro font-medium leading-none', active ? 'text-[var(--fg)]' : 'text-[var(--fg-muted)]')}>{label}</span>
     </button>
   );
 }

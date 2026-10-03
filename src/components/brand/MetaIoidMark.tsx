@@ -1,5 +1,8 @@
 import React from 'react';
 import { cn } from '../../lib/cn';
+import { publicAsset } from './asset';
+
+const MARK_SRC = publicAsset('/brand/metaloid-mark.png');
 
 export interface MetaIoidMarkProps extends React.HTMLAttributes<HTMLElement> {
   size?: number;
@@ -30,8 +33,8 @@ export const MetaIoidMark: React.FC<MetaIoidMarkProps> = ({
         style={{
           width: `${width}px`,
           height: `${height}px`,
-          maskImage: 'url(/brand/metaloid-mark.png)',
-          WebkitMaskImage: 'url(/brand/metaloid-mark.png)',
+          maskImage: `url(${MARK_SRC})`,
+          WebkitMaskImage: `url(${MARK_SRC})`,
           maskSize: 'contain',
           WebkitMaskSize: 'contain',
           maskRepeat: 'no-repeat',
@@ -48,7 +51,7 @@ export const MetaIoidMark: React.FC<MetaIoidMarkProps> = ({
   // Monochrome & default: Direct img with dark:invert ensures 100% foolproof rendering
   return (
     <img
-      src="/brand/metaloid-mark.png"
+      src={MARK_SRC}
       alt={alt}
       style={{ width: `${width}px`, height: `${height}px` }}
       className={cn(

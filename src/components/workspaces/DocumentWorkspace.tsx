@@ -32,14 +32,14 @@ export function DocumentWorkspace({ doc, onClose }: DocumentWorkspaceProps) {
   return (
     <div className={`flex flex-col h-full bg-[var(--surface)] text-[var(--fg)] border-l border-[var(--border)] ${isFullscreen ? 'fixed inset-0 z-50' : 'relative'}`}>
       {/* Header */}
-      <div className="flex items-center justify-between px-4 py-3 border-b border-[var(--border)] bg-[var(--surface-elevated)]/60 backdrop-blur-md">
+      <div className="flex items-center justify-between px-4 py-3 border-b border-[var(--border)] bg-[color-mix(in_srgb,var(--surface-elevated)_60%,transparent)] backdrop-blur-md">
         <div className="flex items-center gap-2.5 min-w-0">
-          <span className="w-7 h-7 rounded-lg bg-[var(--accent)]/10 text-[var(--accent)] flex items-center justify-center shrink-0">
+          <span className="w-7 h-7 rounded-lg bg-[color-mix(in_srgb,var(--accent)_10%,transparent)] text-[var(--accent)] flex items-center justify-center shrink-0">
             <FileText size={15} />
           </span>
           <div className="min-w-0">
-            <h3 className="text-[13.5px] font-semibold text-[var(--fg)] truncate">{doc.title}</h3>
-            <p className="text-[11px] text-[var(--fg-muted)]">Verified Document &middot; Executive Report</p>
+            <h3 className="text-ui font-semibold text-[var(--fg)] truncate">{doc.title}</h3>
+            <p className="text-micro text-[var(--fg-muted)]">Verified Document &middot; Executive Report</p>
           </div>
         </div>
 
@@ -48,7 +48,7 @@ export function DocumentWorkspace({ doc, onClose }: DocumentWorkspaceProps) {
             onClick={handleCopy}
             className="btn-ghost h-8 px-2.5 text-xs rounded-lg inline-flex items-center gap-1.5 text-[var(--fg-muted)] hover:text-[var(--fg)]"
           >
-            {copied ? <Check size={13} className="text-emerald-500" /> : <Copy size={13} />}
+            {copied ? <Check size={13} className="text-success" /> : <Copy size={13} />}
             {copied ? 'Copied' : 'Copy'}
           </button>
           <button
@@ -75,8 +75,8 @@ export function DocumentWorkspace({ doc, onClose }: DocumentWorkspaceProps) {
       {/* Body: TOC + Reading Pane */}
       <div className="flex-1 flex overflow-hidden">
         {/* Table of Contents Column */}
-        <div className="hidden md:block w-48 sm:w-56 border-r border-[var(--border)] overflow-y-auto p-3 space-y-1 bg-[var(--surface-sunken)]/40 shrink-0">
-          <div className="text-[10.5px] font-bold uppercase tracking-wider text-[var(--fg-muted)] px-2 mb-2">
+        <div className="hidden md:block w-48 sm:w-56 border-r border-[var(--border)] overflow-y-auto p-3 space-y-1 bg-[color-mix(in_srgb,var(--surface-sunken)_40%,transparent)] shrink-0">
+          <div className="text-micro font-bold uppercase tracking-wider text-[var(--fg-muted)] px-2 mb-2">
             Contents
           </div>
           {doc.sections.map((sec) => (

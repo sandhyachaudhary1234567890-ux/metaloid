@@ -92,8 +92,14 @@ function sanitizeForPersist(list: Conversation[]): Conversation[] {
 }
 
 export const defaultSettings: AppSettings = {
-  theme: 'warm-paper',
-  accent: '#0d9488', // Restrained emerald / warm earth tone
+  // Obsidian is MetaIoid's signature: warm near-black ink. Light mode is
+  // fully designed and one tap away in Settings, but the first impression
+  // should be the product's own atmosphere.
+  theme: 'obsidian',
+  // Accent is a palette id now, not a hex. See src/design/tokens.ts — the
+  // accent resolves to a *pair* (a luminous text colour and a deep fill),
+  // which is what made badges and buttons legible again.
+  accent: 'jade',
   radius: 'refined',
   density: 'comfortable',
   animations: 'full',
@@ -189,9 +195,13 @@ export const storage = {
     const v1 = read<Partial<AppSettings>>('metaloid.settings.v1', {});
     const merged: AppSettings = { ...defaultSettings, ...v1, ...legacy };
 
-    // Migrate generic indigo default to titanium teal
-    if (merged.accent === '#6366f1') {
-      merged.accent = '#0ea5e9';
+    // Accent migration: older builds stored a raw hex, and shipped two
+    // different defaults (indigo, then a teal that did not exist as a token).
+    // Anything that is not a known palette id becomes Jade, so the accent
+    // always resolves to a legible (text, fill) pair.
+    const KNOWN_ACCENTS = ['jade', 'verdigris', 'amber', 'indigo', 'clay', 'graphite'];
+    if (!KNOWN_ACCENTS.includes(merged.accent)) {
+      merged.accent = 'jade';
     }
     // Migrate legacy 'dark' / 'light' to curated presets if needed
     if (merged.theme === 'dark') {

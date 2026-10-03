@@ -109,23 +109,23 @@ export function ArtifactCard({ artifact, onOpenWorkspace }: ArtifactCardProps) {
   return (
     <div className="mt-3 rounded-2xl border border-[var(--border)] bg-[var(--surface)] p-4 max-w-[440px] shadow-sm select-none">
       <div className="flex items-center gap-3">
-        <span className="w-10 h-10 rounded-xl bg-[var(--accent)]/10 text-[var(--accent)] border border-[var(--border)] flex items-center justify-center shrink-0">
+        <span className="w-10 h-10 rounded-xl bg-[color-mix(in_srgb,var(--accent)_10%,transparent)] text-[var(--accent)] border border-[var(--border)] flex items-center justify-center shrink-0">
           <IconComponent size={18} />
         </span>
         <div className="flex-1 min-w-0">
-          <p className="text-[13.5px] font-semibold text-[var(--fg)] truncate">{artifact.name}</p>
-          <p className="text-[11.5px] text-[var(--fg-muted)]">
+          <p className="text-ui font-semibold text-[var(--fg)] truncate">{artifact.name}</p>
+          <p className="text-micro text-[var(--fg-muted)]">
             {artifact.kind.toUpperCase()}
             {artifact.version ? ` · v${artifact.version}` : ''} &middot; Verified
           </p>
         </div>
         {verified && (
-          <span className="inline-flex items-center gap-1 text-[11px] font-semibold text-emerald-600 dark:text-emerald-400 shrink-0">
+          <span className="inline-flex items-center gap-1 text-micro font-semibold text-success dark:text-success shrink-0">
             <CheckCircle2 size={13} /> Verified
           </span>
         )}
         {failed && (
-          <span className="inline-flex items-center gap-1 text-[11px] font-semibold text-red-500 shrink-0">
+          <span className="inline-flex items-center gap-1 text-micro font-semibold text-danger shrink-0">
             <AlertTriangle size={13} /> Failed
           </span>
         )}
@@ -135,14 +135,14 @@ export function ArtifactCard({ artifact, onOpenWorkspace }: ArtifactCardProps) {
         <button
           onClick={handleOpenWorkspace}
           disabled={!!busy}
-          className="h-8 flex-1 rounded-xl bg-[var(--accent)] text-white text-[12px] font-semibold inline-flex items-center justify-center gap-1.5 hover:opacity-95 transition-opacity disabled:opacity-60"
+          className="h-8 flex-1 rounded-xl bg-[var(--accent-solid)] text-[var(--accent-on-solid)] text-small font-semibold inline-flex items-center justify-center gap-1.5 hover:opacity-95 transition-opacity disabled:opacity-60"
         >
           <Eye size={13} /> {busy === 'open' ? 'Opening…' : 'Open Workspace'}
         </button>
         <button
           onClick={handleDownload}
           disabled={!!busy}
-          className="h-8 flex-1 rounded-xl border border-[var(--border)] text-[12px] font-medium inline-flex items-center justify-center gap-1.5 hover:border-[var(--border-strong)] text-[var(--fg)] disabled:opacity-60 transition-colors"
+          className="h-8 flex-1 rounded-xl border border-[var(--border)] text-small font-medium inline-flex items-center justify-center gap-1.5 hover:border-[var(--border-strong)] text-[var(--fg)] disabled:opacity-60 transition-colors"
         >
           <Download size={13} /> {busy === 'dl' ? 'Saving…' : 'Download'}
         </button>

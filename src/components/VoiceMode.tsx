@@ -237,7 +237,7 @@ export function VoiceMode() {
 
   return (
     <motion.div
-      className="fixed inset-0 z-[70] bg-[var(--bg)]/98 backdrop-blur-2xl flex flex-col text-[var(--fg)]"
+      className="fixed inset-0 z-[70] bg-[color-mix(in_srgb,var(--bg)_98%,transparent)] backdrop-blur-2xl flex flex-col text-[var(--fg)]"
       initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }}
       role="dialog" aria-modal="true" aria-label="Voice mode"
     >
@@ -251,9 +251,9 @@ export function VoiceMode() {
       {fatal ? (
         <div className="flex-1 flex flex-col items-center justify-center px-8 text-center">
           <MetaloidCore status="error" size={140} />
-          <h2 className="mt-6 text-[18px] font-bold">Voice unavailable here</h2>
-          <p className="mt-2 text-[14px] text-[var(--fg-muted)] max-w-[420px]">{fatal}</p>
-          <button onClick={() => { exit(); setView('chat'); }} className="btn-primary h-11 px-6 text-[14px] mt-6">
+          <h2 className="mt-6 text-title font-bold">Voice unavailable here</h2>
+          <p className="mt-2 text-body text-[var(--fg-muted)] max-w-[420px]">{fatal}</p>
+          <button onClick={() => { exit(); setView('chat'); }} className="btn-primary h-11 px-6 text-body mt-6">
             Continue in chat
           </button>
         </div>
@@ -283,10 +283,10 @@ export function VoiceMode() {
             }
             aria-label="Voice orb"
           >
-            <MetaloidCore status={orb} size={180} />
+            <MetaloidCore status={orb} size={180} level={vState === 'MODEL_SPEAKING' || muted ? undefined : micLevel} />
           </button>
-          <h2 className="mt-5 text-[22px] font-bold tracking-tight text-[var(--fg)]" aria-live="polite">{muted ? 'Muted' : label}</h2>
-          <p className="text-[13px] text-[var(--fg-muted)] mt-1.5">
+          <h2 className="mt-6 t-heading text-[var(--fg)]" aria-live="polite">{muted ? 'Muted' : label}</h2>
+          <p className="mt-1.5 text-body text-[var(--fg-muted)]">
             {settings.defaultLanguage === 'hi' ? 'बोलिए — बीच में रोक सकते हैं' : 'Speak — interrupt me any time'}
           </p>
 
@@ -296,19 +296,21 @@ export function VoiceMode() {
               color={vState === 'USER_SPEAKING' ? 'emerald' : 'indigo'}
               level={vState === 'MODEL_SPEAKING' || muted ? undefined : micLevel}
             />
-            <p className="mt-1 text-[11.5px] text-[var(--fg-subtle)]">
-              {vState === 'USER_SPEAKING' ? 'Hearing you — dynamic audio level' : 'Acoustic waveform mirrors your live mic input'}
-            </p>
+            {/* A diagnostic readout, not product copy — only shown when the
+                microphone is genuinely the thing in question. */}
+            {vState === 'USER_SPEAKING' && (
+              <p className="mt-2 text-small text-[var(--fg-subtle)]">Hearing you</p>
+            )}
           </div>
 
           {/* silence alarm */}
           <AnimatePresence>
             {silentAlarm && (
-              <motion.div initial={{ opacity: 0, y: 8 }} animate={{ opacity: 1, y: 0 }} className="mt-3 max-w-[480px] w-full rounded-2xl border border-amber-500/25 bg-amber-500/[0.06] px-5 py-3.5 text-left" role="alert">
-                <p className="text-[13.5px] font-semibold text-amber-300">
+              <motion.div initial={{ opacity: 0, y: 8 }} animate={{ opacity: 1, y: 0 }} className="mt-3 max-w-[480px] w-full rounded-2xl border border-warning/25 bg-warning/5 px-5 py-3.5 text-left" role="alert">
+                <p className="text-ui font-semibold text-warning">
                   {micGone ? 'Microphone disconnected' : dbg?.micMuted ? 'Microphone muted by the system' : 'Microphone is silent'}
                 </p>
-                <p className="mt-1 text-[12.5px] leading-relaxed text-[var(--fg-muted)]">
+                <p className="mt-1 text-small leading-relaxed text-[var(--fg-muted)]">
                   {micGone
                     ? 'The mic track ended. Close and reopen voice mode.'
                     : dbg?.micMuted
@@ -323,8 +325,8 @@ export function VoiceMode() {
           <AnimatePresence>
             {(partial || heard) && (
               <motion.div initial={{ opacity: 0, y: 8 }} animate={{ opacity: 1, y: 0 }} className="mt-3 max-w-[480px] w-full rounded-2xl border border-[var(--border)] bg-[var(--surface-elevated)] px-5 py-3.5 text-left">
-                {heard && <p className="text-[14px] text-[var(--fg)]">“{heard}”</p>}
-                {partial && <p className="text-[14px] text-[var(--fg-muted)] italic mt-1">{partial}…</p>}
+                {heard && <p className="text-body text-[var(--fg)]">“{heard}”</p>}
+                {partial && <p className="text-body text-[var(--fg-muted)] italic mt-1">{partial}…</p>}
               </motion.div>
             )}
           </AnimatePresence>
@@ -341,8 +343,8 @@ export function VoiceMode() {
           {/* audible failure — never go silently quiet */}
           <AnimatePresence>
             {replyError && !reply && (
-              <motion.div initial={{ opacity: 0, y: 8 }} animate={{ opacity: 1, y: 0 }} className="mt-2.5 max-w-[480px] w-full rounded-2xl border border-red-500/25 bg-red-500/[0.07] px-5 py-3.5 text-left" role="alert">
-                <p className="text-[13.5px] text-red-200">{replyError}</p>
+              <motion.div initial={{ opacity: 0, y: 8 }} animate={{ opacity: 1, y: 0 }} className="mt-2.5 max-w-[480px] w-full rounded-2xl border border-danger/25 bg-danger/7 px-5 py-3.5 text-left" role="alert">
+                <p className="text-ui text-danger">{replyError}</p>
               </motion.div>
             )}
           </AnimatePresence>
@@ -351,14 +353,14 @@ export function VoiceMode() {
           <div className="mt-4">
             <button
               onClick={() => setShowLatency((s) => !s)}
-              className="inline-flex items-center gap-1.5 text-[12px] text-[var(--fg-muted)] hover:text-[var(--fg)]"
+              className="inline-flex items-center gap-1.5 text-small text-[var(--fg-muted)] hover:text-[var(--fg)]"
               aria-expanded={showLatency}
             >
               <Activity size={13} /> {latency ? formatLatency(latency) : 'latency appears after a turn'}
               <ChevronDown size={13} className={cn('transition-transform', showLatency && 'rotate-180')} />
             </button>
             {showLatency && (
-              <p className="mt-1.5 text-[11.5px] text-[var(--fg-muted)] max-w-[420px]">
+              <p className="mt-1.5 text-micro text-[var(--fg-muted)] max-w-[420px]">
                 Measured on-device timings for this session. Barge-in counts speech-detect → audio-stop.
               </p>
             )}
@@ -368,7 +370,7 @@ export function VoiceMode() {
           <div className="mt-2.5">
             <button
               onClick={() => setShowPipe((s) => !s)}
-              className="inline-flex items-center gap-1.5 text-[12px] text-[var(--fg-muted)] hover:text-[var(--fg)]"
+              className="inline-flex items-center gap-1.5 text-small text-[var(--fg-muted)] hover:text-[var(--fg)]"
               aria-expanded={showPipe}
             >
               <Gauge size={13} /> Pipeline
@@ -377,19 +379,19 @@ export function VoiceMode() {
             {showPipe && (
               <div className="mt-2 w-full max-w-[440px] rounded-xl border border-[var(--border)] bg-[var(--surface-sunken)] px-4 py-3">
                 {!dbg ? (
-                  <p className="text-[12.5px] text-[var(--fg-muted)]">Starting session…</p>
+                  <p className="text-small text-[var(--fg-muted)]">Starting session…</p>
                 ) : (
                   <ul className="space-y-1.5">
                     {(['MIC', 'VAD', 'STT', 'TURN', 'LLM', 'TTS', 'PLAYBACK'] as const).map((id) => {
                       const st = dbg.stages[id];
                       return (
-                        <li key={id} className="flex items-center gap-2.5 text-[12px]">
+                        <li key={id} className="flex items-center gap-2.5 text-small">
                           <span
                             className={cn(
                               'w-2 h-2 rounded-full shrink-0',
-                              st.status === 'ok' && 'bg-emerald-400',
+                              st.status === 'ok' && 'bg-success/10',
                               st.status === 'active' && 'bg-[var(--accent)] animate-pulse',
-                              st.status === 'dead' && 'bg-red-400',
+                              st.status === 'dead' && 'bg-danger/10',
                               st.status === 'idle' && 'bg-[var(--fg-subtle)]'
                             )}
                           />
@@ -400,7 +402,7 @@ export function VoiceMode() {
                     })}
                   </ul>
                 )}
-                <p className="mt-2 text-[11px] text-[var(--fg-muted)]">Dead layer = exact fault location. Green = flowing.</p>
+                <p className="mt-2 text-micro text-[var(--fg-muted)]">Dead layer = exact fault location. Green = flowing.</p>
                 {dbg?.acoustic && <AcousticBlock dbg={dbg} />}
               </div>
             )}
@@ -410,7 +412,7 @@ export function VoiceMode() {
           <div className="mt-2.5">
             <button
               onClick={() => setShowCheck((s) => !s)}
-              className="inline-flex items-center gap-1.5 text-[12px] text-[var(--fg-muted)] hover:text-[var(--fg)]"
+              className="inline-flex items-center gap-1.5 text-small text-[var(--fg-muted)] hover:text-[var(--fg)]"
               aria-expanded={showCheck}
             >
               <Stethoscope size={13} /> Mic check
@@ -419,9 +421,9 @@ export function VoiceMode() {
             {showCheck && (
               <div className="mt-2 w-full max-w-[440px] rounded-xl border border-[var(--border)] bg-[var(--surface-sunken)] px-4 py-3 text-left">
                 {!dbg ? (
-                  <p className="text-[12.5px] text-[var(--fg-muted)]">Starting session…</p>
+                  <p className="text-small text-[var(--fg-muted)]">Starting session…</p>
                 ) : (
-                  <dl className="grid grid-cols-2 gap-x-4 gap-y-1.5 text-[12px]">
+                  <dl className="grid grid-cols-2 gap-x-4 gap-y-1.5 text-small">
                     <CheckRow k="Mic track" v={dbg.micTracks === 0 ? 'none!' : dbg.micLive ? 'live' : 'ended!'} bad={dbg.micTracks === 0 || !dbg.micLive} />
                     <CheckRow k="Mic enabled" v={dbg.micEnabled ? (dbg.micMuted ? 'muted!' : 'yes') : 'off!'} bad={!dbg.micEnabled || dbg.micMuted} />
                     <CheckRow k="Peak level" v={`${dbg.peak}% (3s: ${dbg.recentPeak}%)${dbg.recentPeak < 1 ? ' — silent!' : ''}`} bad={dbg.recentPeak < 1} />
@@ -431,10 +433,10 @@ export function VoiceMode() {
                     <CheckRow k="State" v={`${vState} · gen ${dbg.generation}`} />
                   </dl>
                 )}
-                {dbg?.micLabel ? <p className="mt-1.5 text-[11px] text-[var(--fg-muted)] truncate">Input: {dbg.micLabel}</p> : null}
-                <p className="mt-1.5 text-[11px] text-[var(--fg-muted)]">Speak while watching Peak — healthy speech reads 3–60%. Stuck at 0% means the OS/browser gives us silence.</p>
+                {dbg?.micLabel ? <p className="mt-1.5 text-micro text-[var(--fg-muted)] truncate">Input: {dbg.micLabel}</p> : null}
+                <p className="mt-1.5 text-micro text-[var(--fg-muted)]">Speak while watching Peak — healthy speech reads 3–60%. Stuck at 0% means the OS/browser gives us silence.</p>
                 {dbg?.acoustic && (
-                  <p className="mt-1.5 text-[11px] text-[var(--fg-muted)] font-mono">
+                  <p className="mt-1.5 text-micro text-[var(--fg-muted)] font-mono">
                     AEC:{String(dbg.acoustic.constraints.aec)} NS:{String(dbg.acoustic.constraints.ns)} AGC:{String(dbg.acoustic.constraints.agc)}
                     {dbg.acoustic.constraints.sampleRate ? ` ${Math.round(dbg.acoustic.constraints.sampleRate / 100) / 10}kHz` : ''}
                     {dbg.acoustic.constraints.channels ? ` ${dbg.acoustic.constraints.channels}ch` : ''}
@@ -444,7 +446,7 @@ export function VoiceMode() {
                 <div className="mt-2 flex gap-2">
                   <button
                     onClick={() => sessionRef.current?.testSpeaker()}
-                    className="btn-ghost h-9 px-3 text-[12.5px] flex-1"
+                    className="btn-ghost h-9 px-3 text-small flex-1"
                   >
                     Test speaker
                   </button>
@@ -458,7 +460,7 @@ export function VoiceMode() {
                       a.click();
                       URL.revokeObjectURL(a.href);
                     }}
-                    className="btn-ghost h-9 px-3 text-[12.5px] flex-1"
+                    className="btn-ghost h-9 px-3 text-small flex-1"
                     title="Decision chain + acoustic events (no raw audio, dev only)"
                   >
                     Export incidents
@@ -483,7 +485,7 @@ export function VoiceMode() {
               aria-label="Hold to talk"
               style={{ touchAction: 'none' }}
               className={cn(
-                'w-full h-12 rounded-xl border flex items-center justify-center gap-2.5 text-[13.5px] font-medium transition-all select-none',
+                'w-full h-12 rounded-xl border flex items-center justify-center gap-2.5 text-ui font-medium transition-all select-none',
                 holding
                   ? 'border-[var(--accent)] bg-[var(--accent-subtle)] text-[var(--accent)] scale-[0.99]'
                   : 'border-[var(--border)] bg-[var(--surface)] text-[var(--fg)] hover:bg-[var(--surface-hover)] active:scale-[0.99]'
@@ -498,7 +500,7 @@ export function VoiceMode() {
             <CtrlBtn label="Open camera (Live)" onClick={() => { exit(); setView('live'); }} Icon={Video} />
             <button
               onClick={() => { exit(); setView('chat'); }}
-              className="h-[48px] rounded-xl bg-[var(--surface)] border border-[var(--border)] hover:bg-[var(--surface-hover)] text-[var(--fg)] flex items-center px-4 text-[13.5px] font-medium transition-all"
+              className="h-[48px] rounded-xl bg-[var(--surface)] border border-[var(--border)] hover:bg-[var(--surface-hover)] text-[var(--fg)] flex items-center px-4 text-ui font-medium transition-all"
             >
               View chat
             </button>
@@ -511,11 +513,11 @@ export function VoiceMode() {
 }
 
 function SpokenText({ full, current }: { full: string; current: string }) {
-  if (!current) return <p className="text-[14px] leading-relaxed text-[var(--fg)]">{full}</p>;
+  if (!current) return <p className="text-body leading-relaxed text-[var(--fg)]">{full}</p>;
   const i = full.indexOf(current);
-  if (i < 0) return <p className="text-[14px] leading-relaxed text-[var(--fg)]">{full}</p>;
+  if (i < 0) return <p className="text-body leading-relaxed text-[var(--fg)]">{full}</p>;
   return (
-    <p className="text-[14px] leading-relaxed text-[var(--fg-muted)]" aria-live="polite">
+    <p className="text-body leading-relaxed text-[var(--fg-muted)]" aria-live="polite">
       {full.slice(0, i)}
       <span className="text-[var(--fg)] bg-[var(--accent-subtle)] rounded px-0.5">{current}</span>
       {full.slice(i + current.length)}
@@ -534,29 +536,29 @@ function AcousticBlock({ dbg }: { dbg: Dbg }) {
   const on = (b: boolean) => (b ? 'text-[var(--accent)]' : 'text-[var(--fg-muted)]');
   return (
     <div className="mt-2.5 rounded-xl border border-[var(--border)] bg-[var(--surface)] px-3.5 py-2.5">
-      <div className="text-[10px] font-semibold tracking-[0.18em] text-[var(--fg-muted)] uppercase mb-1.5">ACOUSTICS</div>
-      <dl className="grid grid-cols-2 gap-x-4 gap-y-1 text-[12px]">
+      <div className="text-micro font-semibold tracking-[0.18em] text-[var(--fg-muted)] uppercase mb-1.5">ACOUSTICS</div>
+      <dl className="grid grid-cols-2 gap-x-4 gap-y-1 text-small">
         <div className="flex items-center justify-between gap-2"><dt className="text-[var(--fg-muted)]">Noise floor</dt><dd className="font-mono text-[var(--fg)]">{s.noiseFloorDb.toFixed(0)} dBFS</dd></div>
         <div className="flex items-center justify-between gap-2"><dt className="text-[var(--fg-muted)]">SNR</dt><dd className="font-mono text-[var(--fg)]">{s.snrDb.toFixed(0)} dB{s.clipped ? ' CLIP!' : ''}</dd></div>
         <div className="flex items-center justify-between gap-2"><dt className="text-[var(--fg-muted)]">Environment</dt><dd className="font-mono text-[var(--fg)]">{s.env}</dd></div>
         <div className="flex items-center justify-between gap-2"><dt className="text-[var(--fg-muted)]">VAD floor</dt><dd className="font-mono text-[var(--fg-muted)]" title={s.vadReason}>{s.vadThreshold.toFixed(4)}</dd></div>
         <div className="flex items-center justify-between gap-2"><dt className="text-[var(--fg-muted)]">Primary</dt><dd className={cn('font-mono', on(s.primaryProb > 0.5))}>{pct(s.primaryProb)}</dd></div>
-        <div className="flex items-center justify-between gap-2"><dt className="text-[var(--fg-muted)]">Echo</dt><dd className={cn('font-mono', s.echoProb > 0.5 ? 'text-amber-400' : 'text-[var(--fg-muted)]')}>{pct(s.echoProb)}</dd></div>
+        <div className="flex items-center justify-between gap-2"><dt className="text-[var(--fg-muted)]">Echo</dt><dd className={cn('font-mono', s.echoProb > 0.5 ? 'text-warning' : 'text-[var(--fg-muted)]')}>{pct(s.echoProb)}</dd></div>
         <div className="flex items-center justify-between gap-2"><dt className="text-[var(--fg-muted)]">Music</dt><dd className={cn('font-mono', on(s.music))}>{s.music ? 'yes' : '—'}</dd></div>
         <div className="flex items-center justify-between gap-2"><dt className="text-[var(--fg-muted)]">Bg speech</dt><dd className={cn('font-mono', on(s.backgroundSpeech))}>{s.backgroundSpeech ? 'yes' : '—'}</dd></div>
         {dbg.speakerConsistency && (
           <div className="flex items-center justify-between gap-2"><dt className="text-[var(--fg-muted)]">Sound gate</dt><dd className="font-mono text-[var(--accent)]">{dbg.speakerConsistency.diagnosticClass}</dd></div>
         )}
         {dbg.bargeInMetrics?.p95BargeInMs !== null && dbg.bargeInMetrics?.p95BargeInMs !== undefined && (
-          <div className="flex items-center justify-between gap-2"><dt className="text-[var(--fg-muted)]">Barge p95</dt><dd className="font-mono text-emerald-400">{dbg.bargeInMetrics.p95BargeInMs}ms</dd></div>
+          <div className="flex items-center justify-between gap-2"><dt className="text-[var(--fg-muted)]">Barge p95</dt><dd className="font-mono text-success">{dbg.bargeInMetrics.p95BargeInMs}ms</dd></div>
         )}
       </dl>
-      <div className="mt-1.5 flex items-center justify-between gap-2 text-[12px]">
+      <div className="mt-1.5 flex items-center justify-between gap-2 text-small">
         <span className="text-[var(--fg-muted)]">Buffer</span>
         <span className="font-mono text-[var(--fg-muted)]">{dbg.pending} chunks · lookahead {dbg.lookaheadLimit || 1}</span>
       </div>
       {s.recentEvents.length > 0 && (
-        <p className="mt-1 text-[11px] font-mono text-[var(--fg-muted)] truncate" title={s.recentEvents.map((e) => e.type).join(', ')}>
+        <p className="mt-1 text-micro font-mono text-[var(--fg-muted)] truncate" title={s.recentEvents.map((e) => e.type).join(', ')}>
           {s.recentEvents.slice(0, 3).map((e) => e.type).join(' → ')}
         </p>
       )}
@@ -568,7 +570,7 @@ function CheckRow({ k, v, bad }: { k: string; v: string; bad?: boolean }) {
   return (
     <div className="flex items-center justify-between gap-2 min-w-0">
       <dt className="text-[var(--fg-muted)] shrink-0">{k}</dt>
-      <dd className={cn('truncate font-mono', bad ? 'text-amber-400' : 'text-[var(--fg)]')}>{v}</dd>
+      <dd className={cn('truncate font-mono', bad ? 'text-warning' : 'text-[var(--fg)]')}>{v}</dd>
     </div>
   );
 }
@@ -579,8 +581,8 @@ function CtrlBtn({ label, onClick, Icon, off, danger }: { label: string; onClick
       onClick={onClick} title={label} aria-label={label}
       className={cn(
         'w-[48px] h-[48px] min-w-[48px] rounded-xl border flex items-center justify-center transition-all active:scale-95',
-        danger ? 'border-red-500/25 bg-red-500/10 text-red-400 hover:bg-red-500/20'
-          : off ? 'border-amber-500/30 bg-amber-500/10 text-amber-300'
+        danger ? 'border-danger/25 bg-danger/10 text-danger hover:bg-danger/20'
+          : off ? 'border-warning/30 bg-warning/10 text-warning'
           : 'border-[var(--border)] bg-[var(--surface)] text-[var(--fg)] hover:bg-[var(--surface-hover)]'
       )}
     ><Icon size={18} /></button>

@@ -52,7 +52,7 @@ export function MessageActions({
         onClick={copy}
         active={copied}
       >
-        {copied ? <Check size={13} className="text-emerald-400" /> : <Copy size={13} />}
+        {copied ? <Check size={13} className="text-success" /> : <Copy size={13} />}
       </ActBtn>
       {isLast && (
         <ActBtn label="Regenerate response" onClick={onRegenerate}>
@@ -71,7 +71,7 @@ export function MessageActions({
         onClick={() => onFeedback(feedback === 'down' ? null : 'down')}
         active={feedback === 'down'}
       >
-        <ThumbsDown size={13} className={feedback === 'down' ? 'text-red-400' : undefined} fill={feedback === 'down' ? 'currentColor' : 'none'} />
+        <ThumbsDown size={13} className={feedback === 'down' ? 'text-danger' : undefined} fill={feedback === 'down' ? 'currentColor' : 'none'} />
       </ActBtn>
       <div className="relative">
         <ActBtn label="More actions" onClick={() => setMoreOpen((o) => !o)} active={moreOpen}>
@@ -92,14 +92,14 @@ export function MessageActions({
                 <button
                   role="menuitem"
                   onClick={() => { setMoreOpen(false); speakMessage(content); }}
-                  className="w-full flex items-center gap-2.5 px-2.5 py-2 rounded-lg text-[13px] text-[var(--fg)] hover:bg-[var(--surface-hover)]"
+                  className="w-full flex items-center gap-2.5 px-2.5 py-2 rounded-lg text-ui text-[var(--fg)] hover:bg-[var(--surface-hover)]"
                 >
                   <Volume2 size={14} className="text-[var(--fg-muted)]" /> Speak aloud
                 </button>
                 <button
                   role="menuitem"
                   onClick={() => { setMoreOpen(false); copy(); }}
-                  className="w-full flex items-center gap-2.5 px-2.5 py-2 rounded-lg text-[13px] text-[var(--fg)] hover:bg-[var(--surface-hover)]"
+                  className="w-full flex items-center gap-2.5 px-2.5 py-2 rounded-lg text-ui text-[var(--fg)] hover:bg-[var(--surface-hover)]"
                 >
                   <Copy size={14} className="text-[var(--fg-muted)]" /> Copy text
                 </button>
@@ -109,7 +109,7 @@ export function MessageActions({
         </AnimatePresence>
       </div>
       {total > 1 && (
-        <span className="ml-2 inline-flex items-center gap-1 text-[11.5px] text-[var(--fg-muted)]" aria-label={`Version ${shownIndex + 1} of ${total}`}>
+        <span className="ml-2 inline-flex items-center gap-1 text-micro text-[var(--fg-muted)]" aria-label={`Version ${shownIndex + 1} of ${total}`}>
           <button
             onClick={() => onVersion(Math.max(0, shownIndex - 1))}
             disabled={shownIndex === 0}

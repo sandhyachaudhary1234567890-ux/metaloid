@@ -48,7 +48,7 @@ export function VoiceVisualizer({
           key={i}
           className={cn(
             'w-[3px] rounded-full transition-all duration-150',
-            color === 'emerald' ? 'bg-emerald-300/80' : 'bg-indigo-300/80'
+            color === 'emerald' ? 'bg-success/80' : 'bg-info/80'
           )}
           style={{ height: `${Math.max(4, Math.min(1.2, l) * 44)}px`, opacity: 0.35 + Math.min(1, l) * 0.65 }}
         />

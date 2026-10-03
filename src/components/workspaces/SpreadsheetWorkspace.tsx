@@ -28,14 +28,14 @@ export function SpreadsheetWorkspace({ sheet, onClose }: SpreadsheetWorkspacePro
   return (
     <div className={`flex flex-col h-full bg-[var(--surface)] text-[var(--fg)] border-l border-[var(--border)] ${isFullscreen ? 'fixed inset-0 z-50' : 'relative'}`}>
       {/* Header */}
-      <div className="flex items-center justify-between px-4 py-3 border-b border-[var(--border)] bg-[var(--surface-elevated)]/60 backdrop-blur-md">
+      <div className="flex items-center justify-between px-4 py-3 border-b border-[var(--border)] bg-[color-mix(in_srgb,var(--surface-elevated)_60%,transparent)] backdrop-blur-md">
         <div className="flex items-center gap-2.5 min-w-0">
-          <span className="w-7 h-7 rounded-lg bg-[var(--accent)]/10 text-[var(--accent)] flex items-center justify-center shrink-0">
+          <span className="w-7 h-7 rounded-lg bg-[color-mix(in_srgb,var(--accent)_10%,transparent)] text-[var(--accent)] flex items-center justify-center shrink-0">
             <Table size={15} />
           </span>
           <div className="min-w-0">
-            <h3 className="text-[13.5px] font-semibold text-[var(--fg)] truncate">{sheet.title}</h3>
-            <p className="text-[11px] text-[var(--fg-muted)]">
+            <h3 className="text-ui font-semibold text-[var(--fg)] truncate">{sheet.title}</h3>
+            <p className="text-micro text-[var(--fg-muted)]">
               {sheet.rows.length} rows &middot; {sheet.columns.length} columns &middot; Spreadsheet Workspace
             </p>
           </div>
@@ -65,10 +65,10 @@ export function SpreadsheetWorkspace({ sheet, onClose }: SpreadsheetWorkspacePro
 
       {/* Summary KPI Bar */}
       {sheet.summary && (
-        <div className="grid grid-cols-2 sm:grid-cols-4 gap-2.5 p-3.5 bg-[var(--surface-sunken)]/40 border-b border-[var(--border)] text-xs">
+        <div className="grid grid-cols-2 sm:grid-cols-4 gap-2.5 p-3.5 bg-[color-mix(in_srgb,var(--surface-sunken)_40%,transparent)] border-b border-[var(--border)] text-xs">
           {Object.entries(sheet.summary).map(([k, v]) => (
             <div key={k} className="p-2.5 rounded-xl border border-[var(--border)] bg-[var(--surface)]">
-              <span className="text-[10.5px] text-[var(--fg-muted)] uppercase tracking-wider block font-medium">
+              <span className="text-micro text-[var(--fg-muted)] uppercase tracking-wider block font-medium">
                 {k}
               </span>
               <span className="text-sm font-semibold text-[var(--fg)] mt-0.5 block">{v}</span>

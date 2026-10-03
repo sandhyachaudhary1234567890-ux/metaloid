@@ -1,5 +1,5 @@
 // METALOID product types — single source of truth for domain shapes.
-// Primary IA: home · chat · live · memory · history · settings
+// Primary IA: chat · live · memory · history · settings
 // Tools are contextual (drawers / inline cards), never a route.
 
 export type AgentStatus =
@@ -18,7 +18,7 @@ export type LanguageId =
 export type ModelId = 'auto' | 'fast' | 'balanced' | 'smart' | 'vision';
 
 export type ViewId =
-  | 'home' | 'chat' | 'live' | 'memory' | 'history' | 'settings'
+  | 'chat' | 'live' | 'memory' | 'history' | 'settings'
   // master-line surfaces, seamed into the polished shell rather than dropped
   | 'projects' | 'library' | 'research' | 'tasks';
 

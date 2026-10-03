@@ -76,18 +76,20 @@ describe('app shell', () => {
     expect(screen.getAllByLabelText('Talk to MetaIoid').length).toBeGreaterThan(0);
   });
 
-  it('reflects connection state in the sidebar without inventing ONLINE', async () => {
+  // Connection is reported in the product's voice — a human phrase, not the
+  // caps-lock system monitor (ONLINE / SANDBOX / DEGRADED) it used to shout.
+  it('reflects connection state in the sidebar without inventing a live provider', async () => {
     vi.stubGlobal('fetch', vi.fn(() => Promise.reject(new Error('offline'))));
     mount();
-    await waitFor(() => expect(screen.getAllByText(/LOCAL DEMO/i).length).toBeGreaterThan(0));
+    await waitFor(() => expect(screen.getAllByText(/Offline/i).length).toBeGreaterThan(0));
   });
 
-  it('shows ONLINE only for a reachable real provider', async () => {
+  it('says Connected only for a reachable real provider', async () => {
     mount();
-    await waitFor(() => expect(screen.getAllByText(/ONLINE/i).length).toBeGreaterThan(0), { timeout: 4000 });
+    await waitFor(() => expect(screen.getAllByText(/Connected/i).length).toBeGreaterThan(0), { timeout: 4000 });
   });
 
-  it('shows SANDBOX for a mock provider', async () => {
+  it('says Demo mode for a mock provider', async () => {
     vi.stubGlobal('fetch', vi.fn((url: string) => {
       if (String(url).includes('/api/health')) {
         return Promise.resolve(new Response(JSON.stringify({ ...health, provider: 'local-mock' }), {
@@ -97,7 +99,7 @@ describe('app shell', () => {
       return Promise.resolve(new Response('{}', { headers: { 'Content-Type': 'application/json' } }));
     }));
     mount();
-    await waitFor(() => expect(screen.getAllByText(/SANDBOX/i).length).toBeGreaterThan(0), { timeout: 4000 });
+    await waitFor(() => expect(screen.getAllByText(/Demo mode/i).length).toBeGreaterThan(0), { timeout: 4000 });
   });
 });
 
@@ -137,7 +139,7 @@ describe('every screen renders without crashing', () => {
 
   it('Memory vault is reachable from Settings', async () => {
     await open('Settings');
-    const vault = await waitFor(() => screen.getByText('Open Memory Vault'), { timeout: 4000 });
+    const vault = await waitFor(() => screen.getByLabelText('Open memory vault'), { timeout: 4000 });
     fireEvent.click(vault);
     await waitFor(() => expect(document.body.textContent).toMatch(/memory/i), { timeout: 4000 });
   });
@@ -149,7 +151,7 @@ describe('every screen renders without crashing', () => {
 
   it('Settings renders and exposes the gateway URL control', async () => {
     await open('Settings');
-    await waitFor(() => expect(screen.getByLabelText('Backend URL')).toBeTruthy(), { timeout: 4000 });
+    await waitFor(() => expect(screen.getByLabelText('Gateway address')).toBeTruthy(), { timeout: 4000 });
   });
 
   it('Live degrades gracefully with no camera available (jsdom has none)', async () => {

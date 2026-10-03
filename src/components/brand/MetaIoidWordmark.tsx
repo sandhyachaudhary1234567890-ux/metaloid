@@ -1,5 +1,8 @@
 import React from 'react';
 import { cn } from '../../lib/cn';
+import { publicAsset } from './asset';
+
+const WORDMARK_SRC = publicAsset('/brand/metaloid-wordmark.png');
 
 export interface MetaIoidWordmarkProps extends React.HTMLAttributes<HTMLElement> {
   height?: number;
@@ -29,8 +32,8 @@ export const MetaIoidWordmark: React.FC<MetaIoidWordmarkProps> = ({
         style={{
           height: `${height}px`,
           width: `${width}px`,
-          maskImage: 'url(/brand/metaloid-wordmark.png)',
-          WebkitMaskImage: 'url(/brand/metaloid-wordmark.png)',
+          maskImage: `url(${WORDMARK_SRC})`,
+          WebkitMaskImage: `url(${WORDMARK_SRC})`,
           maskSize: 'contain',
           WebkitMaskSize: 'contain',
           maskRepeat: 'no-repeat',
@@ -47,7 +50,7 @@ export const MetaIoidWordmark: React.FC<MetaIoidWordmarkProps> = ({
   // Monochrome & default: Direct img with dark:invert ensures 100% foolproof rendering
   return (
     <img
-      src="/brand/metaloid-wordmark.png"
+      src={WORDMARK_SRC}
       alt={alt}
       style={{ height: `${height}px`, width: `${width}px` }}
       className={cn(

@@ -19,7 +19,6 @@ import { LiveScreen } from './screens/LiveScreen';
 import { MemoryScreen } from './screens/MemoryScreen';
 import { HistoryScreen } from './screens/HistoryScreen';
 import { SettingsScreen } from './screens/SettingsScreen';
-import { HomeScreen } from './screens/HomeScreen';
 import { WorkspaceScreen } from './screens/WorkspaceScreen';
 import { WifiOff, X, Archive, Library, Telescope, CheckCircle2 } from 'lucide-react';
 
@@ -30,7 +29,7 @@ import { SyncProvider } from './lib/sync';
 
 function MobileTopBar({ onMore, moreOpen }: { onMore: () => void; moreOpen: boolean }) {
   return (
-    <div className="md:hidden sticky top-0 z-30 border-b border-[var(--border)] bg-[var(--surface)]/90 backdrop-blur-md">
+    <div className="md:hidden sticky top-0 z-30 border-b border-[var(--border)] bg-[color-mix(in_srgb,var(--surface)_90%,transparent)] backdrop-blur-md">
       <div className="px-4 h-[52px] flex items-center gap-2.5">
         <button onClick={() => onMore()} aria-label={moreOpen ? 'Close menu' : 'More'} aria-expanded={moreOpen}
           className="w-9 h-9 -ml-1 rounded-lg flex items-center justify-center text-[var(--fg-muted)] hover:text-[var(--fg)]">
@@ -77,22 +76,22 @@ function MobileMoreSheet({ open, onClose }: { open: boolean; onClose: () => void
             className="md:hidden fixed inset-x-0 bottom-0 z-50 rounded-t-2xl border-t border-[var(--border)] bg-[var(--surface)] p-4 pb-8"
             style={{ paddingBottom: 'max(2rem, env(safe-area-inset-bottom))' }}
           >
-            <p className="text-[11px] font-semibold uppercase tracking-wider text-[var(--fg-faint)]">Workspace</p>
+            <p className="text-micro font-semibold uppercase tracking-wider text-[var(--fg-faint)]">Workspace</p>
             <div className="mt-2 grid grid-cols-2 gap-2">
               {WORKSPACE_ITEMS.map((w) => (
                 <button key={w.id} onClick={() => go(w.id)}
                   className="flex items-start gap-2.5 rounded-xl border border-[var(--border)] bg-[var(--surface-sunken)] p-3 text-left">
                   <w.icon size={16} className="mt-0.5 text-[var(--accent)]" />
                   <span className="min-w-0">
-                    <span className="block text-[13.5px] font-medium text-[var(--fg)]">{w.label}</span>
-                    <span className="block text-[11.5px] text-[var(--fg-muted)]">{w.hint}</span>
+                    <span className="block text-ui font-medium text-[var(--fg)]">{w.label}</span>
+                    <span className="block text-micro text-[var(--fg-muted)]">{w.hint}</span>
                   </span>
                 </button>
               ))}
             </div>
             <button
               onClick={() => { setSkillsOpen(true); onClose(); }}
-              className="mt-3 w-full h-11 rounded-xl border border-[var(--border)] text-[13.5px] font-medium text-[var(--fg)]"
+              className="mt-3 w-full h-11 rounded-xl border border-[var(--border)] text-ui font-medium text-[var(--fg)]"
             >
               Skills
             </button>
@@ -132,12 +131,11 @@ function AppShell() {
   useEffect(() => {
     if (prevViewRef.current !== view) {
       prevViewRef.current = view;
-      MetaIoidFavicon.setDocumentTitle(view === 'chat' || view === 'home' ? undefined : view.charAt(0).toUpperCase() + view.slice(1));
+      MetaIoidFavicon.setDocumentTitle(view === 'chat' ? undefined : view.charAt(0).toUpperCase() + view.slice(1));
     }
   }, [view]);
 
   const meta: Record<string, { title: string; sub: string }> = {
-    home: { title: 'Home', sub: 'Start here' },
     live: { title: 'Live', sub: 'Camera vision feed' },
     memory: { title: 'Memory Vault', sub: 'Personal durable context' },
     history: { title: 'History', sub: 'Past conversations' },
@@ -155,7 +153,7 @@ function AppShell() {
         <div className="h-full flex items-center justify-center bg-[var(--bg)] text-[var(--fg-muted)]">
           <div className="flex flex-col items-center gap-3">
             <div className="h-8 w-8 rounded-full border-2 border-[var(--border)] border-t-[var(--accent)] animate-spin" />
-            <span className="text-[12.5px] tracking-wide">Restoring your session…</span>
+            <span className="text-small tracking-wide">Restoring your session…</span>
           </div>
         </div>
       );
@@ -176,20 +174,20 @@ function AppShell() {
         )}
         {view !== 'chat' && (
           <div className="md:hidden px-4 pt-4">
-            <h1 className="text-[20px] font-bold tracking-tight text-[var(--fg)]">{head.title}</h1>
-            <p className="text-[12.5px] text-[var(--fg-muted)]">{head.sub}</p>
+            <h1 className="t-heading text-[var(--fg)]">{head.title}</h1>
+            <p className="mt-0.5 text-small text-[var(--fg-muted)]">{head.sub}</p>
           </div>
         )}
 
         {status === 'error' && (
-          <div className="mx-4 sm:mx-8 mt-3 rounded-xl border border-amber-500/20 bg-amber-500/[0.05] px-4 py-3 flex flex-col sm:flex-row sm:items-center gap-2.5">
-            <span className="flex items-center gap-2 text-[13px] font-medium text-amber-300"><WifiOff size={15} /> That request didn't go through.</span>
-            <span className="text-[12.5px] text-[var(--fg-muted)] flex-1">
+          <div className="mx-4 sm:mx-8 mt-3 rounded-xl border border-warning/20 bg-warning/5 px-4 py-3 flex flex-col sm:flex-row sm:items-center gap-2.5">
+            <span className="flex items-center gap-2 text-ui font-medium text-warning"><WifiOff size={15} /> That request didn't go through.</span>
+            <span className="text-small text-[var(--fg-muted)] flex-1">
               {connection === 'online' ? 'The provider or network dropped it. Your message is still here.' : 'No gateway is connected, so answers come from the local demo.'}
             </span>
             <span className="flex gap-2">
-              <button onClick={() => setStatus('idle')} className="btn-ghost h-8 px-3 text-[12.5px]">Dismiss</button>
-              <button onClick={() => setView('settings')} className="btn-primary h-8 px-3 text-[12.5px]">Open settings</button>
+              <button onClick={() => setStatus('idle')} className="btn-ghost h-8 px-3 text-small">Dismiss</button>
+              <button onClick={() => setView('settings')} className="btn-primary h-8 px-3 text-small">Open settings</button>
             </span>
           </div>
         )}
@@ -201,10 +199,9 @@ function AppShell() {
               initial={{ opacity: 0 }}
               animate={{ opacity: 1 }}
               exit={{ opacity: 0 }}
-              transition={{ duration: 0.16, ease: 'easeOut' }}
+              transition={{ duration: 0.18, ease: [0.22, 1, 0.36, 1] }}
               className={view === 'chat' ? 'h-full flex flex-col' : ''}
             >
-              {view === 'home' && <HomeScreen />}
               {view === 'chat' && <ChatScreen />}
               {view === 'projects' && <WorkspaceScreen kind="projects" />}
               {view === 'library' && <WorkspaceScreen kind="library" />}

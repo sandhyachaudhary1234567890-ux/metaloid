@@ -222,7 +222,7 @@ export function MetaIoidBoot({ onDone }: { onDone: () => void }) {
           {/* Top Skip Button */}
           <button
             onClick={finishBoot}
-            className="absolute top-6 right-6 z-20 text-[11px] font-medium tracking-wider uppercase text-zinc-500 hover:text-zinc-200 bg-white/[0.03] hover:bg-white/[0.08] border border-white/10 px-3 py-1.5 rounded-full transition-all"
+            className="absolute top-6 right-6 z-20 text-micro font-medium tracking-wider uppercase text-[var(--fg-muted)] hover:text-[var(--fg)] bg-white/[0.03] hover:bg-white/[0.08] border border-white/10 px-3 py-1.5 rounded-full transition-all"
             aria-label="Skip startup animation"
           >
             Skip
@@ -247,7 +247,7 @@ export function MetaIoidBoot({ onDone }: { onDone: () => void }) {
               transition={{ duration: 0.6, delay: 0.2 }}
               className="mt-4 text-center"
             >
-              <h1 className="text-[17px] font-semibold tracking-[0.16em] uppercase text-zinc-200">
+              <h1 className="text-title font-semibold tracking-[0.16em] uppercase text-[var(--fg)]">
                 MetaIoid
               </h1>
             </motion.div>
@@ -261,22 +261,22 @@ export function MetaIoidBoot({ onDone }: { onDone: () => void }) {
                 transition={{ duration: 0.3 }}
                 className="mt-8 w-full max-w-[210px] space-y-1.5"
               >
-                <div className="text-[10.5px] uppercase tracking-[0.2em] text-zinc-500 font-semibold mb-2 text-center">
+                <div className="text-micro uppercase tracking-[0.2em] text-[var(--fg-muted)] font-semibold mb-2 text-center">
                   Initializing
                 </div>
                 {capabilities.map((cap) => (
                   <div
                     key={cap.id}
-                    className="flex items-center justify-between text-[12.5px] leading-tight text-zinc-400 py-0.5"
+                    className="flex items-center justify-between text-small leading-tight text-[var(--fg-secondary)] py-0.5"
                   >
-                    <span className="font-normal text-zinc-300">{cap.name}</span>
+                    <span className="font-normal text-[var(--fg-secondary)]">{cap.name}</span>
                     <span className="w-4 text-right">
                       {cap.checked ? (
                         cap.status === 'ok' ? (
                           <motion.span
                             initial={{ scale: 0.6, opacity: 0 }}
                             animate={{ scale: 1, opacity: 1 }}
-                            className="text-zinc-200 font-medium"
+                            className="text-[var(--fg)] font-medium"
                           >
                             ✓
                           </motion.span>
@@ -284,14 +284,14 @@ export function MetaIoidBoot({ onDone }: { onDone: () => void }) {
                           <motion.span
                             initial={{ scale: 0.6, opacity: 0 }}
                             animate={{ scale: 1, opacity: 1 }}
-                            className="text-amber-400/90 font-medium text-[11px]"
+                            className="text-warning/90 font-medium text-micro"
                             title="Degraded capability"
                           >
                             ⚠️
                           </motion.span>
                         )
                       ) : (
-                        <span className="inline-block w-1.5 h-1.5 rounded-full bg-zinc-700 animate-pulse" />
+                        <span className="inline-block w-1.5 h-1.5 rounded-full bg-[var(--surface-sunken)] animate-pulse" />
                       )}
                     </span>
                   </div>
@@ -307,13 +307,13 @@ export function MetaIoidBoot({ onDone }: { onDone: () => void }) {
                 transition={{ duration: 0.4 }}
                 className="mt-8 text-center flex flex-col items-center"
               >
-                <div className="inline-flex items-center gap-2 text-[12.5px] font-semibold tracking-[0.14em] uppercase text-zinc-200">
+                <div className="inline-flex items-center gap-2 text-small font-semibold tracking-[0.14em] uppercase text-[var(--fg)]">
                   <span>METAIOID</span>
-                  <span className="text-zinc-500 font-normal">|</span>
-                  <span className="inline-flex items-center gap-1.5 text-zinc-100">
+                  <span className="text-[var(--fg-muted)] font-normal">|</span>
+                  <span className="inline-flex items-center gap-1.5 text-white">
                     <span
                       className={`w-2 h-2 rounded-full ${
-                        stage === 'DEGRADED' ? 'bg-amber-400' : 'bg-emerald-400'
+                        stage === 'DEGRADED' ? 'bg-warning/10' : 'bg-success/10'
                       }`}
                       style={{
                         animation: 'metaIoidBreathe 2.4s ease-in-out infinite',
@@ -326,7 +326,7 @@ export function MetaIoidBoot({ onDone }: { onDone: () => void }) {
                     LIVE
                   </span>
                 </div>
-                <p className="mt-2 text-[13px] text-zinc-400 font-normal">
+                <p className="mt-2 text-ui text-[var(--fg-secondary)] font-normal">
                   {micListeningPermitted ? 'Ready · Listening for you' : 'Ready'}
                 </p>
               </motion.div>
@@ -335,7 +335,7 @@ export function MetaIoidBoot({ onDone }: { onDone: () => void }) {
 
           {/* Gentle Bottom Anchor */}
           <div className="absolute bottom-8 inset-x-0 flex justify-center pointer-events-none">
-            <span className="text-[11px] tracking-wider text-zinc-600 uppercase font-medium">
+            <span className="text-micro tracking-wider text-[var(--fg-subtle)] uppercase font-medium">
               Personal Operating Layer
             </span>
           </div>

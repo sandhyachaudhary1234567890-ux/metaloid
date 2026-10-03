@@ -1,177 +1,121 @@
-import { memo, useEffect, useRef, useState } from 'react';
+import { memo, useCallback, useEffect, useRef, useState } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
-import { Eye, Check, Pencil, ArrowDown, RotateCcw, Image as ImageIcon, FileText } from 'lucide-react';
+import { Eye, Pencil, ArrowDown, RotateCcw, Image as ImageIcon, FileText } from 'lucide-react';
 import type { ChatMessage } from '../lib/types';
 import { useApp } from '../lib/store';
 import { Markdown } from './chat/Markdown';
 import { MessageActions } from './chat/MessageActions';
 import { formatSize } from './CommandBar';
 import { cn } from '../lib/cn';
+import { ActivityStack, Activity, ToolActivity } from './ui/Activity';
+import { duration, ease } from '../design/motion';
 
-// Editorial conversation surface: user turns are clean elevated prompt blocks,
-// assistant turns are pure editorial typography. Intelligent autoscroll,
-// quiet hover actions that stay accessible on touch.
+// THE CONVERSATION SURFACE
+//
+// The rule this file exists to enforce: an assistant message is a document,
+// not a chat bubble. It has no container, no avatar and no chrome — just
+// well-set prose at a book measure, with the tool steps that produced it
+// stated quietly above and then got out of the way.
+//
+// User turns are the opposite: compact, right-aligned, visually closed, so the
+// eye can always tell at a glance what it said and what MetaIoid said.
 
-function ToolCard({ t }: { t: NonNullable<ChatMessage['toolActivity']>[number] }) {
-  return (
-    <div className="flex items-center gap-3 rounded-xl border border-[var(--border)] bg-[var(--surface)] px-3.5 py-2.5" role="status">
-      <span className={cn('w-6 h-6 rounded-lg flex items-center justify-center border shrink-0',
-        t.state === 'running' ? 'border-[var(--accent)]/40 bg-[var(--accent-subtle)]' : 'border-[var(--border)] bg-[var(--surface-elevated)]')}>
-        {t.state === 'running'
-          ? <span className="w-1.5 h-1.5 rounded-full bg-[var(--accent)] animate-pulse" />
-          : <Check size={12} className="text-[var(--fg-muted)]" />}
-      </span>
-      <span className="flex-1 min-w-0">
-        <span className="flex items-center gap-2 text-[13px] font-medium text-[var(--fg)]">
-          {t.state === 'running' ? t.label : `${t.tool} ready`}
-          {t.demo && <span className="text-[10px] font-bold tracking-wider text-[var(--fg-muted)] border border-[var(--border)] rounded px-1.5 py-0.2">DEMO</span>}
-        </span>
-        <span className="block text-[11.5px] text-[var(--fg-muted)] truncate">{t.state === 'running' ? t.detail : 'Complete'}</span>
-      </span>
+/* ─────────────────────────────────────────────────────────────────────────────
+   Assistant
+   ───────────────────────────────────────────────────────────────────────────── */
 
-    </div>
-  );
-}
-
-const UserBubble = memo(function UserBubble({ msg, interactive = true }: { msg: ChatMessage; interactive?: boolean }) {
-  const { editAndResend, isGenerating } = useApp();
-  const [editing, setEditing] = useState(false);
-  const [draft, setDraft] = useState(msg.content);
-
-  if (editing) {
-    return (
-      <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} className="flex justify-end">
-        <div className="w-full max-w-[84%] sm:max-w-[75%] rounded-2xl border border-[var(--accent)] bg-[var(--surface-elevated)] p-3 shadow-md">
-          <textarea
-            value={draft}
-            onChange={(e) => setDraft(e.target.value)}
-            rows={3}
-            autoFocus
-            aria-label="Edit message"
-            className="w-full bg-transparent resize-y outline-none text-[14.5px] leading-relaxed text-[var(--fg)] min-h-[72px] max-h-[220px]"
-          />
-          <div className="mt-2 flex justify-end gap-2">
-            <button onClick={() => setEditing(false)} className="btn-ghost h-8 px-3 text-[12.5px]">Cancel</button>
-            <button
-              onClick={() => {
-                if (!draft.trim() || isGenerating) return;
-                setEditing(false);
-                editAndResend(msg.id, draft);
-              }}
-              disabled={!draft.trim() || isGenerating}
-              className="btn-primary h-8 px-3 text-[12.5px] disabled:opacity-40"
-            >
-              Save & resend
-            </button>
-          </div>
-        </div>
-      </motion.div>
-    );
-  }
-
-  return (
-    <motion.div initial={{ opacity: 0, y: 8 }} animate={{ opacity: 1, y: 0 }} transition={{ duration: 0.2 }} className="flex justify-end group">
-      <div className="max-w-[84%] sm:max-w-[75%]">
-        <div className="rounded-2xl rounded-br-lg bg-[var(--surface-elevated)] border border-[var(--border)] px-4 py-2.5 text-[14.5px] leading-relaxed text-[var(--fg)]">
-          {msg.vision && (
-            <span className="inline-flex items-center gap-1.5 text-[11px] font-semibold text-blue-400 bg-blue-400/10 border border-blue-400/20 rounded-md px-2 py-0.5 mb-2">
-              <Eye size={12} /> CAMERA CAPTURE
-            </span>
-          )}
-          {msg.attachments?.length ? (
-            <span className="flex flex-wrap gap-2 mb-2">
-              {msg.attachments.map((a) => (
-                <span key={a.id} className="inline-flex items-center gap-2 rounded-xl border border-[var(--border)] bg-[var(--surface-sunken)] p-1.5 pr-2.5">
-                  {a.kind === 'image' && a.dataUrl ? (
-                    <img src={a.dataUrl} alt={a.name} className="w-10 h-10 rounded-lg object-cover" loading="lazy" />
-                  ) : (
-                    <span className="w-10 h-10 rounded-lg bg-[var(--surface-elevated)] flex items-center justify-center">
-                      {a.type.startsWith('image/') ? <ImageIcon size={14} className="text-[var(--fg-muted)]" /> : <FileText size={14} className="text-[var(--fg-muted)]" />}
-                    </span>
-                  )}
-                  <span className="min-w-0 max-w-[130px]">
-                    <span className="block text-[12px] font-medium text-[var(--fg)] truncate">{a.name}</span>
-                    <span className="block text-[11px] text-[var(--fg-muted)]">{formatSize(a.size)}</span>
-                  </span>
-                </span>
-              ))}
-            </span>
-          ) : null}
-          {msg.content && <p className="whitespace-pre-wrap break-words">{msg.content}</p>}
-        </div>
-        <div className="mt-1 flex items-center justify-end gap-1">
-          {msg.edited && <span className="text-[11px] text-[var(--fg-subtle)] mr-1">edited</span>}
-          {interactive && (
-            <button
-              onClick={() => {
-                setDraft(msg.content);
-                setEditing(true);
-              }}
-              className="msg-actions icon-btn w-6 h-6" aria-label="Edit message" title="Edit and resend"
-            >
-              <Pencil size={12} />
-            </button>
-          )}
-        </div>
-      </div>
-    </motion.div>
-  );
-});
-
-const AssistantBubble = memo(function AssistantBubble({ msg, isLast, interactive = true }: { msg: ChatMessage; isLast: boolean; interactive?: boolean }) {
+const AssistantTurn = memo(function AssistantTurn({
+  msg,
+  isLast,
+  interactive = true,
+}: {
+  msg: ChatMessage;
+  isLast: boolean;
+  interactive?: boolean;
+}) {
   const { toast, regenerate, setFeedback, setVersionIndex, retryFailed, isGenerating, connection, setView } = useApp();
   const versions = msg.versions ?? [];
   const shown = msg.versionIndex !== undefined && msg.versionIndex >= 0 ? versions[msg.versionIndex] ?? msg.content : msg.content;
   const hasTool = (msg.toolActivity?.length ?? 0) > 0 && (msg.versionIndex === undefined || msg.versionIndex < 0);
 
+  /* ── Failure. Stated plainly, with the two things you can actually do. ── */
   if (msg.error && !msg.content) {
     return (
-      <motion.div initial={{ opacity: 0, y: 8 }} animate={{ opacity: 1, y: 0 }} className="flex justify-start">
-        <div className="rounded-xl border border-red-500/25 bg-red-500/[0.06] px-4 py-3 max-w-[94%] sm:max-w-[84%]">
-          <p className="text-[13.5px] font-medium text-[var(--fg)]">That reply didn't come through.</p>
-          <p className="text-[12.5px] text-[var(--fg-muted)] mt-1">
-            {connection === 'online' ? 'The provider stopped mid-answer. Your message is still above.' : 'No AI is connected yet, so answers come from the local demo.'}
-          </p>
-          <span className="flex items-center gap-2 mt-2.5">
-            <button onClick={() => retryFailed(msg.id)} className="btn-ghost h-8 px-3 text-[12.5px]">
-              <RotateCcw size={12} /> Try again
-            </button>
-            <button onClick={() => setView('settings')} className="btn-ghost h-8 px-3 text-[12.5px]">Choose another AI</button>
-          </span>
-        </div>
+      <motion.div
+        initial={{ opacity: 0, y: 4 }}
+        animate={{ opacity: 1, y: 0 }}
+        transition={{ duration: duration.small, ease: ease.out }}
+        className="max-w-[62ch] rounded-[var(--radius-lg)] border border-[color-mix(in_srgb,var(--danger)_28%,transparent)] bg-[color-mix(in_srgb,var(--danger)_7%,transparent)] px-4 py-3.5"
+      >
+        <p className="text-body font-medium text-[var(--fg)]">That reply didn't come through.</p>
+        <p className="mt-1 text-small text-[var(--fg-muted)] text-pretty">
+          {connection === 'online'
+            ? 'The provider stopped mid-answer. Your message is still above.'
+            : 'No AI is connected yet, so answers come from the local demo.'}
+        </p>
+        <span className="mt-3 flex items-center gap-2">
+          <button onClick={() => retryFailed(msg.id)} className="btn-ghost h-8 gap-1.5 px-3 text-small">
+            <RotateCcw size={12} />
+            Try again
+          </button>
+          <button onClick={() => setView('settings')} className="btn-ghost h-8 px-3 text-small">
+            Choose another AI
+          </button>
+        </span>
       </motion.div>
     );
   }
 
   return (
-    <motion.div initial={{ opacity: 0, y: 8 }} animate={{ opacity: 1, y: 0 }} transition={{ duration: 0.25 }} className="flex justify-start group">
-      <div className="max-w-[94%] sm:max-w-[84%] w-full min-w-0">
-        {msg.vision && (
-          <span className="inline-flex items-center gap-1.5 text-[11px] font-semibold text-blue-400 bg-blue-400/10 border border-blue-400/20 rounded-md px-2 py-0.5 mb-2">
-            <Eye size={12} /> VISION CONTEXT
-          </span>
-        )}
-        {hasTool && (
-          <div className="mb-2.5 space-y-2">
-            {msg.toolActivity!.map((t) => <ToolCard key={t.id} t={t} />)}
-          </div>
-        )}
-        {shown ? (
-          <Markdown text={shown} />
-        ) : msg.streaming ? (
-          <span className="inline-flex gap-1.5 py-2" role="status" aria-label="Generating">
-            {[0, 1, 2].map((i) => (
-              <motion.span
-                key={i} className="w-1.5 h-1.5 rounded-full bg-[var(--fg-muted)]"
-                animate={{ opacity: [0.3, 1, 0.3] }} transition={{ duration: 1, repeat: Infinity, delay: i * 0.18 }}
-              />
-            ))}
-          </span>
-        ) : null}
-        {msg.streaming && shown ? (
-          <span className="inline-block w-[6px] h-[14px] ml-1 align-middle rounded-sm bg-[var(--accent)] animate-pulse" aria-label="Generating" />
-        ) : null}
-        {!msg.streaming && shown && interactive && (
+    <motion.div
+      initial={{ opacity: 0, y: 4 }}
+      animate={{ opacity: 1, y: 0 }}
+      transition={{ duration: duration.medium, ease: ease.out }}
+      className="group w-full min-w-0"
+    >
+      {msg.vision && (
+        <span className="mb-2.5 inline-flex items-center gap-1.5 rounded-[var(--radius-xs)] border border-[var(--border)] bg-[var(--surface-sunken)] px-2 py-0.5 text-micro tracking-[0.06em] text-[var(--fg-muted)]">
+          <Eye size={11} strokeWidth={1.8} />
+          Vision context
+        </span>
+      )}
+
+      {/* Work that produced this answer. Collapses to nothing once the answer
+          has arrived — the answer is the point, not the audit trail. */}
+      {hasTool && (
+        <ActivityStack visible={Boolean(msg.streaming) || !shown}>
+          {msg.toolActivity!.map((t) => (
+            <ToolActivity
+              key={t.id}
+              tool={t.tool}
+              label={t.label}
+              detail={t.detail}
+              demo={t.demo}
+              state={t.state === 'running' ? 'running' : 'done'}
+            />
+          ))}
+        </ActivityStack>
+      )}
+
+      {/* The reading surface. */}
+      {shown ? (
+        <Markdown text={shown} />
+      ) : msg.streaming ? (
+        <Activity label="Composing" />
+      ) : null}
+
+      {/* Streaming cursor — a soft bar, not a blinking block. */}
+      {msg.streaming && shown && (
+        <motion.span
+          aria-hidden
+          className="ml-0.5 inline-block h-[1.05em] w-[2px] translate-y-[0.18em] rounded-full bg-[var(--accent)] align-baseline"
+          animate={{ opacity: [1, 0.25, 1] }}
+          transition={{ duration: 1.15, repeat: Infinity, ease: 'easeInOut' }}
+        />
+      )}
+
+      {!msg.streaming && shown && interactive && (
+        <div className="opacity-100 transition-opacity duration-medium ease-out md:opacity-0 md:group-hover:opacity-100 md:focus-within:opacity-100">
           <MessageActions
             content={shown}
             isLast={isLast}
@@ -185,110 +129,192 @@ const AssistantBubble = memo(function AssistantBubble({ msg, isLast, interactive
             onFeedback={(f) => setFeedback(msg.id, f)}
             onVersion={(i) => setVersionIndex(msg.id, i)}
           />
-        )}
+        </div>
+      )}
+    </motion.div>
+  );
+});
 
+/* ─────────────────────────────────────────────────────────────────────────────
+   User
+   ───────────────────────────────────────────────────────────────────────────── */
+
+const UserTurn = memo(function UserTurn({ msg, interactive = true }: { msg: ChatMessage; interactive?: boolean }) {
+  const { editAndResend, isGenerating } = useApp();
+  const [editing, setEditing] = useState(false);
+  const [draft, setDraft] = useState(msg.content);
+
+  if (editing) {
+    return (
+      <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} transition={{ duration: duration.small }} className="flex justify-end">
+        <div className="w-full max-w-[88%] rounded-[var(--radius-lg)] border border-[var(--accent)] bg-[var(--surface-elevated)] p-3 sm:max-w-[76%]">
+          <textarea
+            value={draft}
+            onChange={(e) => setDraft(e.target.value)}
+            rows={3}
+            autoFocus
+            aria-label="Edit message"
+            className="max-h-[240px] min-h-[72px] w-full resize-y bg-transparent text-body leading-relaxed text-[var(--fg)] outline-none"
+          />
+          <div className="mt-2.5 flex justify-end gap-2">
+            <button onClick={() => setEditing(false)} className="btn-ghost h-8 px-3 text-small">
+              Cancel
+            </button>
+            <button
+              onClick={() => {
+                if (!draft.trim() || isGenerating) return;
+                setEditing(false);
+                editAndResend(msg.id, draft);
+              }}
+              disabled={!draft.trim() || isGenerating}
+              className="btn-primary h-8 px-3 text-small"
+            >
+              Save & resend
+            </button>
+          </div>
+        </div>
+      </motion.div>
+    );
+  }
+
+  return (
+    <motion.div
+      initial={{ opacity: 0, y: 4 }}
+      animate={{ opacity: 1, y: 0 }}
+      transition={{ duration: duration.small, ease: ease.out }}
+      className="group flex justify-end"
+    >
+      <div className="max-w-[88%] sm:max-w-[76%]">
+        <div className="rounded-[var(--radius-lg)] rounded-br-[var(--radius-xs)] bg-[var(--surface)] px-4 py-2.5 text-body leading-relaxed text-[var(--fg)] ring-1 ring-inset ring-[var(--border-subtle)]">
+          {msg.attachments?.length ? (
+            <span className="mb-2 flex flex-wrap gap-2">
+              {msg.attachments.map((a) => (
+                <span key={a.id} className="inline-flex items-center gap-2 rounded-[var(--radius-md)] border border-[var(--border)] bg-[var(--surface-sunken)] p-1.5 pr-2.5">
+                  {a.kind === 'image' && a.dataUrl ? (
+                    <img src={a.dataUrl} alt={a.name} className="h-10 w-10 rounded-[var(--radius-sm)] object-cover" loading="lazy" decoding="async" />
+                  ) : (
+                    <span className="flex h-10 w-10 items-center justify-center rounded-[var(--radius-sm)] bg-[var(--surface-elevated)]">
+                      {a.type.startsWith('image/') ? (
+                        <ImageIcon size={14} className="text-[var(--fg-muted)]" />
+                      ) : (
+                        <FileText size={14} className="text-[var(--fg-muted)]" />
+                      )}
+                    </span>
+                  )}
+                  <span className="max-w-[130px] min-w-0">
+                    <span className="block truncate text-small font-medium text-[var(--fg)]">{a.name}</span>
+                    <span className="block text-micro font-normal tracking-normal text-[var(--fg-muted)]">{formatSize(a.size)}</span>
+                  </span>
+                </span>
+              ))}
+            </span>
+          ) : null}
+          {msg.content && <p className="whitespace-pre-wrap break-words">{msg.content}</p>}
+        </div>
+
+        <div className="mt-1 flex items-center justify-end gap-1">
+          {msg.edited && <span className="mr-1 text-micro font-normal tracking-normal text-[var(--fg-subtle)]">edited</span>}
+          {interactive && (
+            <button
+              onClick={() => {
+                setDraft(msg.content);
+                setEditing(true);
+              }}
+              className="icon-btn h-7 w-7 opacity-100 transition-opacity duration-medium ease-out md:opacity-0 md:group-hover:opacity-100 md:focus:opacity-100"
+              aria-label="Edit message"
+              title="Edit and resend"
+            >
+              <Pencil size={12} />
+            </button>
+          )}
+        </div>
       </div>
     </motion.div>
   );
 });
 
+/* ─────────────────────────────────────────────────────────────────────────────
+   Window
+   ───────────────────────────────────────────────────────────────────────────── */
+
 export function ThinkingDots({ label = 'Thinking…' }: { label?: string }) {
-  return (
-    <div className="flex items-center gap-2.5 py-1" role="status" aria-live="polite">
-      <span className="flex gap-1" aria-hidden>
-        {[0, 1, 2].map((i) => (
-          <motion.span
-            key={i} className="w-1.5 h-1.5 rounded-full bg-[var(--fg-muted)]"
-            animate={{ opacity: [0.25, 1, 0.25] }}
-            transition={{ duration: 1.1, repeat: Infinity, delay: i * 0.16 }}
-          />
-        ))}
-      </span>
-      <span className="text-[13px] font-medium text-[var(--fg-secondary)]">{label}</span>
-    </div>
-  );
+  return <Activity label={label.replace(/…$/, '')} />;
 }
 
 export function ChatWindow({ messages, live = false }: { messages: ChatMessage[]; live?: boolean }) {
   const scrollRef = useRef<HTMLDivElement>(null);
-  const [stick, setStick] = useState(true);
   const [showJump, setShowJump] = useState(false);
-  const { status, statusText } = useApp();
   const stickRef = useRef(true);
-  stickRef.current = stick;
+  const { status } = useApp();
 
-  const atBottom = () => {
+  const atBottom = useCallback(() => {
     const el = scrollRef.current;
     if (!el) return true;
     return el.scrollHeight - el.scrollTop - el.clientHeight < 120;
-  };
+  }, []);
 
-  const onScroll = () => {
+  const onScroll = useCallback(() => {
     const near = atBottom();
-    setStick(near);
+    stickRef.current = near;
     setShowJump(!near);
-  };
+  }, [atBottom]);
+
+  const lastLen = messages[messages.length - 1]?.content?.length ?? 0;
+
+  // Follow the conversation while the user is at the bottom, and stop the
+  // moment they scroll away. Content that grows above the viewport is held in
+  // place by `overflow-anchor`, so streaming never drags the reading position.
+  useEffect(() => {
+    if (!stickRef.current) return;
+    const el = scrollRef.current;
+    if (!el) return;
+    el.scrollTop = el.scrollHeight;
+  }, [messages.length, lastLen, status]);
 
   useEffect(() => {
-    if (stickRef.current) {
-      const el = scrollRef.current;
-      if (el) el.scrollTop = el.scrollHeight;
-    } else {
-      setShowJump(true);
+    if (messages.length === 0) {
+      stickRef.current = true;
+      setShowJump(false);
     }
-  }, [messages.length, messages[messages.length - 1]?.content?.length]);
-
-  useEffect(() => {
-    setStick(true);
-    setShowJump(false);
-  }, [messages.length === 0]);
+  }, [messages.length]);
 
   const jump = () => {
     const el = scrollRef.current;
     if (!el) return;
     el.scrollTo({ top: el.scrollHeight, behavior: 'smooth' });
-    setStick(true);
+    stickRef.current = true;
     setShowJump(false);
   };
 
   const lastAsstIdx = [...messages].map((m, i) => ({ m, i })).reverse().find((x) => x.m.role === 'assistant')?.i ?? -1;
 
-  if (messages.length === 0) {
-    return (
-      <div className="flex-1 flex flex-col items-center justify-center text-center px-6 py-16">
-        <p className="text-[14.5px] text-[var(--fg)]">Nothing here yet.</p>
-        <p className="text-[13px] text-[var(--fg-muted)] mt-1 max-w-[320px]">Say something below and it will show up in this thread.</p>
-      </div>
-    );
-  }
-
   return (
-    <div className="flex-1 min-h-0 relative flex flex-col">
-      <div ref={scrollRef} onScroll={onScroll} className="flex-1 overflow-y-auto px-4 sm:px-8 py-6">
-        <div className={cn('mx-auto space-y-6', live ? 'max-w-[560px]' : 'max-w-[760px]')}>
-          <AnimatePresence initial={false}>
-            {messages.map((m, i) =>
-              m.role === 'user' ? (
-                <UserBubble key={m.id} msg={m} interactive={!live} />
-              ) : (
-                <AssistantBubble key={m.id} msg={m} isLast={i === lastAsstIdx} interactive={!live} />
-              )
-            )}
-          </AnimatePresence>
-          {status !== 'idle' && status !== 'error' && (
-            <div className="pt-1"><ThinkingDots label={statusText} /></div>
+    <div className="relative flex min-h-0 flex-1 flex-col">
+      <div ref={scrollRef} onScroll={onScroll} className="scroll-region flex-1 px-4 py-6 sm:px-6">
+        <div className={cn('mx-auto flex flex-col gap-7', live ? 'max-w-[560px]' : 'max-w-[var(--chat-width)]')}>
+          {messages.map((m, i) =>
+            m.role === 'user' ? (
+              <UserTurn key={m.id} msg={m} interactive={!live} />
+            ) : (
+              <AssistantTurn key={m.id} msg={m} isLast={i === lastAsstIdx} interactive={!live} />
+            ),
           )}
         </div>
       </div>
+
       <AnimatePresence>
         {showJump && (
           <motion.button
-            initial={{ opacity: 0, y: 6 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0, y: 6 }}
+            initial={{ opacity: 0, y: 6, scale: 0.96 }}
+            animate={{ opacity: 1, y: 0, scale: 1 }}
+            exit={{ opacity: 0, y: 6, scale: 0.96 }}
+            transition={{ duration: duration.small, ease: ease.out }}
             onClick={jump}
             aria-label="Jump to latest messages"
-            className="absolute bottom-4 left-1/2 -translate-x-1/2 inline-flex items-center gap-1.5 h-9 px-3.5 rounded-full border border-[var(--border)] bg-[var(--surface-elevated)] shadow-pop text-[12.5px] font-medium text-[var(--fg)] hover:bg-[var(--surface-hover)] transition-colors"
+            className="absolute bottom-4 left-1/2 inline-flex h-9 -translate-x-1/2 items-center gap-1.5 rounded-full border border-[var(--border)] bg-[var(--surface-elevated)] px-3.5 text-small font-medium text-[var(--fg)] shadow-pop transition-colors duration-small ease-out hover:bg-[var(--surface-hover)]"
           >
-            <ArrowDown size={13} /> Latest
+            <ArrowDown size={13} />
+            Latest
           </motion.button>
         )}
       </AnimatePresence>

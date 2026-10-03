@@ -58,8 +58,8 @@ export function ControlCenter() {
   if (!online) {
     return (
       <div>
-        <p className="text-[12.5px] text-[var(--fg-muted)]">Sign in with the gateway online to manage your profile, autonomy, devices, and data.</p>
-        <button onClick={() => setView('settings')} className="btn-ghost h-9 px-3.5 mt-2 text-[12.5px]">Open connection settings</button>
+        <p className="text-small text-[var(--fg-muted)]">Sign in with the gateway online to manage your profile, autonomy, devices, and data.</p>
+        <button onClick={() => setView('settings')} className="btn-ghost h-9 px-3.5 mt-2 text-small">Open connection settings</button>
       </div>
     );
   }
@@ -70,11 +70,11 @@ export function ControlCenter() {
     const pct = typeof u.limit === 'number' && u.limit > 0 ? Math.min(100, Math.round((u.usedToday / u.limit) * 100)) : 0;
     return (
       <div className="flex items-center gap-3 py-1">
-        <span className="w-24 text-[12.5px] text-[var(--fg-muted)]">{label}</span>
+        <span className="w-24 text-small text-[var(--fg-muted)]">{label}</span>
         <span className="flex-1 h-1.5 rounded-full bg-[var(--surface-sunken)] overflow-hidden">
           <span className="block h-full rounded-full bg-[var(--accent)]" style={{ width: `${pct}%` }} />
         </span>
-        <span className="text-[12px] font-mono text-[var(--fg-muted)]">
+        <span className="text-small font-mono text-[var(--fg-muted)]">
           {u.usedToday}/{u.limit}
         </span>
       </div>
@@ -91,7 +91,7 @@ export function ControlCenter() {
           <span className="flex gap-2">
             <button
               onClick={() => logout()}
-              className="h-9 px-3.5 rounded-lg bg-[var(--surface-elevated)] border border-[var(--border)] text-[12.5px] font-medium hover:border-[var(--accent)]"
+              className="h-9 px-3.5 rounded-lg bg-[var(--surface-elevated)] border border-[var(--border)] text-small font-medium hover:border-[var(--accent)]"
             >
               Switch account
             </button>
@@ -109,7 +109,7 @@ export function ControlCenter() {
             onChange={(e) => setProfile({ ...(profile || {}), displayName: e.target.value })}
             onBlur={(e) => patch({ displayName: e.target.value })}
             placeholder="Your name"
-            className="h-9 w-44 rounded-lg bg-[var(--surface-elevated)] border border-[var(--border)] px-3 text-[12.5px] text-[var(--fg)] outline-none"
+            className="h-9 w-44 rounded-lg bg-[var(--surface-elevated)] border border-[var(--border)] px-3 text-small text-[var(--fg)] outline-none"
             aria-label="Display name"
           />
         }
@@ -176,11 +176,11 @@ export function ControlCenter() {
           />
         }
       />
-      {saving && <p className="text-[11.5px] text-[var(--fg-faint)]">Saving…</p>}
+      {saving && <p className="text-micro text-[var(--fg-faint)]">Saving…</p>}
 
       {/* ---- usage ---- */}
       <div className="pt-1">
-        <p className="text-[12px] font-medium text-[var(--fg-muted)] mb-1">
+        <p className="text-small font-medium text-[var(--fg-muted)] mb-1">
           Plan: <span className="text-[var(--fg)] font-semibold capitalize">{plan}</span>
         </p>
         {usageRow('Chat', 'chat')}
@@ -191,30 +191,30 @@ export function ControlCenter() {
 
       {/* ---- devices ---- */}
       <div className="pt-2">
-        <p className="text-[12px] font-medium text-[var(--fg-muted)] mb-1">Paired devices ({devices.length})</p>
+        <p className="text-small font-medium text-[var(--fg-muted)] mb-1">Paired devices ({devices.length})</p>
         {devices.map((d) => (
           <div key={d.id} className="flex items-center gap-2 py-1">
-            <span className="h-1.5 w-1.5 rounded-full bg-emerald-400" />
-            <span className="text-[13px] text-[var(--fg)] flex-1">{d.name}</span>
+            <span className="h-1.5 w-1.5 rounded-full bg-success/10" />
+            <span className="text-ui text-[var(--fg)] flex-1">{d.name}</span>
             <button
               onClick={async () => {
                 await revokeDevice(settings.backendUrl, d.id);
                 setDevices(devices.filter((x) => x.id !== d.id));
                 toast({ title: 'Device unpaired.' });
               }}
-              className="text-[12px] text-red-400 hover:text-red-300"
+              className="text-small text-danger hover:text-danger"
             >
               Unpair
             </button>
           </div>
         ))}
         {devices.length === 0 && !pairCode && (
-          <p className="text-[12px] text-[var(--fg-faint)]">No devices paired yet.</p>
+          <p className="text-small text-[var(--fg-faint)]">No devices paired yet.</p>
         )}
         {pairCode ? (
-          <p className="text-[12.5px] text-[var(--fg-muted)] mt-1">
-            Pairing code: <span className="font-mono text-[15px] font-bold text-[var(--fg)] tracking-[0.2em]">{pairCode}</span>
-            <span className="block text-[11.5px] text-[var(--fg-faint)]">Enter it on the new device within 10 minutes.</span>
+          <p className="text-small text-[var(--fg-muted)] mt-1">
+            Pairing code: <span className="font-mono text-read font-bold text-[var(--fg)] tracking-[0.2em]">{pairCode}</span>
+            <span className="block text-micro text-[var(--fg-faint)]">Enter it on the new device within 10 minutes.</span>
           </p>
         ) : (
           <button
@@ -226,7 +226,7 @@ export function ControlCenter() {
                 toast({ title: e instanceof Error ? e.message : 'Pairing failed.', tone: 'error' });
               }
             }}
-            className="mt-1.5 h-9 px-3.5 rounded-lg bg-[var(--surface-elevated)] border border-[var(--border)] text-[12.5px] font-medium hover:border-[var(--accent)]"
+            className="mt-1.5 h-9 px-3.5 rounded-lg bg-[var(--surface-elevated)] border border-[var(--border)] text-small font-medium hover:border-[var(--accent)]"
           >
             Pair a new device…
           </button>
@@ -241,7 +241,7 @@ export function ControlCenter() {
               toast({ title: e instanceof Error ? e.message : 'Failed.' });
             }
           }}
-          className="mt-1.5 ml-2 h-9 px-3.5 rounded-lg bg-[var(--surface-elevated)] border border-[var(--border)] text-[12.5px] font-medium hover:border-red-400"
+          className="mt-1.5 ml-2 h-9 px-3.5 rounded-lg bg-[var(--surface-elevated)] border border-[var(--border)] text-small font-medium hover:border-danger/30"
         >
           Sign out everywhere
         </button>
@@ -264,7 +264,7 @@ export function ControlCenter() {
               toast({ title: e instanceof Error ? e.message : 'Export failed.', tone: 'error' });
             }
           }}
-          className="btn-ghost h-10 px-4 text-[13px] flex-1"
+          className="btn-ghost h-10 px-4 text-ui flex-1"
         >
           Export my data
         </button>
@@ -277,21 +277,21 @@ export function ControlCenter() {
               toast({ title: e instanceof Error ? e.message : 'Could not forget memories.', tone: 'error' });
             }
           }}
-          className="btn-ghost h-10 px-4 text-[13px] flex-1"
+          className="btn-ghost h-10 px-4 text-ui flex-1"
         >
           Forget server memories
         </button>
       </div>
       <div className="pt-2.5">
         {!confirmDelete ? (
-          <button onClick={() => setConfirmDelete(true)} className="btn-danger h-10 px-4 text-[13px] w-full">
+          <button onClick={() => setConfirmDelete(true)} className="btn-danger h-10 px-4 text-ui w-full">
             Delete my account…
           </button>
         ) : (
-          <div className={cn('rounded-xl border border-red-500/30 bg-red-500/[0.06] p-3.5')}>
-            <p className="text-[13px] text-[var(--fg)] font-semibold">Delete everything? Memories, missions, workspaces, devices — gone.</p>
+          <div className={cn('rounded-xl border border-danger/30 bg-danger/5 p-3.5')}>
+            <p className="text-ui text-[var(--fg)] font-semibold">Delete everything? Memories, missions, workspaces, devices — gone.</p>
             <div className="flex gap-2 mt-2.5">
-              <button onClick={() => setConfirmDelete(false)} className="btn-ghost h-9 px-4 text-[13px] flex-1">
+              <button onClick={() => setConfirmDelete(false)} className="btn-ghost h-9 px-4 text-ui flex-1">
                 Keep it
               </button>
               <button
@@ -304,7 +304,7 @@ export function ControlCenter() {
                     toast({ title: e instanceof Error ? e.message : 'Deletion failed.', tone: 'error' });
                   }
                 }}
-                className="h-9 px-4 rounded-lg bg-red-500 text-white text-[13px] font-semibold flex-1"
+                className="h-9 px-4 rounded-lg bg-danger/10 text-white text-ui font-semibold flex-1"
               >
                 Yes, delete everything
               </button>

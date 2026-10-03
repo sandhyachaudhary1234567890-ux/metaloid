@@ -21,11 +21,11 @@ function NotConfigured() {
       title="Account"
       desc="Local sandbox mode — everything stays on this device"
     >
-      <div className="rounded-xl border border-[var(--border)] bg-[var(--surface-sunken)] p-3.5 text-[12.5px] text-[var(--fg-muted)] leading-relaxed">
+      <div className="rounded-xl border border-[var(--border)] bg-[var(--surface-sunken)] p-3.5 text-small text-[var(--fg-muted)] leading-relaxed">
         This build has no Supabase project configured, so there is no account to sign in
         to and nothing is uploaded anywhere. Conversations, memories and settings live in
         this browser only.
-        <div className="mt-2 text-[12px]">
+        <div className="mt-2 text-small">
           To connect a real backend: set <code className="px-1 py-0.5 rounded bg-[var(--surface-elevated)]">VITE_SUPABASE_URL</code> and{' '}
           <code className="px-1 py-0.5 rounded bg-[var(--surface-elevated)]">VITE_SUPABASE_ANON_KEY</code>,
           then configure the gateway (see <code className="px-1 py-0.5 rounded bg-[var(--surface-elevated)]">.env.example</code>).
@@ -36,16 +36,16 @@ function NotConfigured() {
 }
 
 const STATUS_STYLE: Record<string, { label: string; className: string }> = {
-  connected: { label: 'connected', className: 'text-emerald-400 border-emerald-400/30 bg-emerald-400/10' },
-  invalid: { label: 'invalid', className: 'text-red-400 border-red-400/30 bg-red-400/10' },
-  unverified: { label: 'needs setup', className: 'text-amber-400 border-amber-400/30 bg-amber-400/10' },
+  connected: { label: 'connected', className: 'text-success border-success/30 bg-success/10' },
+  invalid: { label: 'invalid', className: 'text-danger border-danger/30 bg-danger/10' },
+  unverified: { label: 'needs setup', className: 'text-warning border-warning/30 bg-warning/10' },
   unconfigured: { label: 'needs setup', className: 'text-[var(--fg-muted)] border-[var(--border)] bg-[var(--surface-sunken)]' },
 };
 
 function Pill({ status }: { status: string }) {
   const s = STATUS_STYLE[status] || STATUS_STYLE.unconfigured;
   return (
-    <span className={cn('inline-flex items-center gap-1 px-2 py-0.5 rounded-full border text-[11px] font-medium', s.className)}>
+    <span className={cn('inline-flex items-center gap-1 px-2 py-0.5 rounded-full border text-micro font-medium', s.className)}>
       {s.label}
     </span>
   );
@@ -169,12 +169,12 @@ export function AccountSection() {
             signedIn ? (
               <button
                 onClick={() => { void auth.signOut(); }}
-                className="inline-flex items-center gap-1.5 px-3 py-2 rounded-xl border border-[var(--border)] text-[12.5px] font-medium hover:border-[var(--border-strong)] transition-colors min-h-[40px]"
+                className="inline-flex items-center gap-1.5 px-3 py-2 rounded-xl border border-[var(--border)] text-small font-medium hover:border-[var(--border-strong)] transition-colors min-h-[40px]"
               >
                 <LogOut size={14} /> Sign out
               </button>
             ) : (
-              <span className="text-[12px] text-[var(--fg-muted)]">Signed out</span>
+              <span className="text-small text-[var(--fg-muted)]">Signed out</span>
             )
           }
         />
@@ -183,8 +183,8 @@ export function AccountSection() {
           hint={label.text}
           control={
             <span className={cn(
-              'inline-flex items-center gap-1.5 text-[12px] font-medium',
-              label.tone === 'ok' ? 'text-emerald-400' : label.tone === 'warn' ? 'text-amber-400' : 'text-[var(--fg-muted)]',
+              'inline-flex items-center gap-1.5 text-small font-medium',
+              label.tone === 'ok' ? 'text-success' : label.tone === 'warn' ? 'text-warning' : 'text-[var(--fg-muted)]',
             )}>
               {label.tone === 'ok' ? <Check size={13} /> : label.tone === 'warn' ? <AlertTriangle size={13} /> : <RefreshCw size={13} />}
               {sync.pending > 0 ? `${sync.pending} pending` : label.tone === 'ok' ? 'up to date' : 'local'}
@@ -202,37 +202,37 @@ export function AccountSection() {
           <div className="flex items-center justify-between gap-3 rounded-xl border border-[var(--border)] bg-[var(--surface-sunken)] px-3.5 py-3">
             <div className="min-w-0">
               <div className="flex items-center gap-2">
-                <span className="text-[13px] font-medium text-[var(--fg)]">OpenRouter</span>
+                <span className="text-ui font-medium text-[var(--fg)]">OpenRouter</span>
                 <Pill status={openrouter.status} />
               </div>
-              <div className="text-[12px] text-[var(--fg-muted)] mt-0.5 font-mono">{openrouter.masked}</div>
+              <div className="text-small text-[var(--fg-muted)] mt-0.5 font-mono">{openrouter.masked}</div>
             </div>
             <div className="flex items-center gap-2 shrink-0">
               <button
                 onClick={testKey}
                 disabled={busy !== null}
-                className="inline-flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg border border-[var(--border)] text-[12px] font-medium hover:border-[var(--border-strong)] disabled:opacity-50 min-h-[36px]"
+                className="inline-flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg border border-[var(--border)] text-small font-medium hover:border-[var(--border-strong)] disabled:opacity-50 min-h-[36px]"
               >
                 {busy === 'test' ? <Loader2 size={13} className="animate-spin" /> : <Plug size={13} />} Test
               </button>
               <button
                 onClick={removeKey}
                 disabled={busy !== null}
-                className="inline-flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg border border-[var(--border)] text-[12px] font-medium text-red-400 hover:border-red-400/40 disabled:opacity-50 min-h-[36px]"
+                className="inline-flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg border border-[var(--border)] text-small font-medium text-danger hover:border-danger/40 disabled:opacity-50 min-h-[36px]"
               >
                 <Trash2 size={13} /> Remove
               </button>
             </div>
           </div>
         ) : (
-          <div className="text-[12.5px] text-[var(--fg-muted)]">
+          <div className="text-small text-[var(--fg-muted)]">
             {signedIn ? 'No key stored yet — the gateway falls back to its own free models.' : 'Sign in to store a key; without one the gateway uses its own free models.'}
           </div>
         )}
 
         {signedIn && (
           <div className="space-y-2">
-            <label htmlFor="provider-key" className="text-[12.5px] font-medium text-[var(--fg)]">
+            <label htmlFor="provider-key" className="text-small font-medium text-[var(--fg)]">
               {openrouter ? 'Replace key' : 'Add an OpenRouter key'}
             </label>
             <div className="flex gap-2">
@@ -244,17 +244,17 @@ export function AccountSection() {
                 value={apiKey}
                 onChange={(e) => setApiKey(e.target.value)}
                 placeholder="sk-or-v1-…"
-                className="flex-1 min-w-0 px-3 py-2.5 rounded-xl bg-[var(--surface-sunken)] border border-[var(--border)] text-[13px] font-mono outline-none focus:border-[var(--accent)]"
+                className="flex-1 min-w-0 px-3 py-2.5 rounded-xl bg-[var(--surface-sunken)] border border-[var(--border)] text-ui font-mono outline-none focus:border-[var(--accent)]"
               />
               <button
                 onClick={saveKey}
                 disabled={busy !== null || apiKey.trim().length === 0}
-                className="px-3.5 py-2.5 rounded-xl bg-[var(--accent)] text-white text-[12.5px] font-medium disabled:opacity-50 min-h-[42px]"
+                className="px-3.5 py-2.5 rounded-xl bg-[var(--accent-solid)] text-[var(--accent-on-solid)] text-small font-medium disabled:opacity-50 min-h-[42px]"
               >
                 {busy === 'save' ? <Loader2 size={14} className="animate-spin" /> : 'Save'}
               </button>
             </div>
-            <div className="flex items-start gap-1.5 text-[11.5px] text-[var(--fg-muted)]">
+            <div className="flex items-start gap-1.5 text-micro text-[var(--fg-muted)]">
               <ShieldCheck size={13} className="mt-0.5 shrink-0" />
               <span>
                 Sent once over HTTPS to your gateway, encrypted with AES-256-GCM under a
@@ -286,7 +286,7 @@ export function AccountSection() {
         )}
 
         {keyError && (
-          <div className="rounded-xl border border-red-400/30 bg-red-400/10 px-3.5 py-2.5 text-[12.5px] text-red-300">
+          <div className="rounded-xl border border-danger/30 bg-danger/10 px-3.5 py-2.5 text-small text-danger">
             {keyError}
           </div>
         )}
@@ -298,7 +298,7 @@ export function AccountSection() {
           title="Delete account"
           desc="Removes the account and everything tied to it — permanently"
         >
-          <div className="text-[12.5px] text-[var(--fg-muted)] leading-relaxed">
+          <div className="text-small text-[var(--fg-muted)] leading-relaxed">
             Deletes your profile, conversations, messages, memories, attachment records and
             stored files, provider settings and credentials, agent tasks and usage events —
             then the identity itself. Local copies on this device are cleared too. There is no
@@ -309,14 +309,14 @@ export function AccountSection() {
               <button
                 onClick={deleteAccount}
                 disabled={busy !== null}
-                className="inline-flex items-center gap-1.5 px-3.5 py-2.5 rounded-xl bg-red-500 text-white text-[12.5px] font-semibold disabled:opacity-50 min-h-[42px]"
+                className="inline-flex items-center gap-1.5 px-3.5 py-2.5 rounded-xl bg-danger/10 text-white text-small font-semibold disabled:opacity-50 min-h-[42px]"
               >
                 {busy === 'delete' ? <Loader2 size={14} className="animate-spin" /> : <Trash2 size={14} />}
                 Yes, delete everything
               </button>
               <button
                 onClick={() => setConfirmDelete(false)}
-                className="px-3.5 py-2.5 rounded-xl border border-[var(--border)] text-[12.5px] font-medium min-h-[42px]"
+                className="px-3.5 py-2.5 rounded-xl border border-[var(--border)] text-small font-medium min-h-[42px]"
               >
                 Keep my account
               </button>
@@ -324,7 +324,7 @@ export function AccountSection() {
           ) : (
             <button
               onClick={() => setConfirmDelete(true)}
-              className="inline-flex items-center gap-1.5 px-3.5 py-2.5 rounded-xl border border-red-400/30 text-red-400 text-[12.5px] font-medium hover:bg-red-400/10 transition-colors min-h-[42px]"
+              className="inline-flex items-center gap-1.5 px-3.5 py-2.5 rounded-xl border border-danger/30 text-danger text-small font-medium hover:bg-danger/10 transition-colors min-h-[42px]"
             >
               <Trash2 size={14} /> Delete my account and data
             </button>

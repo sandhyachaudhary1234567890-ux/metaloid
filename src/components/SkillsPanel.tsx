@@ -95,16 +95,16 @@ export function SkillsPanel({ open, onClose }: { open: boolean; onClose: () => v
           >
             <div className="flex items-center gap-3 px-5 py-4 border-b border-[var(--border)]">
               <div className="flex-1 min-w-0">
-                <h2 className="text-[17px] font-bold text-[var(--fg)]">Skills</h2>
-                <p className="text-[12px] text-[var(--fg-muted)]">Add once — Metaloid uses them when relevant.</p>
+                <h2 className="text-title font-bold text-[var(--fg)]">Skills</h2>
+                <p className="text-small text-[var(--fg-muted)]">Add once — Metaloid uses them when relevant.</p>
               </div>
-              <button onClick={() => setCreating(true)} className="h-9 px-3.5 rounded-xl bg-[var(--accent)] text-white text-[13px] font-semibold flex items-center gap-1.5" title="Create skill">
+              <button onClick={() => setCreating(true)} className="h-9 px-3.5 rounded-xl bg-[var(--accent-solid)] text-[var(--accent-on-solid)] text-ui font-semibold flex items-center gap-1.5" title="Create skill">
                 <Plus size={15} /> New
               </button>
-              <button onClick={() => setImporting(true)} className="h-9 px-3.5 rounded-xl border border-[var(--border)] text-[13px] font-medium flex items-center gap-1.5" title="Import skill.md">
+              <button onClick={() => setImporting(true)} className="h-9 px-3.5 rounded-xl border border-[var(--border)] text-ui font-medium flex items-center gap-1.5" title="Import skill.md">
                 <Upload size={15} /> Import
               </button>
-              <label className="h-9 px-3.5 rounded-xl border border-[var(--border)] text-[13px] font-medium flex items-center gap-1.5 cursor-pointer hover:border-[var(--accent)]" title="Upload .zip skill package">
+              <label className="h-9 px-3.5 rounded-xl border border-[var(--border)] text-ui font-medium flex items-center gap-1.5 cursor-pointer hover:border-[var(--accent)]" title="Upload .zip skill package">
                 <FileUp size={15} /> ZIP
                 <input
                   type="file"
@@ -151,7 +151,7 @@ export function SkillsPanel({ open, onClose }: { open: boolean; onClose: () => v
                     key={t}
                     onClick={() => setTab(t)}
                     className={cn(
-                      'px-3 py-1.5 rounded-lg text-[12.5px] font-medium capitalize',
+                      'px-3 py-1.5 rounded-lg text-small font-medium capitalize',
                       tab === t ? 'bg-[var(--surface-elevated)] text-[var(--fg)] border border-[var(--border)]' : 'text-[var(--fg-muted)]'
                     )}
                   >
@@ -165,7 +165,7 @@ export function SkillsPanel({ open, onClose }: { open: boolean; onClose: () => v
                   value={query}
                   onChange={(e) => setQuery(e.target.value)}
                   placeholder="Search skills…"
-                  className="h-9 w-full rounded-xl bg-[var(--surface-sunken)] border border-[var(--border-subtle)] pl-9 pr-3 text-[13px] outline-none"
+                  className="h-9 w-full rounded-xl bg-[var(--surface-sunken)] border border-[var(--border-subtle)] pl-9 pr-3 text-ui outline-none"
                   aria-label="Search skills"
                 />
               </div>
@@ -173,16 +173,16 @@ export function SkillsPanel({ open, onClose }: { open: boolean; onClose: () => v
 
             <div className="flex-1 overflow-y-auto px-5 py-4 space-y-2.5">
               {runtimes && runtimes.some((r) => !r.available) && (
-                <p className="text-[11.5px] text-[var(--fg-faint)] rounded-xl border border-[var(--border-subtle)] bg-[var(--surface-sunken)] px-3 py-2">
+                <p className="text-micro text-[var(--fg-faint)] rounded-xl border border-[var(--border-subtle)] bg-[var(--surface-sunken)] px-3 py-2">
                   {runtimes.filter((r) => r.available).map((r) => r.kind).join(', ')} live
                   {' · '}
                   {runtimes.filter((r) => !r.available).map((r) => `${r.kind} (${r.runs.join('/')})`).join(', ')} —{' '}
                   Python/Shell execution is not currently enabled in this environment; those scripts stay inert and are never executed.
                 </p>
               )}
-              {!online && <p className="text-[13px] text-[var(--fg-muted)]">Sign in with the gateway online to manage skills.</p>}
+              {!online && <p className="text-ui text-[var(--fg-muted)]">Sign in with the gateway online to manage skills.</p>}
               {online && filtered.length === 0 && (
-                <p className="text-[13px] text-[var(--fg-muted)]">
+                <p className="text-ui text-[var(--fg-muted)]">
                   No skills yet. Create one — e.g. “YouTube SEO” with triggers “youtube, video ranking” — then just ask naturally.
                 </p>
               )}
@@ -207,11 +207,11 @@ export function SkillsPanel({ open, onClose }: { open: boolean; onClose: () => v
                       <span className={cn('block w-[18px] h-[18px] rounded-full bg-white transition-transform', s.status === 'enabled' && 'translate-x-4')} />
                     </button>
                     <div className="flex-1 min-w-0">
-                      <p className="text-[14px] font-semibold text-[var(--fg)]">
-                        {s.name} <span className="font-mono font-normal text-[11px] text-[var(--fg-faint)]">v{s.version}</span>
+                      <p className="text-body font-semibold text-[var(--fg)]">
+                        {s.name} <span className="font-mono font-normal text-micro text-[var(--fg-faint)]">v{s.version}</span>
                       </p>
-                      <p className="text-[12.5px] text-[var(--fg-muted)] line-clamp-2">{s.description}</p>
-                      <p className="mt-1 text-[11px] text-[var(--fg-faint)]">
+                      <p className="text-small text-[var(--fg-muted)] line-clamp-2">{s.description}</p>
+                      <p className="mt-1 text-micro text-[var(--fg-faint)]">
                         {s.scope} · {s.source}{s.command ? ` · /${s.command}` : ''}{s.lastUsedAt ? ` · used ${new Date(s.lastUsedAt).toLocaleDateString()}` : ''}
                       </p>
                     </div>
@@ -271,13 +271,13 @@ export function SkillsPanel({ open, onClose }: { open: boolean; onClose: () => v
             {updating && <UpdateView skill={updating} backendUrl={settings.backendUrl} onClose={() => setUpdating(null)} onSaved={load} />}
             {testing && (
               <SubSheet title={`Test — ${testing.skill.name}`} onClose={() => setTesting(null)}>
-                <p className={cn('text-[14px] font-bold', testing.verdict === 'PASS' ? 'text-emerald-400' : testing.verdict === 'WARN' ? 'text-amber-300' : 'text-red-400')}>
+                <p className={cn('text-body font-bold', testing.verdict === 'PASS' ? 'text-success' : testing.verdict === 'WARN' ? 'text-warning' : 'text-danger')}>
                   {testing.verdict}
                 </p>
                 <div className="mt-2 space-y-1.5">
                   {testing.checks.map((c) => (
-                    <div key={c.name} className="flex gap-2 text-[12.5px]">
-                      <span className={cn('font-semibold w-12 shrink-0', c.verdict === 'PASS' ? 'text-emerald-400' : c.verdict === 'WARN' ? 'text-amber-300' : 'text-red-400')}>
+                    <div key={c.name} className="flex gap-2 text-small">
+                      <span className={cn('font-semibold w-12 shrink-0', c.verdict === 'PASS' ? 'text-success' : c.verdict === 'WARN' ? 'text-warning' : 'text-danger')}>
                         {c.verdict}
                       </span>
                       <span className="text-[var(--fg)]">{c.name} <span className="text-[var(--fg-muted)]">— {c.detail}</span></span>
@@ -299,9 +299,9 @@ function PanelBtn({ icon, label, onClick, danger, busy }: { icon: React.ReactNod
       onClick={onClick}
       disabled={!!busy}
       className={cn(
-        'h-8 px-2.5 rounded-lg border text-[12px] font-medium flex items-center gap-1.5 disabled:opacity-50',
+        'h-8 px-2.5 rounded-lg border text-small font-medium flex items-center gap-1.5 disabled:opacity-50',
         danger
-          ? 'border-red-500/30 text-red-400 hover:bg-red-500/10'
+          ? 'border-danger/30 text-danger hover:bg-danger/10'
           : 'border-[var(--border)] text-[var(--fg-muted)] hover:text-[var(--fg)] hover:border-[var(--fg-faint)]'
       )}
     >
@@ -315,7 +315,7 @@ function SubSheet({ title, onClose, children }: { title: string; onClose: () => 
     <div className="absolute inset-0 z-10 flex items-end sm:items-center justify-center bg-black/50 p-4" onClick={onClose}>
       <div className="w-full max-w-[560px] max-h-[80%] overflow-y-auto rounded-2xl border border-[var(--border)] bg-[var(--surface)] p-5" onClick={(e) => e.stopPropagation()}>
         <div className="flex items-center gap-2 mb-3">
-          <h3 className="text-[15px] font-bold text-[var(--fg)] flex-1">{title}</h3>
+          <h3 className="text-read font-bold text-[var(--fg)] flex-1">{title}</h3>
           <button onClick={onClose} className="icon-btn w-8 h-8 rounded-lg" aria-label="Close">
             <X size={15} />
           </button>
@@ -337,15 +337,15 @@ function PreInstallInspect({ payload, onCancel, onInstall, installing }: {
   return (
     <SubSheet title="Inspect package — nothing installed yet" onClose={onCancel}>
       {!ins ? (
-        <p className="text-[13px] text-red-400">{payload.errors.join(' ')}</p>
+        <p className="text-ui text-danger">{payload.errors.join(' ')}</p>
       ) : (
         <>
-          <p className="text-[15px] font-bold text-[var(--fg)]">{ins.name} <span className="font-mono font-normal text-[11px] text-[var(--fg-faint)]">v{ins.version}</span></p>
-          <p className="text-[13px] text-[var(--fg-muted)] mt-1">{ins.description}</p>
+          <p className="text-read font-bold text-[var(--fg)]">{ins.name} <span className="font-mono font-normal text-micro text-[var(--fg-faint)]">v{ins.version}</span></p>
+          <p className="text-ui text-[var(--fg-muted)] mt-1">{ins.description}</p>
           {payload.warnings.map((w, i) => (
-            <p key={i} className="mt-1.5 text-[12px] text-amber-300">⚠ {w}</p>
+            <p key={i} className="mt-1.5 text-small text-warning">⚠ {w}</p>
           ))}
-          <div className="grid grid-cols-2 gap-2 mt-3 text-[12px]">
+          <div className="grid grid-cols-2 gap-2 mt-3 text-small">
             <Info label="Author" value={String(ins.author || '')} />
             <Info label="License" value={String(ins.license || '')} />
             <Info label="Files" value={ins.files.join(', ') || '—'} />
@@ -360,18 +360,18 @@ function PreInstallInspect({ payload, onCancel, onInstall, installing }: {
           {(sec?.findings.length || 0) > 0 && (
             <div className="mt-2 space-y-1">
               {sec!.findings.map((f, i) => (
-                <p key={i} className={cn('text-[11.5px]', f.level === 'high' ? 'text-red-400' : 'text-amber-300')}>
+                <p key={i} className={cn('text-micro', f.level === 'high' ? 'text-danger' : 'text-warning')}>
                   <ShieldCheck size={11} className="inline mr-1" />[{f.level}] {f.file}: {f.issue}
                 </p>
               ))}
             </div>
           )}
           <div className="flex gap-2 mt-4">
-            <button onClick={onCancel} className="btn-ghost h-10 px-4 text-[13px] flex-1">Cancel</button>
+            <button onClick={onCancel} className="btn-ghost h-10 px-4 text-ui flex-1">Cancel</button>
             <button
               onClick={onInstall}
               disabled={installing}
-              className="h-10 px-4 rounded-xl bg-[var(--accent)] text-white text-[13px] font-semibold flex-1 disabled:opacity-50"
+              className="h-10 px-4 rounded-xl bg-[var(--accent-solid)] text-[var(--accent-on-solid)] text-ui font-semibold flex-1 disabled:opacity-50"
             >
               {installing ? 'Installing…' : 'Install Skill'}
             </button>
@@ -390,11 +390,11 @@ function InspectView({ data, backendUrl, onClose, onChanged }: { data: Record<st
   const [diff, setDiff] = useState<Record<string, unknown> | null>(null);
   return (
     <SubSheet title={String(data.name || 'Skill')} onClose={onClose}>
-      <p className="text-[13px] text-[var(--fg-muted)]">{String(data.description || '')}</p>
+      <p className="text-ui text-[var(--fg-muted)]">{String(data.description || '')}</p>
       <div className="mt-3 rounded-xl bg-[var(--surface-sunken)] border border-[var(--border-subtle)] p-3 max-h-56 overflow-y-auto">
-        <pre className="text-[12px] whitespace-pre-wrap text-[var(--fg)]">{String(data.instructions || '(no instructions)')}</pre>
+        <pre className="text-small whitespace-pre-wrap text-[var(--fg)]">{String(data.instructions || '(no instructions)')}</pre>
       </div>
-      <div className="grid grid-cols-2 gap-2 mt-3 text-[12px]">
+      <div className="grid grid-cols-2 gap-2 mt-3 text-small">
         <Info label="Version" value={String(data.version || '')} />
         <Info label="Scope" value={String(data.scope || '')} />
         <Info label="Tools" value={((data.tools as string[]) || []).join(', ') || '—'} />
@@ -404,10 +404,10 @@ function InspectView({ data, backendUrl, onClose, onChanged }: { data: Record<st
       </div>
       {versions.length > 1 && (
         <div className="mt-3">
-          <p className="text-[12px] font-semibold text-[var(--fg-muted)] flex items-center gap-1.5"><History size={13} /> Versions, rollback & diff</p>
+          <p className="text-small font-semibold text-[var(--fg-muted)] flex items-center gap-1.5"><History size={13} /> Versions, rollback & diff</p>
           <div className="mt-1.5 space-y-1">
             {versions.slice().reverse().map((v) => (
-              <div key={v.version + v.at} className="flex items-center gap-2 text-[12px]">
+              <div key={v.version + v.at} className="flex items-center gap-2 text-small">
                 <span className="font-mono text-[var(--fg)]">v{v.version}</span>
                 <span className="text-[var(--fg-muted)] flex-1 truncate">{v.note}</span>
                 <button
@@ -432,7 +432,7 @@ function InspectView({ data, backendUrl, onClose, onChanged }: { data: Record<st
             <select
               value={diffFrom}
               onChange={(e) => setDiffFrom(e.target.value)}
-              className="h-8 rounded-lg bg-[var(--surface-sunken)] border border-[var(--border)] px-2 text-[12px]"
+              className="h-8 rounded-lg bg-[var(--surface-sunken)] border border-[var(--border)] px-2 text-small"
               aria-label="Diff from version"
             >
               <option value="">Diff from…</option>
@@ -449,7 +449,7 @@ function InspectView({ data, backendUrl, onClose, onChanged }: { data: Record<st
                   toast({ title: e instanceof Error ? e.message : 'Diff failed.' });
                 }
               }}
-              className="h-8 px-3 rounded-lg border border-[var(--border)] text-[12px] disabled:opacity-50"
+              className="h-8 px-3 rounded-lg border border-[var(--border)] text-small disabled:opacity-50"
             >
               Compare to current
             </button>
@@ -459,10 +459,10 @@ function InspectView({ data, backendUrl, onClose, onChanged }: { data: Record<st
       )}
       {audit.length > 0 && (
         <div className="mt-3">
-          <p className="text-[12px] font-semibold text-[var(--fg-muted)]">Recent activity</p>
+          <p className="text-small font-semibold text-[var(--fg-muted)]">Recent activity</p>
           <div className="mt-1 space-y-1">
             {audit.slice().reverse().slice(0, 8).map((a, i) => (
-              <p key={i} className="text-[11.5px] text-[var(--fg-faint)]">
+              <p key={i} className="text-micro text-[var(--fg-faint)]">
                 {new Date(a.at).toLocaleString()} · {a.event}{a.detail ? ` — ${a.detail}` : ''}
               </p>
             ))}
@@ -501,11 +501,11 @@ function DiffRender({ diff }: { diff: Record<string, unknown> }) {
       });
     }
   }
-  if (!rows.length) return <p className="text-[12px] text-[var(--fg-muted)] mt-1">No differences.</p>;
+  if (!rows.length) return <p className="text-small text-[var(--fg-muted)] mt-1">No differences.</p>;
   return (
     <div className="mt-2 rounded-xl border border-[var(--border-subtle)] bg-[var(--surface-sunken)] p-2.5 space-y-1">
       {rows.map((r, i) => (
-        <p key={i} className={cn('text-[12px]', r.hot ? 'text-red-400 font-semibold' : 'text-[var(--fg)]')}>
+        <p key={i} className={cn('text-small', r.hot ? 'text-danger font-semibold' : 'text-[var(--fg)]')}>
           <span className="text-[var(--fg-muted)]">{r.label}:</span> {r.body}
         </p>
       ))}
@@ -516,8 +516,8 @@ function DiffRender({ diff }: { diff: Record<string, unknown> }) {
 function Info({ label, value }: { label: string; value: string }) {
   return (
     <div className="rounded-lg bg-[var(--surface-sunken)] border border-[var(--border-subtle)] px-2.5 py-1.5">
-      <p className="text-[10.5px] uppercase tracking-wide text-[var(--fg-faint)]">{label}</p>
-      <p className="text-[12px] text-[var(--fg)] break-words">{value || '—'}</p>
+      <p className="text-micro uppercase tracking-wide text-[var(--fg-faint)]">{label}</p>
+      <p className="text-small text-[var(--fg)] break-words">{value || '—'}</p>
     </div>
   );
 }
@@ -527,20 +527,20 @@ function Field({ label, value, onChange, placeholder, textarea, tall }: {
 }) {
   return (
     <label className="block mt-2.5">
-      <span className="text-[12px] font-medium text-[var(--fg-muted)]">{label}</span>
+      <span className="text-small font-medium text-[var(--fg-muted)]">{label}</span>
       {textarea ? (
         <textarea
           value={value}
           onChange={(e) => onChange(e.target.value)}
           placeholder={placeholder}
-          className={cn('mt-1 w-full rounded-xl bg-[var(--surface-sunken)] border border-[var(--border)] p-3 text-[13px] outline-none', tall ? 'h-40' : 'h-20')}
+          className={cn('mt-1 w-full rounded-xl bg-[var(--surface-sunken)] border border-[var(--border)] p-3 text-ui outline-none', tall ? 'h-40' : 'h-20')}
         />
       ) : (
         <input
           value={value}
           onChange={(e) => onChange(e.target.value)}
           placeholder={placeholder}
-          className="mt-1 h-10 w-full rounded-xl bg-[var(--surface-sunken)] border border-[var(--border)] px-3 text-[13px] outline-none"
+          className="mt-1 h-10 w-full rounded-xl bg-[var(--surface-sunken)] border border-[var(--border)] px-3 text-ui outline-none"
         />
       )}
     </label>
@@ -579,7 +579,7 @@ function CreateWizard({ backendUrl, onClose, onSaved }: { backendUrl: string; on
       <button
         onClick={save}
         disabled={busy || name.trim().length < 2 || description.trim().length < 20}
-        className="mt-3 h-10 w-full rounded-xl bg-[var(--accent)] text-white text-[13.5px] font-semibold disabled:opacity-50"
+        className="mt-3 h-10 w-full rounded-xl bg-[var(--accent-solid)] text-[var(--accent-on-solid)] text-ui font-semibold disabled:opacity-50"
       >
         {busy ? 'Validating & installing…' : 'Create & install'}
       </button>
@@ -605,18 +605,18 @@ function ImportView({ backendUrl, onClose, onSaved }: { backendUrl: string; onCl
   };
   return (
     <SubSheet title="Import skill.md" onClose={onClose}>
-      <p className="text-[12px] text-[var(--fg-muted)] mb-2">Paste a skill.md with YAML frontmatter (name, description 20+ chars, version). Scanned before install; ZIP files are not accepted.</p>
+      <p className="text-small text-[var(--fg-muted)] mb-2">Paste a skill.md with YAML frontmatter (name, description 20+ chars, version). Scanned before install; ZIP files are not accepted.</p>
       <textarea
         value={md}
         onChange={(e) => setMd(e.target.value)}
         placeholder={'---\nname: YouTube SEO\ndescription: …\nversion: 1.0.0\n---\n\n## Workflow\n…'}
-        className="h-56 w-full rounded-xl bg-[var(--surface-sunken)] border border-[var(--border)] p-3 font-mono text-[12px] outline-none"
+        className="h-56 w-full rounded-xl bg-[var(--surface-sunken)] border border-[var(--border)] p-3 font-mono text-small outline-none"
         aria-label="skill.md content"
       />
       <button
         onClick={save}
         disabled={busy || !md.trim()}
-        className="mt-3 h-10 w-full rounded-xl bg-[var(--accent)] text-white text-[13.5px] font-semibold disabled:opacity-50"
+        className="mt-3 h-10 w-full rounded-xl bg-[var(--accent-solid)] text-[var(--accent-on-solid)] text-ui font-semibold disabled:opacity-50"
       >
         {busy ? 'Validating & installing…' : 'Validate & install'}
       </button>
@@ -645,18 +645,18 @@ function UpdateView({ skill, backendUrl, onClose, onSaved }: { skill: SkillCard;
   };
   return (
     <SubSheet title={`Update — ${skill.name}`} onClose={onClose}>
-      <p className="text-[12px] text-[var(--fg-muted)] mb-2">Paste the revised skill.md. The current v{skill.version} is preserved for rollback.</p>
+      <p className="text-small text-[var(--fg-muted)] mb-2">Paste the revised skill.md. The current v{skill.version} is preserved for rollback.</p>
       <textarea
         value={md}
         onChange={(e) => setMd(e.target.value)}
         placeholder="Revised skill.md with frontmatter…"
-        className="h-56 w-full rounded-xl bg-[var(--surface-sunken)] border border-[var(--border)] p-3 font-mono text-[12px] outline-none"
+        className="h-56 w-full rounded-xl bg-[var(--surface-sunken)] border border-[var(--border)] p-3 font-mono text-small outline-none"
         aria-label="revised skill.md"
       />
       <button
         onClick={save}
         disabled={busy || !md.trim()}
-        className="mt-3 h-10 w-full rounded-xl bg-[var(--accent)] text-white text-[13.5px] font-semibold disabled:opacity-50"
+        className="mt-3 h-10 w-full rounded-xl bg-[var(--accent-solid)] text-[var(--accent-on-solid)] text-ui font-semibold disabled:opacity-50"
       >
         {busy ? 'Validating…' : 'Validate & update'}
       </button>

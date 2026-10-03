@@ -39,3 +39,6 @@ Thumbs.db
 coverage/
 .vitest/
 tsconfig.tsbuildinfo
+
+# TypeScript incremental build output
+.tsbuild-temp/

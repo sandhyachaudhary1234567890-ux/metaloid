@@ -25,12 +25,12 @@ export function LiveActivity() {
         onClick={() => setExpanded((v) => !v)}
         aria-expanded={expanded}
         aria-label={expanded ? 'Collapse activity details' : 'Expand activity details'}
-        className="group inline-flex max-w-full items-center gap-1.5 text-[13px] text-[var(--fg-muted)] hover:text-[var(--fg-secondary)] transition-colors"
+        className="group inline-flex max-w-full items-center gap-1.5 text-ui text-[var(--fg-muted)] hover:text-[var(--fg-secondary)] transition-colors"
       >
         {!done && !failed && (
           <ThinkingLinesSpinner size={18} lineColor="var(--fg-muted)" ballColor="var(--accent)" />
         )}
-        {done && <Check size={13} className="text-emerald-600 dark:text-emerald-400 shrink-0" aria-hidden />}
+        {done && <Check size={13} className="text-success dark:text-success shrink-0" aria-hidden />}
         <span className="truncate font-medium">{view.label}</span>
         <ChevronDown
           size={13}
@@ -43,16 +43,16 @@ export function LiveActivity() {
         <div className="mt-1.5 ml-[13px] border-l border-[var(--border)] pl-3 space-y-1">
           {view.lines.map((l, i) => (
             <div key={i}>
-              <p className="text-[12px] text-[var(--fg-secondary)] leading-snug">{l.label}</p>
+              <p className="text-small text-[var(--fg-secondary)] leading-snug">{l.label}</p>
               {l.detail && (
-                <p className="text-[11.5px] text-[var(--fg-faint)] leading-snug break-words">{l.detail}</p>
+                <p className="text-micro text-[var(--fg-faint)] leading-snug break-words">{l.detail}</p>
               )}
             </div>
           ))}
           {!done && !failed && (
             <button
               onClick={stopGenerating}
-              className="text-[11.5px] text-[var(--fg-faint)] hover:text-[var(--fg-muted)] underline underline-offset-2"
+              className="text-micro text-[var(--fg-faint)] hover:text-[var(--fg-muted)] underline underline-offset-2"
             >
               Stop
             </button>
@@ -60,7 +60,7 @@ export function LiveActivity() {
         </div>
       )}
       {expanded && done && (
-        <p className="mt-1 ml-[13px] text-[11.5px] text-[var(--fg-faint)]">Finished.</p>
+        <p className="mt-1 ml-[13px] text-micro text-[var(--fg-faint)]">Finished.</p>
       )}
     </div>
   );

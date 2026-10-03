@@ -19,7 +19,7 @@ export function TopBar({ tab, onTab }: { tab: HomeTab; onTab: (t: HomeTab) => vo
             onClick={() => onTab(t.id)}
             aria-current={active ? 'page' : undefined}
             className={cn(
-              'relative pb-2 text-[14px] font-medium transition-colors duration-150',
+              'relative pb-2 text-body font-medium transition-colors duration-150',
               active ? 'text-[var(--fg)]' : 'text-[var(--fg-muted)] hover:text-[var(--fg)]'
             )}
           >

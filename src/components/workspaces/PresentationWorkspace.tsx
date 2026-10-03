@@ -35,14 +35,14 @@ export function PresentationWorkspace({ deck, onClose }: PresentationWorkspacePr
   return (
     <div className={`flex flex-col h-full bg-[var(--surface)] text-[var(--fg)] border-l border-[var(--border)] ${isFullscreen ? 'fixed inset-0 z-50' : 'relative'}`}>
       {/* Workspace Header */}
-      <div className="flex items-center justify-between px-4 py-3 border-b border-[var(--border)] bg-[var(--surface-elevated)]/60 backdrop-blur-md">
+      <div className="flex items-center justify-between px-4 py-3 border-b border-[var(--border)] bg-[color-mix(in_srgb,var(--surface-elevated)_60%,transparent)] backdrop-blur-md">
         <div className="flex items-center gap-2.5 min-w-0">
-          <span className="w-7 h-7 rounded-lg bg-[var(--accent)]/10 text-[var(--accent)] flex items-center justify-center shrink-0">
+          <span className="w-7 h-7 rounded-lg bg-[color-mix(in_srgb,var(--accent)_10%,transparent)] text-[var(--accent)] flex items-center justify-center shrink-0">
             <Presentation size={15} />
           </span>
           <div className="min-w-0">
-            <h3 className="text-[13.5px] font-semibold text-[var(--fg)] truncate">{deck.title}</h3>
-            <p className="text-[11px] text-[var(--fg-muted)]">
+            <h3 className="text-ui font-semibold text-[var(--fg)] truncate">{deck.title}</h3>
+            <p className="text-micro text-[var(--fg-muted)]">
               {deck.slides.length} slides &middot; Verified PowerPoint &middot; Presentation Workspace
             </p>
           </div>
@@ -51,14 +51,14 @@ export function PresentationWorkspace({ deck, onClose }: PresentationWorkspacePr
         <div className="flex items-center gap-1.5 shrink-0">
           <button
             onClick={handleDownloadPptx}
-            className="btn-primary h-8 px-2.5 sm:px-3 text-[12px] rounded-lg inline-flex items-center gap-1.5"
+            className="btn-primary h-8 px-2.5 sm:px-3 text-small rounded-lg inline-flex items-center gap-1.5"
             title="Download verified .pptx file"
           >
             <Download size={13} /> <span className="hidden sm:inline">Download</span> PPTX
           </button>
           <button
             onClick={handleDownloadMarkdown}
-            className="btn-ghost h-8 px-2.5 text-[12px] rounded-lg inline-flex items-center gap-1 text-[var(--fg-muted)] hover:text-[var(--fg)]"
+            className="btn-ghost h-8 px-2.5 text-small rounded-lg inline-flex items-center gap-1 text-[var(--fg-muted)] hover:text-[var(--fg)]"
             title="Export slide text as Markdown"
           >
             <FileText size={13} />
@@ -83,8 +83,8 @@ export function PresentationWorkspace({ deck, onClose }: PresentationWorkspacePr
       {/* Workspace Body */}
       <div className="flex-1 flex overflow-hidden">
         {/* Slide Thumbnails Column */}
-        <div className="hidden md:block w-48 sm:w-56 border-r border-[var(--border)] overflow-y-auto p-3 space-y-2.5 bg-[var(--surface-sunken)]/40 shrink-0">
-          <div className="text-[10.5px] font-bold uppercase tracking-wider text-[var(--fg-muted)] px-1 mb-1">
+        <div className="hidden md:block w-48 sm:w-56 border-r border-[var(--border)] overflow-y-auto p-3 space-y-2.5 bg-[color-mix(in_srgb,var(--surface-sunken)_40%,transparent)] shrink-0">
+          <div className="text-micro font-bold uppercase tracking-wider text-[var(--fg-muted)] px-1 mb-1">
             Slides ({deck.slides.length})
           </div>
           {deck.slides.map((s, idx) => (
@@ -97,7 +97,7 @@ export function PresentationWorkspace({ deck, onClose }: PresentationWorkspacePr
                   : 'border-[var(--border)] bg-[var(--surface)] text-[var(--fg-muted)] hover:bg-[var(--surface-hover)]'
               }`}
             >
-              <div className="flex items-center justify-between text-[10px] text-[var(--fg-muted)] mb-1">
+              <div className="flex items-center justify-between text-micro text-[var(--fg-muted)] mb-1">
                 <span>Slide {s.slideNumber}</span>
                 {idx === currentSlideIndex && <Check size={10} className="text-[var(--accent)]" />}
               </div>
@@ -111,10 +111,10 @@ export function PresentationWorkspace({ deck, onClose }: PresentationWorkspacePr
           {/* Main Slide Canvas */}
           <div className="w-full max-w-[720px] aspect-[16/9] rounded-2xl border border-[var(--border-strong)] bg-[var(--surface)] p-5 sm:p-8 md:p-12 shadow-pop flex flex-col justify-between select-text transition-all relative overflow-hidden">
             {/* Subtle background glow */}
-            <div className="absolute top-0 right-0 w-64 h-64 bg-[var(--accent)]/5 rounded-full blur-3xl pointer-events-none" />
+            <div className="absolute top-0 right-0 w-64 h-64 bg-[color-mix(in_srgb,var(--accent)_5%,transparent)] rounded-full blur-3xl pointer-events-none" />
 
             <div>
-              <div className="flex items-center justify-between text-[11px] font-mono text-[var(--fg-muted)] uppercase tracking-wider mb-4">
+              <div className="flex items-center justify-between text-micro font-mono text-[var(--fg-muted)] uppercase tracking-wider mb-4">
                 <span>{deck.title}</span>
                 <span>{currentSlide.slideNumber} / {deck.slides.length}</span>
               </div>
@@ -131,7 +131,7 @@ export function PresentationWorkspace({ deck, onClose }: PresentationWorkspacePr
             <div className="my-auto py-4">
               <ul className="space-y-3">
                 {currentSlide.bullets.map((b, i) => (
-                  <li key={i} className="flex items-start gap-2.5 text-[13.5px] leading-relaxed text-[var(--fg)]">
+                  <li key={i} className="flex items-start gap-2.5 text-ui leading-relaxed text-[var(--fg)]">
                     <span className="w-1.5 h-1.5 rounded-full bg-[var(--accent)] mt-2 shrink-0" />
                     <span>{b}</span>
                   </li>
@@ -139,7 +139,7 @@ export function PresentationWorkspace({ deck, onClose }: PresentationWorkspacePr
               </ul>
             </div>
 
-            <div className="flex items-center justify-between border-t border-[var(--border-subtle)] pt-3 text-[11px] text-[var(--fg-muted)]">
+            <div className="flex items-center justify-between border-t border-[var(--border-subtle)] pt-3 text-micro text-[var(--fg-muted)]">
               <span>MetaIoid Verified Deliverable</span>
               <span className="font-mono">Slide {currentSlide.slideNumber}</span>
             </div>
@@ -168,7 +168,7 @@ export function PresentationWorkspace({ deck, onClose }: PresentationWorkspacePr
 
           {/* Speaker Notes */}
           {currentSlide.speakerNotes && (
-            <div className="w-full max-w-[720px] mt-4 p-3.5 rounded-xl border border-[var(--border)] bg-[var(--surface-elevated)]/60 text-xs text-[var(--fg-secondary)] leading-relaxed">
+            <div className="w-full max-w-[720px] mt-4 p-3.5 rounded-xl border border-[var(--border)] bg-[color-mix(in_srgb,var(--surface-elevated)_60%,transparent)] text-xs text-[var(--fg-secondary)] leading-relaxed">
               <span className="font-semibold text-[var(--fg)] block mb-0.5">Speaker Notes:</span>
               {currentSlide.speakerNotes}
             </div>

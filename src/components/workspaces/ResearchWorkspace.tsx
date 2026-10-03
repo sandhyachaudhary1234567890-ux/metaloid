@@ -13,14 +13,14 @@ export function ResearchWorkspace({ research, onClose }: ResearchWorkspaceProps)
   return (
     <div className={`flex flex-col h-full bg-[var(--surface)] text-[var(--fg)] border-l border-[var(--border)] ${isFullscreen ? 'fixed inset-0 z-50' : 'relative'}`}>
       {/* Header */}
-      <div className="flex items-center justify-between px-4 py-3 border-b border-[var(--border)] bg-[var(--surface-elevated)]/60 backdrop-blur-md">
+      <div className="flex items-center justify-between px-4 py-3 border-b border-[var(--border)] bg-[color-mix(in_srgb,var(--surface-elevated)_60%,transparent)] backdrop-blur-md">
         <div className="flex items-center gap-2.5 min-w-0">
-          <span className="w-7 h-7 rounded-lg bg-[var(--accent)]/10 text-[var(--accent)] flex items-center justify-center shrink-0">
+          <span className="w-7 h-7 rounded-lg bg-[color-mix(in_srgb,var(--accent)_10%,transparent)] text-[var(--accent)] flex items-center justify-center shrink-0">
             <Telescope size={15} />
           </span>
           <div className="min-w-0">
-            <h3 className="text-[13.5px] font-semibold text-[var(--fg)] truncate">{research.title}</h3>
-            <p className="text-[11px] text-[var(--fg-muted)]">Verified Investigation &middot; Cited Research Workspace</p>
+            <h3 className="text-ui font-semibold text-[var(--fg)] truncate">{research.title}</h3>
+            <p className="text-micro text-[var(--fg-muted)]">Verified Investigation &middot; Cited Research Workspace</p>
           </div>
         </div>
 
@@ -59,8 +59,8 @@ export function ResearchWorkspace({ research, onClose }: ResearchWorkspaceProps)
             {research.findings.map((f, i) => (
               <div key={i} className="p-4 rounded-xl border border-[var(--border)] bg-[var(--surface)]">
                 <p className="text-xs leading-relaxed text-[var(--fg)] font-medium mb-2">{f.point}</p>
-                <div className="flex items-center justify-between text-[11px] text-[var(--fg-muted)]">
-                  <span className="inline-flex items-center gap-1 text-emerald-500 font-semibold">
+                <div className="flex items-center justify-between text-micro text-[var(--fg-muted)]">
+                  <span className="inline-flex items-center gap-1 text-success font-semibold">
                     <CheckCircle2 size={12} /> {f.confidence}
                   </span>
                   <span className="truncate max-w-[200px]">{f.source}</span>
@@ -88,10 +88,10 @@ export function ResearchWorkspace({ research, onClose }: ResearchWorkspaceProps)
                   <p className="font-medium text-[var(--fg)] group-hover:text-[var(--accent)] transition-colors truncate">
                     {s.title}
                   </p>
-                  <p className="text-[10.5px] text-[var(--fg-muted)] truncate">{s.url}</p>
+                  <p className="text-micro text-[var(--fg-muted)] truncate">{s.url}</p>
                 </div>
                 <div className="flex items-center gap-2 shrink-0">
-                  <span className="px-2 py-0.5 rounded-full text-[10px] font-semibold bg-emerald-500/10 text-emerald-500">
+                  <span className="px-2 py-0.5 rounded-full text-micro font-semibold bg-success/10 text-success">
                     {s.reliability}
                   </span>
                   <ExternalLink size={12} className="text-[var(--fg-muted)] group-hover:text-[var(--accent)]" />
