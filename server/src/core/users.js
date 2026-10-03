@@ -9,6 +9,7 @@ import fs from 'node:fs';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { emit } from './events.js';
+import { authConfigured } from '../auth.js';
 
 const DIR = process.env.METALOID_DATA_DIR || path.join(path.dirname(fileURLToPath(import.meta.url)), '..', '..', 'data');
 const USERS_FILE = path.join(DIR, 'users.json');
@@ -200,10 +201,14 @@ const LOCAL_AUTH = { userId: 'local:owner', accountId: 'local:owner', sessionId:
 function localOpenMode(req) {
   if (process.env.METALOID_MODE === 'production') return false;
   if (process.env.METALOID_MODE === 'showcase' || process.env.METALOID_ALLOW_ANONYMOUS === 'true') return true;
-  const authConfiguredNow = Boolean(
-    process.env.SUPABASE_JWKS_URL || process.env.SUPABASE_JWT_SECRET || process.env.SUPABASE_PUBLIC_KEY_PEM
-  );
-  if (authConfiguredNow) return false;
+  // Ask auth.js, which is the module that actually verifies tokens. This used
+  // to re-derive the answer from a hand-written list of env var names, and it
+  // named the public key SUPABASE_PUBLIC_KEY_PEM while auth.js reads
+  // SUPABASE_JWT_PUBLIC_KEY. A deployment configured with only the key auth.js
+  // uses therefore looked *unconfigured* here and could hand a same-host caller
+  // the local owner identity — an anonymous route to the platform's provider
+  // credits on a server that was in fact fully configured.
+  if (authConfigured()) return false;
   const ip = String((req.socket && req.socket.remoteAddress) || '');
   return ip === '::1' || ip.startsWith('127.') || ip.startsWith('::ffff:127.');
 }

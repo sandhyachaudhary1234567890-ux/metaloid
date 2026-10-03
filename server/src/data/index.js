@@ -109,7 +109,10 @@ const taskRow = (r) => ({
 });
 
 const profileRow = (r) => ({
-  id: r.user_id,
+  // `profiles.id` IS the user's uuid (the table is 1:1 with auth.users); there
+  // is no user_id column. Reading the wrong one produced a profile with an
+  // undefined id, which every ownership comparison downstream then believed.
+  id: r.id ?? r.user_id,
   display_name: r.display_name ?? '',
   avatar_url: r.avatar_url ?? null,
   onboarding_completed: !!r.onboarding_completed,

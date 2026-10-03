@@ -49,7 +49,12 @@ export const HealthStatus = {
  */
 export class ProviderHealthManager {
   constructor() {
-    this.cleanupInterval = setInterval(() => this._cleanupExpired(), 60000); // Cleanup every minute
+    // Housekeeping, not work: this timer must never be the reason a process
+    // stays alive. Un-unref'd it pinned the event loop of anything that merely
+    // imported the gateway — a short-lived script, a test run, or a serverless
+    // instance that should be free to freeze the moment its request is done.
+    this.cleanupInterval = setInterval(() => this._cleanupExpired(), 60000);
+    if (typeof this.cleanupInterval.unref === 'function') this.cleanupInterval.unref();
   }
   
   /**

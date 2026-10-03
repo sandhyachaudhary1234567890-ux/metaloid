@@ -1673,6 +1673,14 @@ app.delete('/api/account', requireAuth, rateLimit(5, 60000), async (req, res) =>
   res.json({ ok: true, deleted: uid });
 });
 
+// ---- unmatched API routes answer in the API's own language ----
+// Anything under /api that no route claimed is a 404 in JSON. Without this a
+// typo in a client path falls through to whatever serves the app shell, and
+// the client reports a JSON parse failure instead of a missing endpoint.
+app.use('/api', (req, res) => {
+  res.status(404).json({ error: 'Unknown API endpoint.', code: 'not_found', path: req.path });
+});
+
 // TLS when LAN certs exist (server/../certs from certs-gen.mjs) — required
 // because an https page may not call an http gateway (mixed content), and
 // the phone needs https for mic access at all.
