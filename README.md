@@ -69,11 +69,21 @@ distinct, truthful states, and the UI switches between them automatically:
 `GET /api/health` reports the same thing, from facts:
 
 ```json
-{ "ai": true, "provider": "openrouter", "models": { "free": 41, "catalogue": true } }
+{
+  "server": true, "ai": true, "degraded": false,
+  "data": { "driver": "supabase", "supabase_configured": true },
+  "database": true,
+  "auth": { "configured": true, "mode": "jwks" },
+  "provider_configured": true, "provider_healthy": true,
+  "storage": { "driver": "supabase", "ok": true },
+  "encryption": { "configured": true, "active_key": "k1" }
+}
 ```
 
-`ai` is only true when a key is present **and** the provider actually answered
-the catalogue call — never because a variable is set.
+`provider_healthy` is only true when a key is present **and** the provider
+actually answered the catalogue call — never because a variable is set.
+`database`, `auth` and `storage` are measured the same way, and an unconfigured
+one reports `configured: false` rather than a hopeful green tick.
 
 ---
 
@@ -120,6 +130,52 @@ exists only to sign private objects and to complete an account deletion.
    `provider_configured`, `provider_healthy` and `storage` separately. It
    reports values it actually observed — it never says ONLINE because an env
    var exists.
+
+### Environment variables
+
+| Variable | Side | Why |
+|---|---|---|
+| `VITE_SUPABASE_URL`, `VITE_SUPABASE_ANON_KEY` | **client-safe** | the anon key is designed to be public; RLS is what protects data |
+| `VITE_API_URL` | **client-safe** | where the gateway lives |
+| `OPENROUTER_API_KEY`, `NVIDIA_API_KEY` | server-only | billed provider credentials |
+| `SUPABASE_SERVICE_ROLE_KEY` | **server-only** | bypasses RLS; used for signing private objects, storage cleanup and account deletion |
+| `SUPABASE_JWKS_URL` (+ `_ISSUER`, `_AUDIENCE`) | server-only | verifies user JWTs without a shared secret |
+| `METALOID_ENCRYPTION_KEYS`, `_ACTIVE` | **server-only** | encrypts stored provider keys (`openssl rand -base64 32`) |
+| `METALOID_DATA_DRIVER`, `METALOID_DATA_DIR` | server-only | `supabase` in production, `local` for the demo |
+| `ALLOW_ORIGINS`, `BIND_HOST`, `PORT` | server-only | CORS allow-list and listen address |
+
+The gateway refuses to start a request path that needs a missing secret rather
+than degrading quietly: no JWT key → `auth: unconfigured` and `503`; no
+encryption key → it will not store a provider key at all.
+
+### Provider secrets
+
+A submitted key is encrypted with AES-256-GCM under a key from the environment
+and stored in a **versioned envelope**: `v1:<keyId>:<iv>:<tag>:<ciphertext>`.
+Responses contain only a mask (`sk-or-…4f2a`) and one of
+`connected | invalid | needs_setup`; there is no route that returns plaintext,
+and no log line that contains one. Rotation is a config change, not a
+migration: add `k2` to `METALOID_ENCRYPTION_KEYS`, point
+`METALOID_ENCRYPTION_ACTIVE` at it, and re-encrypt as rows are rewritten — the
+old key keeps decrypting until nothing references it.
+
+### Storage
+
+Three **private** buckets — `attachments`, `generated`, `avatars` — with objects
+namespaced `{user_id}/{file_id}/{filename}` inside them (the policy compares the
+first folder to `auth.uid()`; `attachments.storage_path` keeps the
+fully-qualified path for auditability). Clients never construct a URL:
+`GET /api/v1/attachments/:id/url` checks ownership and returns a signed link
+that expires in 30–3600 s (default 300). Bytes stay out of Postgres; the
+database holds metadata only.
+
+### Testing your own setup
+
+```bash
+npm test                    # typecheck + 85 tests + 205 RLS assertions
+supabase test db            # the same RLS matrix, against your project
+npm run showcase            # landing at /, app at /app/, gateway on 8787
+```
 
 ## What is inside
 

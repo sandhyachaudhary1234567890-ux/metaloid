@@ -231,6 +231,7 @@
     </a>
     <nav class="nav-links" aria-label="Sections">
       <a href="#capabilities">Capabilities</a>
+      <a href="#accounts">Accounts</a>
       <a href="#honesty">Honesty</a>
       <a href="#architecture">Architecture</a>
       <a href="#run">Run it</a>
@@ -254,11 +255,11 @@
           <a class="btn btn-primary btn-lg" href="/app/">Launch METALOID</a>
           <a class="btn btn-lg btn-ghost" href="#run">Run it locally</a>
         </div>
-        <p class="cta-note">No account. No telemetry. Works offline with an honest demo state.</p>
+        <p class="cta-note">No account needed — sign in only when you want your data to follow you. No telemetry, no trackers, and an honest state for the demo.</p>
         <div class="badge-row">
-          <span class="badge">Voice loop · barge-in &lt; 10 ms</span>
+          <span class="badge">Barge-in ≤ 9 ms to LISTENING</span>
           <span class="badge">Hindi · Hinglish · English</span>
-          <span class="badge">44 automated tests</span>
+          <span class="badge">85 tests + 205 RLS assertions</span>
         </div>
       </div>
 
@@ -342,6 +343,53 @@
     </div>
   </section>
 
+
+  <section id="accounts">
+    <div class="wrap">
+      <div class="sec-head">
+        <div class="kicker">Accounts &amp; sync</div>
+        <h2>Yours on every device — or on none of them.</h2>
+        <p>METALOID works entirely on this device out of the box. Sign in and the same data follows you: real email/password identity with verification and reset, conversations and memories in Postgres behind row level security, and your provider key encrypted at rest — never in the browser, never in a response.</p>
+      </div>
+      <div class="grid g3">
+        <div class="card">
+          <h3>Identity that is actually identity</h3>
+          <p>Sign up, verify by email, reset a forgotten password, stay signed in across restarts. Sessions refresh automatically; signing out clears this device only.</p>
+        </div>
+        <div class="card">
+          <h3>Row level security, executed</h3>
+          <p>Every user table is owner-only, with private storage paths. 205 security assertions run in CI against real PostgreSQL — anonymous, owner and non-owner, including cross-user probes.</p>
+        </div>
+        <div class="card">
+          <h3>Your key, encrypted</h3>
+          <p>Provider keys are stored server-side with AES-256-GCM under a key from the environment, in a versioned envelope with a rotation path. The UI only ever shows a mask.</p>
+        </div>
+        <div class="card">
+          <h3>Streaming stays fast</h3>
+          <p>The visible path never waits on a database: you send, the gateway streams, the finished turn is persisted after. An interrupted stream is recorded as cancelled, not lost.</p>
+        </div>
+        <div class="card">
+          <h3>Private files</h3>
+          <p>Attachments, generated files and avatars live in private buckets under your own folder, reachable only through short-lived signed links minted after an ownership check.</p>
+        </div>
+        <div class="card">
+          <h3>Delete means delete</h3>
+          <p>Account deletion removes your profile, conversations, messages, memories, attachment records and files, provider settings and keys, tasks and usage — then the identity itself.</p>
+        </div>
+      </div>
+      <div class="metrics" style="margin-top:40px">
+        <div class="metric"><b>1330</b><span>requests/sec at p95 12 ms — measured, 2 vCPU, local driver</span></div>
+        <div class="metric"><b>600/min</b><span>per-account API budget, enforced per identity</span></div>
+        <div class="metric"><b>0</b><span>raw provider keys in any API response or log</span></div>
+        <div class="metric"><b>1</b><span>auth system — no second login to maintain</span></div>
+      </div>
+      <p style="margin-top:22px;font-size:13px;color:var(--fg-3);max-width:760px">
+        The load number is what a script measured on a small machine against the local data driver. It is published with its
+        <a href="https://github.com/sandhyachaudhary1234567890-ux/metaloid/blob/master/docs/ANDROID_API.md#11-load-characteristics" style="color:var(--accent)">method, bottlenecks and caveats</a> — never as a user count nobody can verify.
+      </p>
+    </div>
+  </section>
+
   <section id="honesty">
     <div class="wrap">
       <div class="sec-head">
@@ -404,8 +452,8 @@
       </div>
       <div class="metrics" style="margin-top:40px">
         <div class="metric"><b>20/20</b><span>voice torture matrix, incl. barge-in &amp; Hindi</span></div>
-        <div class="metric"><b>&lt;10 ms</b><span>interrupt to LISTENING, engine-clear</span></div>
-        <div class="metric"><b>44</b><span>automated tests across app &amp; gateway</span></div>
+        <div class="metric"><b>≤9 ms</b><span>interrupt to LISTENING (engine-clear 0.1–0.6 ms)</span></div>
+        <div class="metric"><b>290</b><span>automated checks: 85 tests + 205 security assertions</span></div>
         <div class="metric"><b>0</b><span>secrets in the repository</span></div>
       </div>
     </div>

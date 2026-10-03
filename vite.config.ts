@@ -72,6 +72,8 @@ export default defineConfig({
   // dist/ is the whole deployable site: landing at the root, product in
   // /app/ (assets + public/ follow the base automatically).
   build: {
+    // The whole product builds into dist/app/ so that dist/ can also hold the
+    // marketing page at its root — one deployable artifact, two URLs.
     outDir: 'dist/app',
     emptyOutDir: true,
     // Split the heavy, rarely-changing libraries out of the app chunk so the
