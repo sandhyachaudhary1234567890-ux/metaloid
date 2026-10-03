@@ -20,7 +20,8 @@
     "test:unit": "vitest run",
     "test:integration": "npm --prefix server test && npm --prefix server run test:matrices",
     "test:security": "node supabase/tests/rls.pglite.mjs && node supabase/tests/rls_pgtap.pglite.mjs",
-    "test:e2e": "node scripts/e2e.mjs"
+    "test:e2e": "node scripts/e2e.mjs",
+    "test:live": "node scripts/live-smoke.mjs"
   },
   "dependencies": {
     "@supabase/supabase-js": "^2.117.2",

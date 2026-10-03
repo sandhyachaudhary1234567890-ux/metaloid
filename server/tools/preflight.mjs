@@ -192,8 +192,17 @@ function main() {
 
   let env = { ...process.env };
   let source = 'the ambient environment';
-  if (envIdx !== -1 && args[envIdx + 1]) {
-    const file = path.resolve(process.cwd(), args[envIdx + 1]);
+  // With no --env, check `server/.env` if it is there. The ambient environment
+  // on a developer machine holds none of these variables, so defaulting to it
+  // would report "nothing is configured" on a machine that is fully
+  // configured — the least useful possible answer from a tool whose whole job
+  // is to tell you what is missing.
+  const defaultFile = path.join(process.cwd(), 'server', '.env');
+  const fallbackFile = path.join(process.cwd(), '.env');
+  const chosen = args[envIdx + 1]
+    || (fs.existsSync(defaultFile) ? defaultFile : fs.existsSync(fallbackFile) ? fallbackFile : null);
+  if (chosen) {
+    const file = path.resolve(process.cwd(), chosen);
     if (!fs.existsSync(file)) {
       console.error(`preflight: ${file} does not exist`);
       process.exit(1);

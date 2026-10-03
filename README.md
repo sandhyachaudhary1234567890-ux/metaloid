@@ -251,6 +251,8 @@ npm run test:unit           # app contract tests (vitest)
 npm run test:integration    # gateway API tests, real HTTP, real data driver
 npm run test:security       # RLS: 157 properties + the pgTAP suite
 npm run test:e2e            # signup → login → onboarding → chat → logout → reload
+npm run test:live           # the above, but through the running stack: 5173 → proxy → gateway
+npm run preflight --prefix server   # what is missing before deploying (no network)
 supabase test db            # the same RLS matrix, against your project
 npm run showcase            # landing at /, app at /app/, gateway on 8787
 ```

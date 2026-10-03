@@ -3,7 +3,7 @@
   "private": true,
   "version": "0.1.0",
   "type": "module",
-  "description": "METALOID edge/API gateway \u2014 model router, agent skills, OSINT orchestration. Keys stay here, never in the frontend.",
+  "description": "METALOID edge/API gateway — model router, agent skills, OSINT orchestration. Keys stay here, never in the frontend.",
   "scripts": {
     "start": "node src/index.js",
     "dev": "node --watch src/index.js",
@@ -12,7 +12,8 @@
     "fake:provider": "node tests/fake-provider.mjs --port 9911 --scenario ok",
     "loadtest": "node tools/loadtest.mjs",
     "test:matrices": "node tests/core-isolation.mjs && node tests/artifacts-matrix.mjs && node tests/skills-matrix.mjs && node tests/skills-v2.mjs && node tests/intent-artifact-matrix.mjs",
-    "test:matrices:network": "node tests/providers-matrix.mjs && node tests/providers-http.cjs && node tests/http-matrix.cjs && node tests/load.cjs && node tests/supabase-mode.cjs"
+    "test:matrices:network": "node tests/providers-matrix.mjs && node tests/providers-http.cjs && node tests/http-matrix.cjs && node tests/load.cjs && node tests/supabase-mode.cjs",
+    "preflight": "node tools/preflight.mjs"
   },
   "dependencies": {
     "bcrypt": "^6.0.0",
