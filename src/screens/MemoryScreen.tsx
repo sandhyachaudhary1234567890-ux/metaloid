@@ -9,13 +9,8 @@ import { timeAgo, cn } from '../lib/cn';
 // Curated categories: Personal, Preferences, Projects, Important, Instructions.
 
 const CATS: MemoryCategory[] = ['Personal', 'Preferences', 'Projects', 'Important', 'Instructions'];
-const CAT_COLOR: Record<MemoryCategory, string> = {
-  Personal: 'text-sky-400 bg-sky-400/10 border-sky-400/20',
-  Preferences: 'text-violet-400 bg-violet-400/10 border-violet-400/20',
-  Projects: 'text-cyan-400 bg-cyan-400/10 border-cyan-400/20',
-  Important: 'text-amber-400 bg-amber-400/10 border-amber-400/20',
-  Instructions: 'text-purple-400 bg-purple-400/10 border-purple-400/20',
-};
+// One neutral treatment: the category name carries the meaning, colour does not.
+const CAT_CHIP = 'text-[var(--fg-muted)] bg-[var(--surface-sunken)] border-[var(--border)]';
 
 export function MemoryScreen() {
   const { memories, addMemory, updateMemory, openModal, toast, settings } = useApp();
@@ -128,7 +123,7 @@ export function MemoryScreen() {
                     onClick={() => { setSelected(m); setEditing(false); setEditText(m.content); }}
                     className="rounded-2xl border border-[var(--border)] bg-[var(--surface)] p-4 text-left hover:bg-[var(--surface-hover)] hover:border-[var(--border-strong)] transition-all"
                   >
-                    <span className={cn('inline-flex text-[10px] font-bold tracking-wider uppercase rounded-md px-2 py-0.5 border', CAT_COLOR[m.category])}>
+                    <span className={cn('inline-flex text-[10.5px] font-medium tracking-wider uppercase rounded-md px-2 py-0.5 border', CAT_CHIP)}>
                       {m.category}
                     </span>
                     <p className="mt-2.5 text-[13.5px] leading-relaxed text-[var(--fg)] line-clamp-3">{m.content}</p>
@@ -193,7 +188,7 @@ export function MemoryScreen() {
             <motion.div className="fixed inset-0 z-[75] bg-black/60" initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} onClick={() => setSelected(null)} />
             <motion.div
               initial={{ x: 40, opacity: 0 }} animate={{ x: 0, opacity: 1 }} exit={{ x: 40, opacity: 0 }}
-              transition={{ type: 'spring', damping: 30, stiffness: 300 }}
+              transition={{ duration: 0.2, ease: 'easeOut' }}
               className="fixed top-0 right-0 bottom-0 z-[76] w-full sm:w-[400px] border-l border-[var(--border)] bg-[var(--surface-elevated)] p-5 overflow-y-auto text-[var(--fg)]"
               role="dialog" aria-label="Memory detail"
             >

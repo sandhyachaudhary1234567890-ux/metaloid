@@ -67,33 +67,33 @@ assert.equal((await memory.stats(A)).total, 1);
 pass('memory isolation + user control');
 
 // ---- missions isolation ----
-const mA = missions.createMission({ userId: A, objective: 'Research agent security', tasks: [] });
+const mA = await missions.createMission({ userId: A, objective: 'Research agent security', tasks: [] });
 assert.ok(mA.userId === A);
-assert.equal(missions.getMission(B, mA.id), null, 'B cannot open A mission');
-assert.deepEqual(missions.listMissions(B), [], 'B list empty');
-assert.equal(missions.pauseMission(B, mA.id), null);
-assert.equal(missions.listMissions(A).length, 1);
+assert.equal(await missions.getMission(B, mA.id), null, 'B cannot open A mission');
+assert.deepEqual(await missions.listMissions(B), [], 'B list empty');
+assert.equal(await missions.pauseMission(B, mA.id), null);
+assert.equal((await missions.listMissions(A)).length, 1);
 await missions.runMission(A, mA.id, { userId: A });
-const done = missions.getMission(A, mA.id);
+const done = await missions.getMission(A, mA.id);
 assert.ok(['COMPLETED', 'BLOCKED'].includes(done.status), 'mission ran, got ' + done.status);
 pass('missions isolation + run');
 
 // ---- world isolation ----
-const ea = world.upsertEntity({ userId: A, type: 'project', name: 'Alice Project' });
-assert.equal(world.findEntities(B, 'alice').length, 0);
-assert.equal(world.findEntities(A, 'alice').length, 1);
-const eb = world.upsertEntity({ userId: B, type: 'project', name: 'Alice Project' });
+const ea = await world.upsertEntity({ userId: A, type: 'project', name: 'Alice Project' });
+assert.equal((await world.findEntities(B, 'alice')).length, 0);
+assert.equal((await world.findEntities(A, 'alice')).length, 1);
+const eb = await world.upsertEntity({ userId: B, type: 'project', name: 'Alice Project' });
 assert.ok(eb.id !== ea.id, 'same name, separate entities per user');
-assert.equal(world.relate(B, ea.id, eb.id, 'x').ok, false, 'B cannot link A entity');
-assert.ok(world.relate(A, ea.id, ea.id, 'self').ok);
-assert.deepEqual(world.neighbors(B, ea.id), { entities: [], relations: [] });
+assert.equal((await world.relate(B, ea.id, eb.id, 'x')).ok, false, 'B cannot link A entity');
+assert.ok((await world.relate(A, ea.id, ea.id, 'self')).ok);
+assert.deepEqual(await world.neighbors(B, ea.id), { entities: [], relations: [] });
 pass('world isolation');
 
 // ---- osint isolation ----
-const ja = osint.createInvestigation('example.com', 'domain', A);
-assert.equal(osint.getInvestigationFor(B, ja.id), null);
-assert.ok(osint.getInvestigationFor(A, ja.id));
-assert.deepEqual(osint.listInvestigations(B), []);
+const ja = await osint.createInvestigation('example.com', 'domain', A);
+assert.equal(await osint.getInvestigationFor(B, ja.id), null);
+assert.ok(await osint.getInvestigationFor(A, ja.id));
+assert.deepEqual(await osint.listInvestigations(B), []);
 pass('osint isolation');
 
 // ---- approvals isolation ----
@@ -106,15 +106,15 @@ assert.ok(perms.grantApproval(gate.approvalId, true, 'user', A));
 pass('approvals isolation');
 
 // ---- profiles: validation, no silent upgrades ----
-const p0 = profiles.getProfile(A);
+const p0 = await profiles.getProfile(A);
 assert.equal(p0.autonomy, 'assisted');
-profiles.updateProfile(A, { autonomy: 'autonomous', tone: 'warm', evil: 'x', language: 'xx' });
-const p1 = profiles.getProfile(A);
+await profiles.updateProfile(A, { autonomy: 'autonomous', tone: 'warm', evil: 'x', language: 'xx' });
+const p1 = await profiles.getProfile(A);
 assert.equal(p1.autonomy, 'autonomous');
 assert.equal(p1.tone, 'warm');
 assert.equal(p1.evil, undefined, 'unknown keys dropped');
 assert.equal(p1.language, 'auto', 'invalid values dropped');
-assert.ok(profiles.personalizationBlock(A).includes('AUTONOMOUS'));
+assert.ok((await profiles.personalizationBlock(A)).includes('AUTONOMOUS'));
 pass('profiles validation + personalization');
 
 // ---- entitlements + budgets ----
@@ -131,18 +131,18 @@ assert.equal(u.chat.limit, 100);
 pass('entitlements + budgets');
 
 // ---- workspaces + devices ----
-const wA = ws.createWorkspace(A, { name: 'Research' });
+const wA = await ws.createWorkspace(A, { name: 'Research' });
 assert.equal(wA.ok, true);
-assert.equal(ws.getWorkspace(B, wA.workspace.id), null);
-assert.deepEqual(ws.listWorkspaces(B), []);
-const pair = ws.requestPairing(A, { deviceName: 'phone' });
+assert.equal(await ws.getWorkspace(B, wA.workspace.id), null);
+assert.deepEqual(await ws.listWorkspaces(B), []);
+const pair = await ws.requestPairing(A, { deviceName: 'phone' });
 assert.ok(/^\d{6}$/.test(pair.code));
-const conf = ws.confirmPairing(A, pair.code, {});
+const conf = await ws.confirmPairing(A, pair.code, {});
 assert.equal(conf.ok, true);
-assert.equal(ws.authorizeDevice(B, conf.device.id, 'x').ok, false, 'B cannot use A device');
-assert.ok(ws.authorizeDevice(A, conf.device.id, 'x').ok);
-assert.equal(ws.revokeDevice(B, conf.device.id), false);
-assert.equal(ws.revokeDevice(A, conf.device.id), true);
+assert.equal((await ws.authorizeDevice(B, conf.device.id, 'x')).ok, false, 'B cannot use A device');
+assert.ok((await ws.authorizeDevice(A, conf.device.id, 'x')).ok);
+assert.equal(await ws.revokeDevice(B, conf.device.id), false);
+assert.equal(await ws.revokeDevice(A, conf.device.id), true);
 pass('workspaces + devices');
 
 // ---- delete cascade ----

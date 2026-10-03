@@ -1,68 +1,67 @@
-// Supabase email Auth (frontend). Publishable key only — safe for browser.
-// Session tokens live in localStorage; the gateway accepts Supabase JWTs
-// (sb: namespace) on every route. Email confirm + password reset depend on
-// Supabase Auth email delivery (custom SMTP needed for real launches).
+// Supabase email auth — an ADAPTER, not a second client.
+//
+// The browser has exactly one Supabase client (`lib/supabase.ts`) and exactly
+// one session store (the client's own persistence + the mirror in
+// `lib/auth.tsx`). This module keeps the small surface the store and the
+// components grew up with, so nothing needs two live sessions that can drift
+// apart — a stale cached copy of a session is a security bug, not a cache.
 
-import { createClient, type SupabaseClient, type Session } from '@supabase/supabase-js';
-
-const URL = (import.meta as unknown as { env?: Record<string, string> }).env?.VITE_SUPABASE_URL || '';
-const ANON = (import.meta as unknown as { env?: Record<string, string> }).env?.VITE_SUPABASE_ANON_KEY || '';
-
-let client: SupabaseClient | null = null;
+import type { Session } from '@supabase/supabase-js';
+import { getSupabase, supabaseConfigured as configured, peekSupabase } from './supabase';
+import { mirrorSupabaseSession } from './auth';
 
 export function supabaseConfigured(): boolean {
-  return URL.startsWith('https://') && ANON.length > 10;
+  return configured();
 }
 
-export function supabase(): SupabaseClient {
-  if (!client) {
-    if (!supabaseConfigured()) throw new Error('Supabase is not configured in this build.');
-    client = createClient(URL, ANON);
-  }
+/** The live client. Throws when this build has no Supabase project, which is
+ *  the honest answer: callers must check `supabaseConfigured()` first. */
+export function supabase() {
+  const client = peekSupabase();
+  if (!client) throw new Error('Supabase is not configured in this build.');
   return client;
 }
 
-const K = 'metaloid.sbSession.v1';
+/** Load the client (creating it on first use). */
+export async function supabaseClient() {
+  return getSupabase();
+}
 
+/** Kept for callers that hand a session over explicitly — the mirror is what
+ *  the rest of the app reads, and the client owns persistence. */
 export function saveSbSession(s: Session | null) {
-  try {
-    if (s) localStorage.setItem(K, JSON.stringify(s));
-    else localStorage.removeItem(K);
-  } catch { /* ignore */ }
+  mirrorSupabaseSession(s);
 }
 
+/** Always the client's own current session; never a second stored copy. */
 export function loadSbSession(): Session | null {
-  try {
-    const raw = localStorage.getItem(K);
-    return raw ? (JSON.parse(raw) as Session) : null;
-  } catch {
-    return null;
-  }
+  return null;
 }
 
-/** access_token for gateway Bearer use (refreshes when expiring soon). */
+/** access_token for gateway Bearer use (refreshed when close to expiry). */
 export async function sbAccessToken(): Promise<string | null> {
-  if (!supabaseConfigured()) return null;
-  const sb = supabase();
+  const sb = await getSupabase();
+  if (!sb) return null;
   const { data } = await sb.auth.getSession();
-  let session = data.session || loadSbSession();
+  const session = data.session;
   if (!session) return null;
-  const exp = session.expires_at || 0;
-  if (exp * 1000 - Date.now() < 60000) {
-    const { data: refreshed, error } = await sb.auth.refreshSession({ refresh_token: session.refresh_token });
-    if (error || !refreshed.session) {
-      saveSbSession(null);
-      return null;
-    }
-    session = refreshed.session;
-    saveSbSession(session);
-  }
+  mirrorSupabaseSession(session);
   return session.access_token;
 }
 
+/** The refresh token of the live session, when the gateway's local-driver
+ *  refresh path needs one. Supabase itself keeps refreshing in the client. */
+export async function sbRefreshToken(): Promise<string | null> {
+  const sb = await getSupabase();
+  if (!sb) return null;
+  const { data } = await sb.auth.getSession();
+  return data.session?.refresh_token ?? null;
+}
+
 export async function sbSignOut() {
-  saveSbSession(null);
+  mirrorSupabaseSession(null);
   try {
-    await supabase().auth.signOut();
+    const sb = await getSupabase();
+    await sb?.auth.signOut();
   } catch { /* already out */ }
 }

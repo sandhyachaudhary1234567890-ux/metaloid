@@ -10,11 +10,19 @@
 import fs from 'node:fs';
 import path from 'node:path';
 import os from 'node:os';
+import http from 'node:http';
 import https from 'node:https';
 import { fileURLToPath } from 'node:url';
 import express from 'express';
 import cors from 'cors';
-import { listFreeModels, pickModel, pickCandidates, retryableProviderError, classifyTask, streamChat } from './openrouter.js';
+import {
+  listFreeModels, pickModel, pickCandidates, retryableProviderError, classifyTask, streamChat,
+  markModelDead, modelHealth, catalogueStatus, PROVIDER_LABEL,
+  modelSpecificFailure, humanizeProviderError,
+} from './openrouter.js';
+import { mountV1 } from './api/v1.js';
+import { authConfigured, authMode } from './auth.js';
+import { ping as dbPing, storagePing, driverInfo } from './data/index.js';
 import { streamNvidia, NVIDIA_SMART } from './nvidia.js';
 // Provider Platform imports
 import { listProviders, getProvider, getProviderModels, updateProvider } from './core/providerRegistry.js';
@@ -155,17 +163,38 @@ function lanOrigins() {
   return out;
 }
 const ALLOWED = new Set([...ORIGINS, ...lanOrigins()]);
+/**
+ * Explicit origin allowlist. Anything not listed is refused — no wildcard,
+ * no "reflect any origin" fallback, because these APIs carry credentials.
+ *
+ *   ALLOW_ORIGINS           comma-separated exact origins (production web app)
+ *   ALLOW_VERCEL_PREVIEWS   "true" to also allow *.vercel.app preview URLs
+ *   ALLOW_MOBILE_ORIGINS    comma-separated (Capacitor / Android shell origins)
+ *   ALLOW_LOCAL_ORIGINS     "true" to allow localhost/LAN (dev + showcase only)
+ */
+const ALLOWED_ORIGINS = new Set(
+  (process.env.ALLOW_ORIGINS || '').split(',').map((s) => s.trim()).filter(Boolean)
+);
+const ALLOWED_MOBILE = new Set(
+  (process.env.ALLOW_MOBILE_ORIGINS || '').split(',').map((s) => s.trim()).filter(Boolean)
+);
+const ALLOW_VERCEL_PREVIEWS = process.env.ALLOW_VERCEL_PREVIEWS === 'true';
+const ALLOW_LOCAL_ORIGINS = process.env.ALLOW_LOCAL_ORIGINS === 'true'
+  || process.env.METALOID_MODE === 'showcase'
+  || process.env.NODE_ENV !== 'production';
+
 function isAllowedOrigin(origin) {
-  if (!origin) return true;
-  if (ALLOWED.has(origin)) return true;
+  if (!origin) return true;               // same-origin / curl / native app
+  if (ALLOWED_ORIGINS.has(origin)) return true;
+  if (ALLOWED_MOBILE.has(origin)) return true;
   try {
-    const u = new URL(origin);
-    const h = u.hostname;
-    if (h === 'localhost' || h === '127.0.0.1') return true;
-    if (h.startsWith('192.168.') || h.startsWith('10.') || /^172\.(1[6-9]|2[0-9]|3[0-1])\./.test(h)) return true;
-    if (h.endsWith('.vercel.app')) return true;
-  } catch {}
-  return true;
+    const h = new URL(origin).hostname;
+    if (ALLOW_VERCEL_PREVIEWS && h.endsWith('.vercel.app')) return true;
+    if (ALLOW_LOCAL_ORIGINS && (h === 'localhost' || h === '127.0.0.1'
+      || h.startsWith('192.168.') || h.startsWith('10.')
+      || /^172\.(1[6-9]|2[0-9]|3[0-1])\./.test(h))) return true;
+  } catch { /* malformed origin → refuse */ }
+  return false;
 }
 
 app.use(cors({
@@ -202,6 +231,11 @@ app.use((req, res, next) => {
 });
 
 app.use(express.json({ limit: '3mb' })); // 256kb would 413 skill-ZIP payloads (1.5MB archive cap enforced inside skillZip.js); rate limits still apply per route
+
+// Supabase-backed account data (profiles, conversations, messages, memories,
+// provider credentials, attachments, tasks, usage). Every route is behind
+// requireAuth and ownership is enforced in Postgres by RLS.
+mountV1(app);
 
 // ---- request IDs + structured access log (method/path/status/ms/user —
 // NEVER secrets, tokens, keys, or bodies) ----
@@ -280,20 +314,57 @@ app.get('/', (req, res) => {
   });
 });
 
-// ---- health: REAL backend state (frontend shows this, never fakes it) ----
+// ---- health: measured state only. Nothing here is asserted because an env
+// var exists: the provider is probed, the data driver is pinged, and auth
+// reports whether tokens can actually be verified right now. ----
 app.get('/api/health', async (req, res) => {
-  const models = await listFreeModels().catch(() => []);
-  const ai = OR_KEY.length > 10 && models.length > 0;
+  const [db, storage, models] = await Promise.all([
+    dbPing().catch((e) => ({ ok: false, detail: String((e && e.message) || e) })),
+    storagePing().catch((e) => ({ ok: false, detail: String((e && e.message) || e) })),
+    listFreeModels().catch(() => []),
+  ]);
+  const providerSet = OR_KEY.length > 10 || (NV_ON && NV_KEY.length > 10);
+  const cat = catalogueStatus();
+  const live = models.filter((m) => !modelHealth().quarantined.some((q) => q.id === m.id)).length;
+  // ai = "a reply can plausibly be produced": a key exists AND the provider
+  // answered our catalogue call. A key with no network is degraded, not online.
+  const ai = providerSet && cat.ok && live > 0;
+  const info = driverInfo();
+  const databaseReady = Boolean(db && db.ok);
+  const storageReady = Boolean(storage && storage.ok);
+  // "reachable" means tokens can actually be verified right now: auth is
+  // configured AND the data layer it verifies against is answering. A mode
+  // with no auth (local demo) is honestly reachable because nothing is asked.
+  const authConfiguredNow = authConfigured();
+  const authState = {
+    configured: authConfiguredNow,
+    mode: authMode(),
+    reachable: authConfiguredNow ? databaseReady : true,
+  };
   res.json({
     ok: true,
     server: true,
     ai,
-    auth: true, // multi-user: Bearer session required on all /api except health+auth
-    voice: true, // Voice runtime & SSE voice streaming operational
-    vision: ai, // vision-capable free models route through the same chat path
-    realtime: true, // SSE streaming live
-    database: true, // V2: per-user file stores, server-side
-    models: { free: models.length },
+    degraded: !ai && providerSet,
+    provider: providerSet ? PROVIDER_LABEL : null,
+    voice: false,                          // speech runs in the browser, not here
+    vision: ai,                            // vision models ride the same chat path
+    realtime: true,                        // SSE streaming is live in this process
+    database: databaseReady,
+    auth: authState,                       // object: configured / mode / reachable
+    authState,
+    storage: { ready: storageReady, driver: (storage && storage.driver) || info.storage, buckets: (storage && storage.buckets) || null },
+    data: { driver: info.driver, supabase_configured: info.supabase_configured, url_set: info.supabase_url_set },
+    encryption: { configured: info.encryption.configured, active_key: info.encryption.activeKeyId },
+    // "free models" is only a number once a provider key can actually reach
+    // them; without a key the catalogue is a plan, not availability.
+    models: {
+      free: providerSet ? live : 0,
+      total: models.length,
+      catalogue: cat.ok,
+      at: cat.at || null,
+    },
+    at: new Date().toISOString(),
   });
 });
 
@@ -382,9 +453,33 @@ app.delete('/api/auth/sessions/:id', requireAuth, (req, res) => {
 });
 
 app.get('/api/models', async (req, res) => {
-  const models = await listFreeModels().catch(() => []);
-  res.json({ models, provider: 'openrouter', free_only: true });
+  const all = await listFreeModels().catch(() => []);
+  const dead = new Set(modelHealth().quarantined.map((q) => q.id));
+  // live first; quarantined slugs are flagged, never hidden, so the UI can say
+  // why a model is missing instead of silently dropping it
+  const models = all.map((m) => ({ ...m, unavailable: dead.has(m.id) }));
+  res.json({ models, provider: PROVIDER_LABEL, free_only: true, mock: PROVIDER_LABEL !== 'openrouter' });
 });
+
+/**
+ * Stable, non-leaky error codes for the UI. The frontend switches on these
+ * (and only these) so provider churn never changes what a user sees:
+ *   no_provider - bad_key - no_credit - rate_limited - no_model - offline - timeout - cancelled - server
+ */
+function providerCodeOf(e) {
+  const s = e && e.status;
+  if (e && e.code === 'NO_PROVIDER') return 'no_provider';
+  if (e && e.code === 'CLIENT_GONE') return 'cancelled';
+  if (s === 401) return 'bad_key';
+  if (s === 402) return 'no_credit';
+  if (s === 429) return 'rate_limited';
+  if (s === 400 || s === 404) return 'no_model';
+  if (s >= 500) return 'server';
+  const msg = String((e && e.message) || '');
+  if (/fetch failed|ENOTFOUND|EAI_AGAIN|ECONNREFUSED/i.test(msg)) return 'offline';
+  if (/aborted|timeout/i.test(msg)) return 'timeout';
+  return 'server';
+}
 
 // ---- chat: model router + streaming (SSE), per-user metered ----
 app.post('/api/chat', requireAuth, rateLimit(60, 60000), async (req, res) => {
@@ -483,7 +578,7 @@ app.post('/api/chat', requireAuth, rateLimit(60, 60000), async (req, res) => {
     for (const cand of candidates) {
       try {
         usedModel = cand.id;
-        send({ meta: { model: cand.id, tier, provider: 'openrouter', demo: false } });
+        send({ meta: { model: cand.id, tier, provider: PROVIDER_LABEL, demo: PROVIDER_LABEL !== 'openrouter' } });
         await streamChat({
           apiKey: OR_KEY, model: cand, messages, system,
           signal: controller.signal,
@@ -493,12 +588,17 @@ app.post('/api/chat', requireAuth, rateLimit(60, 60000), async (req, res) => {
         break;
       } catch (e) {
         lastErr = e;
+        // A dead slug surfaces as 400/404 as often as 404, so anything
+        // model-specific is quarantined and the next candidate is tried —
+        // the user never sees the provider's raw complaint.
+        if (modelSpecificFailure(e)) markModelDead(cand.id, (e && e.providerBody) || (e && e.message));
         if (!retryableProviderError(e)) throw e;
+        console.warn(`[gateway] model ${cand.id} rejected (${(e && e.status) || 'net'}) \u2192 next candidate`);
         send({ retry: cand.id });
       }
     }
     if (!streamed) throw lastErr || new Error('openrouter failed');
-    trackModel({ provider: 'openrouter', model: usedModel, tier, ms: Date.now() - t0, ok: true });
+    trackModel({ provider: usedProvider || PROVIDER_LABEL, model: usedModel, tier, ms: Date.now() - t0, ok: true });
     await recordUsage(req.auth.userId, 'chat');
     send({ done: true });
   } catch (e) {
@@ -516,12 +616,16 @@ app.post('/api/chat', requireAuth, rateLimit(60, 60000), async (req, res) => {
         trackModel({ provider: 'nvidia', model: NVIDIA_SMART, tier, ms: Date.now() - t0, ok: true });
         send({ done: true });
       } catch (e2) {
-        trackModel({ provider: usedProvider || 'openrouter', model: usedModel, tier, ms: Date.now() - t0, ok: false });
-        send({ error: byokError ? String(byokError.message).slice(0, 220) : 'Both providers failed. Retry.' });
+        trackModel({ provider: usedProvider || PROVIDER_LABEL, model: usedModel, tier, ms: Date.now() - t0, ok: false });
+        console.error('[gateway] all providers failed:', (e && e.message) || e, '|', (e2 && e2.message) || e2);
+        send({ error: humanizeProviderError(e2.code === 'CLIENT_GONE' ? e2 : (e || e2)), code: providerCodeOf(e || e2) });
       }
     } else {
-      trackModel({ provider: 'openrouter', model: usedModel, tier, ms: Date.now() - t0, ok: false });
-      send({ error: byokError ? String(byokError.message).slice(0, 220) : 'Model provider failed. Retry.' });
+      trackModel({ provider: usedProvider || PROVIDER_LABEL, model: usedModel, tier, ms: Date.now() - t0, ok: false });
+      if (!controller.signal.aborted && !(e && e.code === 'CLIENT_GONE')) {
+        console.error('[gateway] chat failed:', (e && e.message) || e);
+      }
+      send({ error: humanizeProviderError(e), code: providerCodeOf(e) });
     }
   } finally {
     clearTimeout(timer);
@@ -1562,7 +1666,23 @@ const serve = tlsOn
       { key: fs.readFileSync(path.join(certDir, 'key.pem')), cert: fs.readFileSync(path.join(certDir, 'cert.pem')) },
       app
     )
-  : app;
+  // Always a real http.Server: an express app has no close(), and a gateway
+  // that cannot drain on SIGTERM is killed mid-stream on every deploy.
+  : http.createServer(app);
+
+// Graceful shutdown: finish in-flight streams before dying, so a deploy never
+// cuts a user mid-sentence.
+let shuttingDown = false;
+for (const sig of ['SIGTERM', 'SIGINT']) {
+  process.on(sig, () => {
+    if (shuttingDown) return;
+    shuttingDown = true;
+    console.log(`[gateway] ${sig} — draining connections`);
+    serve.close(() => process.exit(0));
+    serve.closeIdleConnections?.();
+    setTimeout(() => process.exit(0), 5000).unref();
+  });
+}
 
 serve.listen(PORT, BIND_HOST, () => {
   console.log(`metaloid-gateway ${tlsOn ? 'https' : 'http'}://${

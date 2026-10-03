@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { AnimatePresence, motion } from 'framer-motion';
-import { Search, MessageSquare, Mic, Radio, Brain, History, Settings, Trash2, Plus, Globe, Command, Sparkles, Radar, Rocket, Palette, Flame, Blocks, FolderKanban, Library, ListTodo } from 'lucide-react';
+import { Search, MessageSquare, Mic, Radio, Brain, History, Settings, Trash2, Plus, Globe, Command, Sparkles, Radar, Rocket, Palette, Flame } from 'lucide-react';
 import { useApp } from '../lib/store';
 import type { ThemeId } from '../lib/types';
 import { cn } from '../lib/cn';
@@ -12,8 +12,7 @@ export function CommandPalette() {
   const {
     paletteOpen, setPaletteOpen, newConversation, setView, setVoiceOpen,
     setToolsOpen, setOsintOpen, setOsintTarget, setMissionsOpen, setMissionDraft,
-    setSkillForgeOpen, setSkillsOpen,
-    toast, openModal, activeConv, setLanguage, language, updateSettings,
+    toast, openModal, activeConv, setLanguage, language, updateSettings, settings,
   } = useApp();
   const [q, setQ] = useState('');
   const [idx, setIdx] = useState(0);
@@ -34,24 +33,18 @@ export function CommandPalette() {
     { id: 'live', label: 'Start live camera mode', hint: 'Talk while showing camera', icon: Radio, run: () => setView('live') },
     { id: 'memory', label: 'Open Memory Vault', hint: 'Local personal context facts', icon: Brain, run: () => setView('memory') },
     { id: 'history', label: 'Open History', hint: 'Past conversations & turns', icon: History, run: () => setView('history') },
-    { id: 'projects', label: 'Open Projects', hint: 'Persistent workspaces', icon: FolderKanban, run: () => setView('projects') },
-    { id: 'library', label: 'Open Library', hint: 'Created files and artifacts', icon: Library, run: () => setView('library') },
-    { id: 'tasks', label: 'Open Tasks', hint: 'Mission runtime and checkpoints', icon: ListTodo, run: () => setView('tasks') },
     { id: 'agents', label: 'Agents & tools drawer', hint: 'Contextual tool capabilities', icon: Sparkles, run: () => setToolsOpen(true) },
     { id: 'osint', label: 'OSINT investigation', hint: 'Domains & repositories research', icon: Radar, run: () => { setOsintTarget(''); setOsintOpen(true); } },
     { id: 'missions', label: 'Mission Control', hint: 'Multi-step autonomous workflows', icon: Rocket, run: () => { setMissionDraft(''); setMissionsOpen(true); } },
-    { id: 'theme-obsidian', label: 'Switch Theme: Obsidian', hint: 'Deep neutral charcoal & obsidian', icon: Palette, run: () => { updateSettings({ theme: 'obsidian' as ThemeId }); toast({ title: 'Theme: Obsidian' }); } },
-    { id: 'theme-graphite', label: 'Switch Theme: Graphite', hint: 'Cool slate and technical graphite', icon: Palette, run: () => { updateSettings({ theme: 'graphite' as ThemeId }); toast({ title: 'Theme: Graphite' }); } },
-    { id: 'theme-warm-paper', label: 'Switch Theme: Warm Paper', hint: 'Editorial warm ivory (Light)', icon: Palette, run: () => { updateSettings({ theme: 'warm-paper' as ThemeId }); toast({ title: 'Theme: Warm Paper' }); } },
-    { id: 'theme-nordic', label: 'Switch Theme: Nordic', hint: 'Crisp minimalist slate & white (Light)', icon: Palette, run: () => { updateSettings({ theme: 'nordic' as ThemeId }); toast({ title: 'Theme: Nordic' }); } },
-    { id: 'theme-oled', label: 'Switch Theme: OLED Pure Black', hint: 'Pitch black #000000 contrast', icon: Palette, run: () => { updateSettings({ theme: 'oled' as ThemeId }); toast({ title: 'Theme: OLED' }); } },
-    { id: 'theme-system', label: 'Switch Theme: System Auto', hint: 'Follows operating system dark/light', icon: Palette, run: () => { updateSettings({ theme: 'system' as ThemeId }); toast({ title: 'Theme: System' }); } },
-    { id: 'skills', label: 'Customize: Skills', hint: 'Installed, mine, system — create, import, test, inspect', icon: Blocks, run: () => setSkillsOpen(true) },
-    { id: 'developer-forge', label: 'Developer: Skill Forge & Continuous Engine', hint: 'Inspect registry, benchmarks, canary tests & rollback', icon: Flame, run: () => setSkillForgeOpen(true) },
-    { id: 'settings', label: 'Open Settings', hint: 'Application configuration', icon: Settings, run: () => setView('settings') },
+    { id: 'appearance', label: 'Switch appearance', hint: 'Flip between dark and light', icon: Palette, run: () => {
+        const next: ThemeId = settings.theme === 'nordic' || settings.theme === 'warm-paper' ? 'obsidian' : 'nordic';
+        updateSettings({ theme: next });
+        toast({ title: next === 'nordic' ? 'Light appearance' : 'Dark appearance' });
+      } },
+    { id: 'settings', label: 'Open Settings', hint: 'Appearance, AI, voice, privacy', icon: Settings, run: () => setView('settings') },
     { id: 'lang', label: `Toggle language (currently ${language})`, hint: 'Auto &middot; Hindi &middot; English', icon: Globe, run: () => { setLanguage(language === 'hi' ? 'en' : 'hi'); toast({ title: 'Language toggled' }); } },
     { id: 'clear', label: 'Clear current conversation', hint: activeConv ? activeConv.title : 'No active chat', icon: Trash2, run: () => { if (activeConv) openModal('delete-chat', activeConv.id); } },
-  ], [newConversation, setView, setVoiceOpen, setToolsOpen, setOsintOpen, setOsintTarget, setMissionsOpen, setMissionDraft, setSkillsOpen, language, setLanguage, updateSettings, toast, activeConv, openModal]);
+  ], [newConversation, setView, setVoiceOpen, setToolsOpen, setOsintOpen, setOsintTarget, setMissionsOpen, setMissionDraft, language, setLanguage, updateSettings, toast, activeConv, openModal, settings.theme]);
 
   const filtered = actions.filter((a) => a.label.toLowerCase().includes(q.toLowerCase()) || a.hint.toLowerCase().includes(q.toLowerCase()));
 

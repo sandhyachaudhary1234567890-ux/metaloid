@@ -211,7 +211,7 @@ defineTool({
   outputs: { artifact: 'object' },
   handler: async (args, grants) => {
     const { userId, scope } = scopedArgs(args, grants);
-    const r = createArtifact({ userId, kind: args.kind, name: args.name, spec: args.spec, ...scope });
+    const r = await createArtifact({ userId, kind: args.kind, name: args.name, spec: args.spec, ...scope });
     if (!r.ok) throw new Error(r.error);
     return { artifact: r.artifact };
   },
@@ -229,7 +229,7 @@ defineTool({
   },
   outputs: { artifact: 'object' },
   handler: async (args, grants) => {
-    const r = editArtifact(scopedUser(grants), args.id, args.spec, args.note || '');
+    const r = await editArtifact(scopedUser(grants), args.id, args.spec, args.note || '');
     if (!r.ok) throw new Error(r.error);
     return { artifact: r.artifact };
   },
@@ -243,7 +243,7 @@ defineTool({
   inputs: { id: { type: 'string', required: true } },
   outputs: { artifact: 'object' },
   handler: async (args, grants) => {
-    const a = getArtifact(scopedUser(grants), args.id);
+    const a = await getArtifact(scopedUser(grants), args.id);
     if (!a) throw new Error('Unknown artifact.');
     const { bytes, ...meta } = a;
     void bytes;
@@ -259,7 +259,7 @@ defineTool({
   inputs: { id: { type: 'string', required: true } },
   outputs: { inspection: 'object' },
   handler: async (args, grants) => {
-    const a = getArtifact(scopedUser(grants), args.id);
+    const a = await getArtifact(scopedUser(grants), args.id);
     if (!a) throw new Error('Unknown artifact.');
     const qa = visualQA(scopedUser(grants), args.id);
     return {
@@ -281,7 +281,7 @@ defineTool({
   inputs: { id: { type: 'string', required: true } },
   outputs: { verification: 'object' },
   handler: async (args, grants) => {
-    const r = validateArtifact(scopedUser(grants), args.id);
+    const r = await validateArtifact(scopedUser(grants), args.id);
     if (!r.ok) throw new Error(r.error);
     return { verification: r.verification };
   },
@@ -309,7 +309,7 @@ defineTool({
   inputs: { id: { type: 'string', required: true }, projectId: { type: 'string', required: false } },
   outputs: { artifact: 'object' },
   handler: async (args, grants) => {
-    const r = finalizeArtifact(scopedUser(grants), args.id, args.projectId || null);
+    const r = await finalizeArtifact(scopedUser(grants), args.id, args.projectId || null);
     if (!r.ok) throw new Error(r.error);
     return { artifact: r.artifact };
   },
@@ -334,7 +334,7 @@ defineTool({
     const spec = args.kind === 'docx'
       ? { title: args.title, blocks: args.blocks }
       : { text: `# ${args.title}\n\n${blocksToMarkdown(args.blocks)}` };
-    const r = createArtifact({ userId, kind: args.kind, name: args.title, spec, ...scope });
+    const r = await createArtifact({ userId, kind: args.kind, name: args.title, spec, ...scope });
     if (!r.ok) throw new Error(r.error);
     return { artifact: r.artifact };
   },
@@ -359,7 +359,7 @@ defineTool({
   inputs: { id: { type: 'string', required: true }, spec: { type: 'object', required: true }, note: { type: 'string', required: false, max: 120 } },
   outputs: { artifact: 'object' },
   handler: async (args, grants) => {
-    const r = editArtifact(scopedUser(grants), args.id, args.spec, args.note || '');
+    const r = await editArtifact(scopedUser(grants), args.id, args.spec, args.note || '');
     if (!r.ok) throw new Error(r.error);
     return { artifact: r.artifact };
   },
@@ -373,7 +373,7 @@ defineTool({
   inputs: { id: { type: 'string', required: true } },
   outputs: { verification: 'object' },
   handler: async (args, grants) => {
-    const r = validateArtifact(scopedUser(grants), args.id);
+    const r = await validateArtifact(scopedUser(grants), args.id);
     if (!r.ok) throw new Error(r.error);
     return { verification: r.verification };
   },
@@ -395,7 +395,7 @@ defineTool({
   outputs: { artifact: 'object' },
   handler: async (args, grants) => {
     const { userId, scope } = scopedArgs(args, grants);
-    const r = createArtifact({ userId, kind: 'pptx', name: args.title, spec: { title: args.title, slides: args.slides, accent: args.accent }, ...scope });
+    const r = await createArtifact({ userId, kind: 'pptx', name: args.title, spec: { title: args.title, slides: args.slides, accent: args.accent }, ...scope });
     if (!r.ok) throw new Error(r.error);
     return { artifact: r.artifact };
   },
@@ -409,7 +409,7 @@ defineTool({
   inputs: { id: { type: 'string', required: true }, spec: { type: 'object', required: true }, note: { type: 'string', required: false, max: 120 } },
   outputs: { artifact: 'object' },
   handler: async (args, grants) => {
-    const r = editArtifact(scopedUser(grants), args.id, args.spec, args.note || '');
+    const r = await editArtifact(scopedUser(grants), args.id, args.spec, args.note || '');
     if (!r.ok) throw new Error(r.error);
     return { artifact: r.artifact };
   },
@@ -423,7 +423,7 @@ defineTool({
   inputs: { id: { type: 'string', required: true } },
   outputs: { verification: 'object' },
   handler: async (args, grants) => {
-    const r = validateArtifact(scopedUser(grants), args.id);
+    const r = await validateArtifact(scopedUser(grants), args.id);
     if (!r.ok) throw new Error(r.error);
     return { verification: r.verification };
   },

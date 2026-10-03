@@ -18,8 +18,8 @@
       console.log('PASS', n);
     }
   };
-  const gw = spawn('node', ['server/src/index.js'], {
-    cwd: 'C:\\metaloid',
+  const gw = spawn(process.execPath, ['server/src/index.js'], {
+    cwd: require('node:path').resolve(__dirname, '..', '..'),
     env: { ...process.env, PORT: '8881', METALOID_DATA_DIR: tmp, METALOID_ACCESS_TTL_MS: '2000', METALOID_AUTH_LIMIT: '1000' },
     stdio: 'ignore',
   });

@@ -1,37 +1,27 @@
 import { useEffect, useRef, useState } from 'react';
 import { AnimatePresence, motion } from 'framer-motion';
-import { Plus, Mic, Camera, SlidersHorizontal, X, FileText, Image as ImageIcon, Telescope, BarChart3, Terminal, Lightbulb, MessageSquare, Command, Check } from 'lucide-react';
+import { Plus, Mic, ArrowUp, Square, Camera, Paperclip, Telescope, MessageSquarePlus, X, FileText, Image as ImageIcon } from 'lucide-react';
 import type { LucideIcon } from 'lucide-react';
 import { useApp } from '../lib/store';
 import type { Attachment } from '../lib/types';
-import type { ModelId } from '../lib/types';
-import { MODELS } from '../lib/i18n';
 import { uid } from '../lib/storage';
 import { cn } from '../lib/cn';
-import { LiquidMetalButton } from './animations/LiquidMetalButton';
+import { ModelSelector } from './ModelSelector';
 
-export type ComposerMode =
-  | { id: 'ask'; label: string; prefix: ''; hint: string; desc?: string }
-  | { id: string; label: string; prefix: string; hint: string; desc?: string };
+export interface ComposerMode {
+  id: 'ask' | 'research' | 'build' | 'analyze';
+  label: string;
+  prefix: string;
+  hint: string;
+}
 
-// Default capability menu (used verbatim on Home via props; in Chat the
-// same entries insert their prefix into the draft instead of setting mode).
-const DEFAULT_MODES: ComposerMode[] = [
-  { id: 'ask', label: 'Ask anything', prefix: '', hint: 'Ask anything…', desc: 'Balanced responses for everyday tasks' },
-  { id: 'research', label: 'Deep Research', prefix: 'Research deeply: ', hint: 'What should I research?', desc: 'Thorough investigation with sources' },
-  { id: 'image', label: 'Create Image', prefix: '/imagine ', hint: 'Describe the image…', desc: 'Free AI images via Puter — no key needed' },
-  { id: 'analyze', label: 'Analyze', prefix: 'Analyze: ', hint: 'What should I analyze?', desc: 'Break down data, text or ideas' },
-  { id: 'code', label: 'Code', prefix: 'Write code for: ', hint: 'Describe what to build…', desc: 'Write and debug code' },
-  { id: 'brainstorm', label: 'Brainstorm', prefix: 'Brainstorm ideas for: ', hint: 'What should we brainstorm?', desc: 'Divergent ideas, then converge' },
-];
-
-const MODE_MENU_ICONS: Record<string, LucideIcon> = {
-  ask: MessageSquare,
-  research: Telescope,
-  image: ImageIcon,
-  analyze: BarChart3,
-  code: Terminal,
-  brainstorm: Lightbulb,
+/** The four things people actually start with. Each is a label on the message,
+ *  not hidden magic: what you send is what you typed, prefixed in the open. */
+export const COMPOSER_MODES: Record<ComposerMode['id'], ComposerMode> = {
+  ask: { id: 'ask', label: 'Ask', prefix: '', hint: 'Message MetaIoid…' },
+  research: { id: 'research', label: 'Research', prefix: 'Research deeply: ', hint: 'What should I look into?' },
+  build: { id: 'build', label: 'Build', prefix: 'Build: ', hint: 'What should we build?' },
+  analyze: { id: 'analyze', label: 'Analyze', prefix: 'Analyze: ', hint: 'What should I look at?' },
 };
 
 const MAX_FILES = 4;
@@ -43,90 +33,46 @@ export function formatSize(bytes: number): string {
   return `${(bytes / (1024 * 1024)).toFixed(1)} MB`;
 }
 
-// Engineered composer: clean elevated shell, autogrowing textarea (1–6 rows),
-// drag-and-drop file attachments, mode badges, send/stop accelerator.
-
+/**
+ * The composer. One job: get a thought out of your head with no friction.
+ *
+ *   +   Message MetaIoid…                              🎙   ↑
+ *
+ * Everything optional stays out of the way until asked for: the `+` sheet holds
+ * attach, camera, research and new chat; the model chip sits on the quiet meta
+ * row and opens the full provider/model detail.
+ */
 export function CommandBar({
+  mode = COMPOSER_MODES.ask,
+  onModeChange,
   onCamera,
-  large = false,
   autoFocus = false,
-  mode,
-  onModeClear,
-  onModeSelect,
-  availableModes,
-  injected,
+  showModel = true,
 }: {
-  onCamera?: () => void;
-  large?: boolean;
-  autoFocus?: boolean;
   mode?: ComposerMode;
-  onModeClear?: () => void;
-  onModeSelect?: (m: ComposerMode) => void;
-  availableModes?: ComposerMode[];
-  injected?: { text: string; n: number } | null;
+  onModeChange?: (m: ComposerMode) => void;
+  onCamera?: () => void;
+  autoFocus?: boolean;
+  showModel?: boolean;
 }) {
-  const { sendMessage, isGenerating, stopGenerating, setVoiceOpen, setView, setPaletteOpen, toast, connection, model, setModel } = useApp();
-  const [value, setValue] = useState(() => {
-    try {
-      return sessionStorage.getItem('metaloid_composer_draft') || '';
-    } catch {
-      return '';
-    }
-  });
+  const { sendMessage, isGenerating, stopGenerating, setVoiceOpen, setView, newConversation, toast, connection } = useApp();
+  const [value, setValue] = useState('');
   const [focused, setFocused] = useState(false);
   const [atts, setAtts] = useState<Attachment[]>([]);
   const [dragging, setDragging] = useState(false);
-  const [toolsOpen, setToolsOpen] = useState(false);
-  const [modeOpen, setModeOpen] = useState(false);
+  const [menuOpen, setMenuOpen] = useState(false);
   const taRef = useRef<HTMLTextAreaElement>(null);
-
-  // Sync draft to sessionStorage
-  useEffect(() => {
-    try {
-      if (value.trim()) {
-        sessionStorage.setItem('metaloid_composer_draft', value);
-      } else {
-        sessionStorage.removeItem('metaloid_composer_draft');
-      }
-    } catch {
-      // ignore
-    }
-  }, [value]);
   const fileRef = useRef<HTMLInputElement>(null);
   const offline = connection !== 'online';
-  const menuModes = availableModes ?? DEFAULT_MODES;
-  const activeModel = MODELS.find((m) => m.id === model) ?? MODELS[0];
 
-  const closeMenus = () => {
-    setToolsOpen(false);
-    setModeOpen(false);
-  };
-
-  // Escape closes popups (mirrors the reference behavior)
   useEffect(() => {
-    if (!toolsOpen && !modeOpen) return;
-    const onKey = (e: KeyboardEvent) => {
-      if (e.key === 'Escape') closeMenus();
-    };
+    if (!menuOpen) return;
+    const onKey = (e: KeyboardEvent) => { if (e.key === 'Escape') setMenuOpen(false); };
     window.addEventListener('keydown', onKey);
     return () => window.removeEventListener('keydown', onKey);
-  }, [toolsOpen, modeOpen]);
+  }, [menuOpen]);
 
-  const selectMode = (m: ComposerMode) => {
-    if (onModeSelect) onModeSelect(m.id === 'ask' ? menuModes[0] : m);
-    else if (m.prefix) {
-      setValue((v) => (v.startsWith(m.prefix) ? v : m.prefix + v));
-      taRef.current?.focus();
-    }
-    closeMenus();
-  };
-
-  const selectModel = (id: ModelId) => {
-    setModel(id);
-    closeMenus();
-  };
-
-  // auto-grow 1..6 rows
+  // Grow with the thought, up to six comfortable lines, then scroll.
   useEffect(() => {
     const el = taRef.current;
     if (!el) return;
@@ -134,25 +80,15 @@ export function CommandBar({
     el.style.height = `${Math.min(el.scrollHeight, 168)}px`;
   }, [value]);
 
-  // suggestion injection
-  const lastInject = useRef(0);
-  useEffect(() => {
-    if (injected && injected.n !== lastInject.current) {
-      lastInject.current = injected.n;
-      setValue(injected.text);
-      taRef.current?.focus();
-    }
-  }, [injected]);
-
   const addFiles = (files: FileList | File[]) => {
     const room = MAX_FILES - atts.length;
     if (room <= 0) {
-      toast({ title: 'Attachment limit', desc: `Maximum ${MAX_FILES} files per turn` });
+      toast({ title: 'Up to 4 files per message', desc: 'Remove one to add another.' });
       return;
     }
     [...files].slice(0, room).forEach((f) => {
       if (f.size > MAX_BYTES) {
-        toast({ title: 'File too large', desc: `${f.name} exceeds 2.5 MB` });
+        toast({ title: 'That file is too large', desc: `${f.name} is over 2.5 MB.` });
         return;
       }
       const kind = f.type.startsWith('image/') ? 'image' : 'file';
@@ -160,7 +96,7 @@ export function CommandBar({
       if (kind === 'image') {
         const r = new FileReader();
         r.onload = () => setAtts((p) => [...p, { ...base, dataUrl: r.result as string }]);
-        r.onerror = () => toast({ title: 'Could not read file', desc: f.name });
+        r.onerror = () => toast({ title: 'Could not read that file', desc: f.name });
         r.readAsDataURL(f);
       } else {
         setAtts((p) => [...p, base]);
@@ -168,103 +104,93 @@ export function CommandBar({
     });
   };
 
+  const canSend = Boolean(value.trim()) || atts.length > 0;
+
   const submit = () => {
-    if (isGenerating) {
-      stopGenerating();
-      return;
-    }
-    if (!value.trim() && !atts.length) return;
-    const v = mode?.prefix ? `${mode.prefix}${value}` : value;
+    if (isGenerating) { stopGenerating(); return; }
+    if (!canSend) return;
     const files = atts;
     setValue('');
     setAtts([]);
-    try { sessionStorage.removeItem('metaloid_composer_draft'); } catch { /* ignore */ }
     if (taRef.current) taRef.current.style.height = 'auto';
-    sendMessage(v, { attachments: files });
+    sendMessage(`${mode.prefix}${value}`.trim(), { attachments: files });
     setView('chat');
   };
 
+  const pickMode = (m: ComposerMode) => {
+    onModeChange?.(m);
+    setMenuOpen(false);
+    taRef.current?.focus();
+  };
+
+  const menu: { label: string; hint: string; icon: LucideIcon; run: () => void }[] = [
+    { label: 'Attach a file', hint: 'Images, PDF, text — up to 2.5 MB', icon: Paperclip, run: () => { fileRef.current?.click(); setMenuOpen(false); } },
+    { label: 'Show the camera', hint: 'Talk while MetaIoid looks', icon: Camera, run: () => { onCamera?.(); setMenuOpen(false); } },
+    { label: 'Research deeply', hint: 'Sources and citations in this chat', icon: Telescope, run: () => pickMode(COMPOSER_MODES.research) },
+    { label: 'Start a new chat', hint: 'Fresh context', icon: MessageSquarePlus, run: () => { newConversation(); setView('chat'); setMenuOpen(false); } },
+  ];
+
   return (
     <div
-      onDragOver={(e) => {
-        e.preventDefault();
-        setDragging(true);
-      }}
+      onDragOver={(e) => { e.preventDefault(); setDragging(true); }}
       onDragLeave={() => setDragging(false)}
-      onDrop={(e) => {
-        e.preventDefault();
-        setDragging(false);
-        if (e.dataTransfer.files.length) addFiles(e.dataTransfer.files);
-      }}
+      onDrop={(e) => { e.preventDefault(); setDragging(false); if (e.dataTransfer.files.length) addFiles(e.dataTransfer.files); }}
       className={cn(
-        'w-full rounded-2xl border bg-[var(--surface-elevated)] transition-all duration-200',
-        dragging && 'border-[var(--accent)] bg-[var(--accent-subtle)]',
-        focused && !dragging
-          ? 'border-[var(--accent)] ring-2 ring-[var(--accent-subtle)] shadow-md'
-          : 'border-[var(--border)] shadow-sm'
+        'relative w-full rounded-[22px] border bg-[var(--surface-elevated)] transition-[border-color,box-shadow] duration-150',
+        dragging ? 'border-[var(--accent)] bg-[var(--accent-subtle)]'
+          : focused ? 'border-[var(--border-strong)] shadow-[0_2px_18px_-8px_rgba(0,0,0,0.35)]'
+            : 'border-[var(--border)] shadow-sm',
       )}
     >
-      {/* Mode pill banner */}
-      {mode && mode.id !== 'ask' && (
-        <div className="flex items-center gap-2 px-4 pt-2.5">
-          <span className="chip !py-0.5 !text-[12px] !border-[var(--accent)] !text-[var(--accent)] !bg-[var(--accent-subtle)]">
-            {mode.label}
-          </span>
-          <button onClick={onModeClear} className="text-[12px] text-[var(--fg-muted)] hover:text-[var(--fg)] transition-colors" aria-label="Clear mode">
-            Clear
-          </button>
+      {/* Intent label — only when the message carries one */}
+      {mode.id !== 'ask' && (
+        <div className="flex items-center gap-2 px-3.5 pt-2.5">
+          <span className="chip !py-0.5 !text-[11.5px] !border-[var(--accent)] !text-[var(--accent)] !bg-[var(--accent-subtle)]">{mode.label}</span>
+          <button onClick={() => onModeChange?.(COMPOSER_MODES.ask)} className="text-[11.5px] text-[var(--fg-muted)] hover:text-[var(--fg)] transition-colors">Clear</button>
         </div>
       )}
 
-      {/* attachment previews */}
+      {/* Attachments — filename, size, kind. Nothing more. */}
       {atts.length > 0 && (
-        <div className="flex gap-2 px-4 pt-3 overflow-x-auto">
+        <div className="flex gap-2 px-3.5 pt-2.5 overflow-x-auto">
           {atts.map((a) => (
-            <motion.div
-              key={a.id}
-              initial={{ opacity: 0, scale: 0.95 }}
-              animate={{ opacity: 1, scale: 1 }}
-              className="relative shrink-0 flex items-center gap-2 rounded-xl border border-[var(--border)] bg-[var(--surface-sunken)] p-1.5 pr-7 min-w-[130px] max-w-[200px]"
-            >
+            <div key={a.id} className="relative shrink-0 flex items-center gap-2 rounded-xl border border-[var(--border)] bg-[var(--surface-sunken)] py-1.5 pl-1.5 pr-7 max-w-[210px]">
               {a.kind === 'image' && a.dataUrl ? (
-                <img src={a.dataUrl} alt={a.name} className="w-9 h-9 rounded-lg object-cover shrink-0" />
+                <img src={a.dataUrl} alt="" className="w-8 h-8 rounded-lg object-cover shrink-0" />
               ) : (
-                <span className="w-9 h-9 rounded-lg bg-[var(--surface-elevated)] flex items-center justify-center shrink-0">
-                  {a.type.startsWith('image/') ? <ImageIcon size={15} className="text-[var(--fg-muted)]" /> : <FileText size={15} className="text-[var(--fg-muted)]" />}
+                <span className="w-8 h-8 rounded-lg bg-[var(--surface-elevated)] flex items-center justify-center shrink-0">
+                  {a.type.startsWith('image/') ? <ImageIcon size={14} className="text-[var(--fg-muted)]" /> : <FileText size={14} className="text-[var(--fg-muted)]" />}
                 </span>
               )}
               <span className="min-w-0">
                 <span className="block text-[12px] font-medium text-[var(--fg)] truncate">{a.name}</span>
                 <span className="block text-[10.5px] text-[var(--fg-muted)]">{formatSize(a.size)}</span>
               </span>
-              <button
-                onClick={() => setAtts((p) => p.filter((x) => x.id !== a.id))}
-                className="absolute top-1 right-1 icon-btn w-7 h-7"
-                aria-label={`Remove ${a.name}`}
-              >
+              <button onClick={() => setAtts((p) => p.filter((x) => x.id !== a.id))} className="absolute top-1/2 -translate-y-1/2 right-1.5 icon-btn w-5 h-5" aria-label={`Remove ${a.name}`}>
                 <X size={11} />
               </button>
-            </motion.div>
+            </div>
           ))}
         </div>
       )}
 
       <input
-        ref={fileRef}
-        type="file"
-        multiple
+        ref={fileRef} type="file" multiple
         accept="image/*,.pdf,.txt,.md,.csv,.json,.ts,.tsx,.js,.jsx,.py"
-        className="hidden"
-        aria-hidden
-        tabIndex={-1}
-        onChange={(e) => {
-          if (e.target.files?.length) addFiles(e.target.files);
-          e.target.value = '';
-        }}
+        className="hidden" aria-hidden tabIndex={-1}
+        onChange={(e) => { if (e.target.files?.length) addFiles(e.target.files); e.target.value = ''; }}
       />
 
-      {/* Primary Textarea Area */}
-      <div className={cn('w-full px-4 pt-3.5 pb-1', large && 'px-5 pt-4 pb-2')}>
+      {/* Main row: + Message MetaIoid… 🎙 ↑ */}
+      <div className="flex items-end gap-1 px-2.5 pt-1">
+        <button
+          onClick={() => setMenuOpen((o) => !o)}
+          aria-haspopup="menu" aria-expanded={menuOpen} aria-label="More ways to send"
+          className={cn('icon-btn w-10 h-10 shrink-0 rounded-xl transition-colors', menuOpen && 'text-[var(--accent)] bg-[var(--surface-hover)]')}
+        >
+          <Plus size={19} />
+        </button>
+
         <textarea
           ref={taRef}
           value={value}
@@ -272,159 +198,83 @@ export function CommandBar({
           onChange={(e) => setValue(e.target.value)}
           onFocus={() => setFocused(true)}
           onBlur={() => setFocused(false)}
-          onPaste={(e) => {
-            const files = e.clipboardData?.files;
-            if (files?.length) {
-              e.preventDefault();
-              addFiles(files);
-            }
-          }}
-          onKeyDown={(e) => {
-            if (e.key === 'Enter' && !e.shiftKey) {
-              e.preventDefault();
-              submit();
-            }
-          }}
+          onPaste={(e) => { const files = e.clipboardData?.files; if (files?.length) { e.preventDefault(); addFiles(files); } }}
+          onKeyDown={(e) => { if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); submit(); } }}
           rows={1}
-          placeholder={mode && mode.id !== 'ask' ? mode.hint : 'Ask MetaIoid anything…'}
-          aria-label="Prompt input"
-          className={cn(
-            'w-full bg-transparent resize-none outline-none placeholder:text-[var(--fg-subtle)] text-[var(--fg)] overflow-y-auto font-sans leading-relaxed',
-            large ? 'text-[15.5px]' : 'text-[14.5px]'
-          )}
-          style={{ minHeight: large ? 36 : 28 }}
+          placeholder={mode.hint}
+          aria-label="Message MetaIoid"
+          className="flex-1 bg-transparent resize-none outline-none placeholder:text-[var(--fg-subtle)] text-[var(--fg)] overflow-y-auto font-sans text-[15px] leading-6 py-2.5 px-1"
+          style={{ minHeight: 42 }}
         />
+
+        <button
+          onClick={() => setVoiceOpen(true)}
+          className="icon-btn w-10 h-10 shrink-0 rounded-xl"
+          aria-label="Talk to MetaIoid" title="Voice"
+        >
+          <Mic size={18} />
+        </button>
+
+        <button
+          onClick={submit}
+          disabled={!canSend && !isGenerating}
+          aria-label={isGenerating ? 'Stop' : 'Send'}
+          title={isGenerating ? 'Stop' : 'Send'}
+          className={cn(
+            'w-10 h-10 shrink-0 rounded-full flex items-center justify-center transition-all duration-150',
+            isGenerating
+              ? 'bg-[var(--surface-hover)] text-[var(--fg)] border border-[var(--border)]'
+              : canSend
+                ? 'bg-[var(--accent)] text-white hover:opacity-90 active:scale-95'
+                : 'bg-[var(--surface-hover)] text-[var(--fg-subtle)] cursor-not-allowed',
+          )}
+        >
+          {isGenerating ? <Square size={14} fill="currentColor" /> : <ArrowUp size={18} />}
+        </button>
       </div>
 
-      {/* Minimal Ergonomic Controls: ＋ ... 🎙 ↑ */}
-      <div className="relative flex items-center justify-between px-3 pb-2.5 pt-1">
-        <div className="relative">
-          <button
-            onClick={() => setToolsOpen((o) => !o)}
-            aria-expanded={toolsOpen}
-            aria-haspopup="menu"
-            className={cn(
-              'inline-flex items-center justify-center w-8 h-8 rounded-full border transition-all active:scale-95',
-              toolsOpen
-                ? 'border-[var(--accent)] bg-[var(--accent-subtle)] text-[var(--fg)]'
-                : 'border-[var(--border)] bg-[var(--surface-elevated)] text-[var(--fg-secondary)] hover:text-[var(--fg)] hover:border-[var(--fg-muted)]'
-            )}
-            title="Attach files or capabilities"
-            aria-label="Attach or select capabilities"
-          >
-            <Plus size={16} strokeWidth={2.2} />
-          </button>
-        </div>
+      {/* Quiet meta row: model, and nothing that needs reading */}
+      <div className="flex items-center gap-2 px-3.5 pb-2.5 pt-0.5 min-h-[30px]">
+        {showModel && <div className="scale-[0.92] origin-left -ml-0.5"><ModelSelector compact /></div>}
+        <span className="flex-1" />
+        {focused && value.length > 0 && (
+          <span className="hidden sm:inline text-[11px] text-[var(--fg-subtle)]">Enter sends · Shift+Enter for a new line</span>
+        )}
+        {!focused && offline && (
+          <span className="text-[11px] text-[var(--fg-subtle)] truncate">Local demo · <button onClick={() => setView('settings')} className="underline hover:text-[var(--fg-muted)]">connect AI</button></span>
+        )}
+      </div>
 
-        <div className="flex items-center gap-1.5 shrink-0">
-          <button
-            onClick={() => setVoiceOpen(true)}
-            className="inline-flex items-center justify-center w-8 h-8 rounded-full text-[var(--fg-muted)] hover:text-[var(--accent)] hover:bg-[var(--accent-subtle)] transition-colors"
-            aria-label="Voice input"
-            title="Voice mode"
-          >
-            <Mic size={17} strokeWidth={2} />
-          </button>
-          <LiquidMetalButton
-            onClick={submit}
-            isGenerating={isGenerating}
-            disabled={!isGenerating && !value.trim() && !atts.length}
-            size={34}
-            title={isGenerating ? 'Stop generating' : 'Send message'}
-          />
-        </div>
-
-        {/* Universal Attachments & Capabilities Popover */}
-        <AnimatePresence>
-          {toolsOpen && (
-            <>
-              <div className="fixed inset-0 z-40" onClick={closeMenus} aria-hidden />
-              <motion.div
-                initial={{ opacity: 0, y: 8, scale: 0.98 }}
-                animate={{ opacity: 1, y: 0, scale: 1 }}
-                exit={{ opacity: 0, y: 6, scale: 0.98 }}
-                transition={{ duration: 0.18, ease: [0.22, 1, 0.36, 1] }}
-                className="absolute z-50 left-0 bottom-full mb-2 w-[min(300px,calc(100vw-3rem))] rounded-2xl border border-[var(--border)] bg-[var(--surface-elevated)] backdrop-blur-xl shadow-pop p-1.5 overflow-y-auto"
-                role="menu"
-                aria-label="Composer capabilities"
-              >
+      {/* `+` sheet */}
+      <AnimatePresence>
+        {menuOpen && (
+          <>
+            <div className="fixed inset-0 z-40" onClick={() => setMenuOpen(false)} aria-hidden />
+            <motion.div
+              initial={{ opacity: 0, y: 6 }}
+              animate={{ opacity: 1, y: 0 }}
+              exit={{ opacity: 0, y: 4 }}
+              transition={{ duration: 0.15, ease: 'easeOut' }}
+              role="menu"
+              aria-label="Ways to send"
+              className="absolute z-50 left-3 bottom-full mb-2 w-[min(300px,calc(100vw-2.5rem))] rounded-2xl border border-[var(--border)] bg-[var(--surface-elevated)] text-[var(--fg)] shadow-pop p-1.5"
+            >
+              {menu.map((m) => (
                 <button
-                  role="menuitem"
-                  onClick={() => {
-                    closeMenus();
-                    fileRef.current?.click();
-                  }}
-                  className="w-full flex items-center gap-3 px-3 py-2 rounded-xl text-left hover:bg-[var(--surface-hover)] transition-colors text-[var(--fg)]"
+                  key={m.label} role="menuitem" onClick={m.run}
+                  className="w-full flex items-center gap-3 px-3 py-2.5 rounded-xl text-left hover:bg-[var(--surface-hover)] transition-colors"
                 >
-                  <span className="w-6 text-center text-[var(--fg-muted)] shrink-0">
-                    <FileText size={15} />
-                  </span>
-                  <span className="flex-1 min-w-0">
-                    <span className="block text-[13px] font-medium text-[var(--fg)]">Upload file or document</span>
-                    <span className="block text-[11px] text-[var(--fg-muted)]">PDF, DOCX, CSV, TXT, images</span>
+                  <m.icon size={16} className="text-[var(--fg-muted)] shrink-0" />
+                  <span className="min-w-0">
+                    <span className="block text-[13.5px] font-medium truncate">{m.label}</span>
+                    <span className="block text-[11.5px] text-[var(--fg-muted)] truncate">{m.hint}</span>
                   </span>
                 </button>
-
-                {onCamera && (
-                  <button
-                    role="menuitem"
-                    onClick={() => {
-                      closeMenus();
-                      onCamera();
-                    }}
-                    className="w-full flex items-center gap-3 px-3 py-2 rounded-xl text-left hover:bg-[var(--surface-hover)] transition-colors text-[var(--fg)]"
-                  >
-                    <span className="w-6 text-center text-[var(--fg-muted)] shrink-0">
-                      <Camera size={15} />
-                    </span>
-                    <span className="flex-1 min-w-0">
-                      <span className="block text-[13px] font-medium text-[var(--fg)]">Take photo / Camera</span>
-                      <span className="block text-[11px] text-[var(--fg-muted)]">Visual context capture</span>
-                    </span>
-                  </button>
-                )}
-
-                <div className="h-px bg-[var(--border-subtle)] my-1" />
-
-                <div className="px-3 pt-1.5 pb-1 text-[10.5px] font-bold tracking-[0.14em] uppercase text-[var(--fg-muted)]">
-                  Workspaces & Capabilities
-                </div>
-
-                {menuModes.map((m) => {
-                  const Icon = MODE_MENU_ICONS[m.id] ?? MessageSquare;
-                  return (
-                    <button
-                      key={m.id}
-                      role="menuitem"
-                      onClick={() => {
-                        closeMenus();
-                        selectMode(m);
-                      }}
-                      className="w-full flex items-center gap-3 px-3 py-2 rounded-xl text-left hover:bg-[var(--surface-hover)] transition-colors text-[var(--fg)]"
-                    >
-                      <span className="w-6 text-center text-[var(--fg-muted)] shrink-0">
-                        <Icon size={15} />
-                      </span>
-                      <span className="flex-1 min-w-0">
-                        <span className="block text-[13px] font-medium text-[var(--fg)]">{m.label}</span>
-                        {m.desc && <span className="block text-[11px] text-[var(--fg-muted)] truncate">{m.desc}</span>}
-                      </span>
-                    </button>
-                  );
-                })}
-              </motion.div>
-            </>
-          )}
-        </AnimatePresence>
-      </div>
-
-      {focused && large && (
-        <div className="px-4 pb-2.5 flex items-center gap-2 text-[11.5px] text-[var(--fg-muted)] border-t border-[var(--border-subtle)] pt-1.5">
-          <kbd className="font-mono bg-[var(--surface-sunken)] border border-[var(--border)] rounded px-1.5 py-0.5 text-[11px]">Enter</kbd> send
-          <kbd className="font-mono bg-[var(--surface-sunken)] border border-[var(--border)] rounded px-1.5 py-0.5 text-[11px]">Shift+Enter</kbd> newline
-          <span className="ml-auto hidden sm:inline">{offline ? 'Local prototype' : 'Connected'}</span>
-        </div>
-      )}
+              ))}
+            </motion.div>
+          </>
+        )}
+      </AnimatePresence>
     </div>
   );
 }

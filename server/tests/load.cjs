@@ -16,8 +16,8 @@
   const rec = (op, ms) => {
     (lat[op] = lat[op] || []).push(ms);
   };
-  const gw = spawn('node', ['server/src/index.js'], {
-    cwd: 'C:\\metaloid',
+  const gw = spawn(process.execPath, ['server/src/index.js'], {
+    cwd: require('node:path').resolve(__dirname, '..', '..'),
     env: { ...process.env, PORT: '8890', METALOID_DATA_DIR: tmp, METALOID_AUTH_LIMIT: '10000' },
     stdio: 'ignore',
   });

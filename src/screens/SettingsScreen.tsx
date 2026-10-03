@@ -1,10 +1,9 @@
-import { Palette, Mic2, Globe2, Cpu, Brain, ShieldCheck, Plug, Server, Keyboard, Trash2, Check, Flame, CircleUserRound, Network } from 'lucide-react';
+import { useState } from 'react';
+import { Palette, Mic2, Globe2, Cpu, Brain, ShieldCheck, Plug, Server, Keyboard, Trash2, Check, Flame, SlidersHorizontal } from 'lucide-react';
 import { useApp } from '../lib/store';
 import { SettingsSection, SettingsRow, Seg, Toggle } from '../components/SettingsGroup';
 import { SystemStatus } from '../components/SystemStatus';
-import { ControlCenter } from '../components/ControlCenter';
-import { ProviderSettings } from '../components/ProviderSettings';
-import { PuterConnect } from '../components/PuterConnect';
+import { AccountSection } from '../components/AccountPanel';
 import { LANGUAGES, MODELS } from '../lib/i18n';
 import { getVoices } from '../providers/tts';
 import { THEME_PRESETS, ACCENT_PALETTES, type ThemePreset } from '../lib/theme';
@@ -16,22 +15,28 @@ import { cn } from '../lib/cn';
 // Zero theme flash, instant live switching, curated presets.
 
 export function SettingsScreen() {
-  const { settings, updateSettings, toast, openModal, setView, connection, setSkillForgeOpen } = useApp();
+  const { settings, updateSettings, toast, openModal, setView, connection, setSkillForgeOpen, setSkillsOpen } = useApp();
   const saved = (msg: string) => toast({ title: msg });
+  // Advanced stays folded away until asked for — no jargon on the first read.
+  const [advanced, setAdvanced] = useState(false);
+  const [appearanceMore, setAppearanceMore] = useState(false);
 
   const presetsList = Object.values(THEME_PRESETS);
 
   return (
     <div className="max-w-[860px] mx-auto px-4 sm:px-8 py-6 pb-32 md:pb-12 space-y-4">
       <div>
-        <h1 className="text-[22px] font-bold tracking-tight text-[var(--fg)]">Settings</h1>
+        <h2 className="text-[22px] font-bold tracking-tight text-[var(--fg)]">Settings</h2>
         <p className="text-[13.5px] text-[var(--fg-muted)] mt-0.5">
-          Configure {settings.agentName} &middot; All preferences are preserved locally on this device.
+          Your AI, your voice, your data — kept on this device unless you sign in.
         </p>
       </div>
 
+      {/* ============ ACCOUNT + PROVIDER KEYS ============ */}
+      <AccountSection />
+
       {/* ============ APPEARANCE ============ */}
-      <SettingsSection icon={Palette} title="Appearance & Visual System" desc="Curated theme presets, signature accents, and border geometry">
+      <SettingsSection icon={Palette} title="Appearance" desc="How MetaIoid looks on this device">
         {/* Curated Theme Preset Grid */}
         <div className="space-y-2">
           <div className="text-[13px] font-medium text-[var(--fg)]">Theme Preset</div>
@@ -108,10 +113,21 @@ export function SettingsScreen() {
           </div>
         </div>
 
+        <SettingsRow
+          label="More appearance options"
+          hint="Accent colour, corner radius, density and motion"
+          control={
+            <button onClick={() => setAppearanceMore((v) => !v)} className="btn-ghost h-9 px-3 text-[12.5px]" aria-expanded={appearanceMore}>
+              {appearanceMore ? 'Hide' : 'Show'}
+            </button>
+          }
+        />
+
+        {appearanceMore && (<>
         {/* Accent Color Palette */}
         <SettingsRow
-          label="Signature Accent"
-          hint="Restrained focal point across buttons, active states, and indicators"
+          label="Accent colour"
+          hint="Used for focus, selection and the send button — nothing else"
           control={
             <div className="flex flex-wrap gap-2">
               {ACCENT_PALETTES.map((acc) => {
@@ -142,8 +158,7 @@ export function SettingsScreen() {
 
         {/* Radius Scale */}
         <SettingsRow
-          label="Corner Radius"
-          hint="How rounded corners feel across the interface"
+          label="Corner softness"
           control={
             <Seg
               options={['sharp', 'refined', 'soft'] as const}
@@ -159,7 +174,7 @@ export function SettingsScreen() {
 
         {/* Density */}
         <SettingsRow
-          label="Information Density"
+          label="Density"
           control={
             <Seg
               options={['comfortable', 'compact'] as const}
@@ -172,8 +187,8 @@ export function SettingsScreen() {
 
         {/* Animations */}
         <SettingsRow
-          label="Motion & Transitions"
-          hint="Reduced eliminates animated transitions"
+          label="Motion"
+          hint="Reduced turns off non-essential animation"
           control={
             <Seg
               options={['full', 'reduced'] as const}
@@ -186,8 +201,8 @@ export function SettingsScreen() {
 
         {/* Startup animation */}
         <SettingsRow
-          label="Startup sequence"
-          hint="Short intro animation when the app opens"
+          label="Startup fade"
+          hint="A short brand beat before the workspace appears"
           control={
             <Toggle
               on={settings.showStartup}
@@ -196,10 +211,11 @@ export function SettingsScreen() {
             />
           }
         />
+        </>)}
       </SettingsSection>
 
       {/* ============ VOICE ============ */}
-      <SettingsSection icon={Mic2} title="Voice" desc="Spoken conversations, voices and interruption behavior">
+      <SettingsSection icon={Mic2} title="Voice" desc="How MetaIoid listens and speaks">
         <SettingsRow
           label="Voice interaction enabled"
           control={
@@ -260,8 +276,8 @@ export function SettingsScreen() {
           }
         />
         <SettingsRow
-          label="Mic sensitivity"
-          hint="Higher values react faster in quick back-and-forth conversation"
+          label="Speech endpoint sensitivity"
+          hint="Higher sensitivity for rapid conversational turn-taking"
           control={
             <Seg
               options={['Low', 'Medium', 'High'] as const}
@@ -272,8 +288,8 @@ export function SettingsScreen() {
           }
         />
         <SettingsRow
-          label="Interrupt on voice"
-          hint="Stops the reply out loud as soon as you start speaking"
+          label="Barge-in interrupt"
+          hint="Instantly cancels agent playback when speech is detected"
           control={
             <Toggle
               on={settings.stopOnTalk}
@@ -285,7 +301,7 @@ export function SettingsScreen() {
       </SettingsSection>
 
       {/* ============ LANGUAGE ============ */}
-      <SettingsSection icon={Globe2} title="Language" desc="Automatic detection with first-class Hindi, Hinglish, and English">
+      <SettingsSection icon={Globe2} title="Language" desc="Hindi, English, and automatic detection">
         <div className="grid grid-cols-2 sm:grid-cols-3 gap-2">
           {LANGUAGES.map((l) => {
             const active = settings.defaultLanguage === l.id;
@@ -313,7 +329,7 @@ export function SettingsScreen() {
       </SettingsSection>
 
       {/* ============ AGENT ============ */}
-      <SettingsSection icon={Cpu} title="Personality" desc="Name, answer depth and tone of voice">
+      <SettingsSection icon={Cpu} title="Personality" desc="What MetaIoid calls itself and how it answers">
         <SettingsRow
           label="Agent name"
           control={
@@ -326,8 +342,7 @@ export function SettingsScreen() {
           }
         />
         <SettingsRow
-          label="Answer smarts"
-          hint="Higher tiers reason more before replying"
+          label="Reasoning tier"
           control={
             <select
               value={settings.model}
@@ -368,10 +383,10 @@ export function SettingsScreen() {
       </SettingsSection>
 
       {/* ============ MEMORY & PRIVACY ============ */}
-      <SettingsSection icon={Brain} title="Memory & Privacy" desc="What MetaIoid remembers on this device">
+      <SettingsSection icon={Brain} title="Memory & Privacy" desc="What MetaIoid remembers, and what never leaves your device">
         <SettingsRow
-          label="Durable memory enabled"
-          hint="Allows agent to retain key user preferences and project facts locally"
+          label="Remember things"
+          hint="Keeps preferences and project facts so you do not repeat yourself"
           control={
             <Toggle
               on={settings.memoryEnabled}
@@ -396,21 +411,11 @@ export function SettingsScreen() {
         </div>
       </SettingsSection>
 
-      {/* ============ CONTROL CENTER (multi-user) ============ */}
-      <SettingsSection icon={CircleUserRound} title="Control Center" desc="Your profile, autonomy, usage, devices, and data — isolated per account">
-        <ControlCenter />
-      </SettingsSection>
-
-      {/* ============ AI PROVIDERS (BYOK) ============ */}
-      <SettingsSection icon={Network} title="AI Providers" desc="Your keys, your models — encrypted, tested, routed with fallbacks">
-        <ProviderSettings />
-      </SettingsSection>
-
       {/* ============ CONNECTIONS & SYSTEM ============ */}
-      <SettingsSection icon={Plug} title="Connection & System" desc="Backend connection and service health">
+      <SettingsSection icon={Plug} title="Connection" desc="Where answers come from, and how to connect your own AI">
         <SettingsRow
-          label="Server address"
-          hint="Leave empty to use the built-in demo mode"
+          label="Gateway address"
+          hint="Leave blank to use the built-in demo gateway"
           control={
             <input
               value={settings.backendUrl}
@@ -421,33 +426,30 @@ export function SettingsScreen() {
             />
           }
         />
-        <SettingsRow
-          label="Puter — free images & AI"
-          hint="One-time free sign-in; image costs use your Puter allowance, never ours"
-          control={<PuterConnect />}
-        />
         <SystemStatus />
       </SettingsSection>
 
-      {/* ============ ADVANCED ============ */}
-      <SettingsSection icon={Flame} title="Advanced · Skill Forge" desc="Experimental self-improvement tools for owners">
+      {/* ============ ADVANCED (folded by default) ============ */}
+      <SettingsSection icon={SlidersHorizontal} title="Advanced" desc="Developer surfaces and diagnostics. Nothing here is needed for everyday use.">
         <SettingsRow
-          label="Skill engine"
-          hint="Learns new capabilities in an isolated sandbox"
+          label="Advanced tools"
+          hint="Skill Forge: the sandboxed self-improvement engine"
           control={
-            <span className="text-[11px] font-mono uppercase px-2 py-0.5 rounded border border-emerald-500/30 bg-emerald-500/10 text-emerald-400">
-              On
-            </span>
+            <button onClick={() => setAdvanced((v) => !v)} className="btn-ghost h-9 px-3 text-[12.5px]" aria-expanded={advanced}>
+              {advanced ? 'Hide' : 'Show'}
+            </button>
           }
         />
-        <div className="pt-2">
-          <button
-            onClick={() => setSkillForgeOpen(true)}
-            className="w-full h-11 rounded-xl text-[13px] font-semibold border border-[var(--accent)] bg-[var(--accent-subtle)] text-[var(--accent)] hover:opacity-90 flex items-center justify-center gap-2 transition-all"
-          >
-            <Flame size={16} /> Open Skill Forge
-          </button>
-        </div>
+        {advanced && (
+          <div className="pt-2">
+            <button
+              onClick={() => setSkillForgeOpen(true)}
+              className="w-full h-11 rounded-xl text-[13px] font-medium border border-[var(--border)] bg-[var(--surface-elevated)] text-[var(--fg)] hover:bg-[var(--surface-hover)] flex items-center justify-center gap-2 transition-colors"
+            >
+              <Flame size={16} className="text-[var(--accent)]" /> Open Skill Forge
+            </button>
+          </div>
+        )}
       </SettingsSection>
     </div>
   );

@@ -19,15 +19,18 @@ export function fmtTime(ts: number): string {
   return new Date(ts).toLocaleTimeString([], { hour: 'numeric', minute: '2-digit' });
 }
 
-export function groupConversations<T extends { createdAt: number }>(list: T[]): { label: string; items: T[] }[] {
+export function groupConversations<T extends { createdAt: number; updatedAt?: number }>(list: T[]): { label: string; items: T[] }[] {
   const now = new Date();
   const startToday = new Date(now.getFullYear(), now.getMonth(), now.getDate()).getTime();
   const startYesterday = startToday - 86400000;
   const startWeek = startToday - 86400000 * 7;
-  const today = list.filter((c) => c.createdAt >= startToday);
-  const yesterday = list.filter((c) => c.createdAt >= startYesterday && c.createdAt < startToday);
-  const week = list.filter((c) => c.createdAt >= startWeek && c.createdAt < startYesterday);
-  const older = list.filter((c) => c.createdAt < startWeek);
+  // A conversation you continued this morning belongs under Today, even if it
+  // was created last month — so the recency that matters is the last update.
+  const at = (c: T) => c.updatedAt ?? c.createdAt;
+  const today = list.filter((c) => at(c) >= startToday);
+  const yesterday = list.filter((c) => at(c) >= startYesterday && at(c) < startToday);
+  const week = list.filter((c) => at(c) >= startWeek && at(c) < startYesterday);
+  const older = list.filter((c) => at(c) < startWeek);
   const out: { label: string; items: T[] }[] = [];
   if (today.length) out.push({ label: 'Today', items: today });
   if (yesterday.length) out.push({ label: 'Yesterday', items: yesterday });

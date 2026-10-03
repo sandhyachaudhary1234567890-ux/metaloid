@@ -1,219 +1,144 @@
-import { useEffect, useRef, useState } from 'react';
+import { useMemo, useState } from 'react';
 import { AnimatePresence, motion } from 'framer-motion';
-import { Square, MoreHorizontal, Pencil, Trash2, Plus, ArrowRight, Unplug, PanelLeft } from 'lucide-react';
+import { Square, MoreHorizontal, Pencil, Trash2, Plus, Telescope, Hammer, ChartNoAxesColumn, Sparkles } from 'lucide-react';
 import { useApp } from '../lib/store';
+import { useAuth } from '../lib/auth';
 import { ChatWindow } from '../components/ChatWindow';
-import { CommandBar } from '../components/CommandBar';
-import { MetaloidCore } from '../components/MetaloidCore';
-import { ModelSelector } from '../components/ModelSelector';
-import { LanguageSelector } from '../components/LanguageSelector';
-import { UnifiedWorkspacePanel } from '../components/workspaces/UnifiedWorkspacePanel';
-import type { PlatformArtifactPayload } from '../lib/artifacts/artifactGenerator';
-import { greetingFor } from '../lib/i18n';
+import { CommandBar, COMPOSER_MODES, type ComposerMode } from '../components/CommandBar';
 
-// CHAT — universal command center and long-form conversation workspace.
-// Editorial typography, calm surface treatments, sticky autoscroll,
-// and seamless side-by-side artifact workspaces.
+// CHAT — the product.
+//
+// Three bands and nothing else: a small identity line, the conversation, the
+// composer. When the conversation is empty the middle band holds one question
+// and four ways to start; as soon as you speak, they are gone for good.
+
+const STARTERS: { mode: ComposerMode; sample: string; icon: typeof Sparkles }[] = [
+  { mode: COMPOSER_MODES.ask, sample: 'Explain something clearly', icon: Sparkles },
+  { mode: COMPOSER_MODES.research, sample: 'Follow a topic to its sources', icon: Telescope },
+  { mode: COMPOSER_MODES.build, sample: 'Turn an idea into something working', icon: Hammer },
+  { mode: COMPOSER_MODES.analyze, sample: 'Break down what you are looking at', icon: ChartNoAxesColumn },
+];
 
 export function ChatScreen() {
   const {
-    activeConv, status, isGenerating, stopGenerating, detectedLang,
-    newConversation, setView, openModal, renameConversation, language,
-    connection, sidebarCollapsed, setSidebarCollapsed, setMobileSidebarOpen,
-    authUser,
+    activeConv, isGenerating, stopGenerating, newConversation, openModal,
+    renameConversation, setView, connection, status,
   } = useApp();
+  const auth = useAuth();
   const messages = activeConv?.messages ?? [];
-  const [moreOpen, setMoreOpen] = useState(false);
-  const [draft, setDraft] = useState<{ text: string; n: number } | null>(null);
-  const [activeWorkspacePayload, setActiveWorkspacePayload] = useState<PlatformArtifactPayload | null>(null);
-  const draftN = useRef(0);
-  const greet = greetingFor(new Date(), language);
-  const offline = connection !== 'online';
 
-  useEffect(() => {
-    const w = window as unknown as { __openPlatformArtifact?: (p: PlatformArtifactPayload) => void };
-    w.__openPlatformArtifact = (p: PlatformArtifactPayload) => {
-      setActiveWorkspacePayload(p);
-    };
-    return () => {
-      delete w.__openPlatformArtifact;
-    };
-  }, []);
+  const [moreOpen, setMoreOpen] = useState(false);
+  const [mode, setMode] = useState<ComposerMode>(COMPOSER_MODES.ask);
+
+  const firstName = useMemo(() => {
+    const meta = (auth.user?.user_metadata ?? {}) as Record<string, unknown>;
+    const raw = (meta.display_name as string | undefined) || auth.user?.email?.split('@')[0];
+    if (!raw) return null;
+    const first = raw.trim().split(/[\s._-]+/)[0];
+    return first ? first.charAt(0).toUpperCase() + first.slice(1) : null;
+  }, [auth.user]);
+
+  const offline = connection !== 'online';
+  const working = isGenerating || status === 'thinking' || status === 'executing';
 
   return (
-    <div className="flex h-full min-h-0 bg-[var(--bg)] overflow-hidden">
-      {/* Primary Chat Column */}
-      <div className={`flex flex-col h-full min-h-0 min-w-0 transition-all duration-300 ${
-        activeWorkspacePayload ? 'flex-1 lg:w-1/2' : 'w-full'
-      }`}>
-        {/* top: title · model · language · more */}
-        <div className="w-full mx-auto px-3 sm:px-6 md:px-8 h-14 flex items-center gap-2.5 border-b border-[var(--border-subtle)] shrink-0">
-          <button
-            onClick={() => {
-              if (window.innerWidth < 768) {
-                setMobileSidebarOpen(true);
-              } else {
-                setSidebarCollapsed(!sidebarCollapsed);
-              }
-            }}
-            className="icon-btn w-8 h-8 rounded-lg text-[var(--fg-muted)] hover:text-[var(--fg)] hover:bg-[var(--surface-hover)] shrink-0"
-            title={sidebarCollapsed ? 'Expand sidebar (⌘\\)' : 'Collapse sidebar (⌘\\)'}
-            aria-label="Toggle sidebar"
-          >
-            <PanelLeft size={18} />
+    <div className="flex flex-col h-full min-h-0 bg-[var(--bg)]">
+      {/* identity line — quiet, 52px, never a dashboard */}
+      <div className="mx-auto w-full max-w-[760px] px-4 sm:px-6 h-[52px] flex items-center gap-2 shrink-0">
+        <h1 className="text-[13.5px] font-medium text-[var(--fg-muted)] truncate min-w-0">
+          {activeConv?.title || 'New chat'}
+        </h1>
+        {working && (
+          <span className="flex items-center gap-1.5 text-[12px] text-[var(--accent)] shrink-0">
+            <span className="h-1.5 w-1.5 rounded-full bg-[var(--accent)] animate-pulse" />
+            {status === 'executing' ? 'Working' : 'Thinking'}
+          </span>
+        )}
+        <span className="flex-1" />
+        {isGenerating && (
+          <button onClick={stopGenerating} className="btn-ghost h-8 px-3 text-[12.5px] shrink-0" aria-label="Stop">
+            <Square size={11} fill="currentColor" /> Stop
           </button>
-
-          {messages.length <= 2 && (
-            <div className="hidden sm:block shrink-0">
-              <MetaloidCore status={status} size={30} glyph={false} minimal />
-            </div>
-          )}
-          <div className="min-w-0 flex-1 flex items-center gap-2">
-            <h2 className="text-[14.5px] font-medium text-[var(--fg)] tracking-tight truncate">
-              {activeConv?.title ?? 'New conversation'}
-            </h2>
-            {offline && (
-              <span className="text-[11px] font-medium px-2 py-0.5 rounded-full bg-amber-500/10 text-amber-500 border border-amber-500/20">
-                Offline
-              </span>
+        )}
+        <div className="relative shrink-0">
+          <button
+            onClick={() => setMoreOpen((o) => !o)}
+            className="icon-btn w-9 h-9"
+            aria-label="Conversation options"
+            aria-haspopup="menu"
+            aria-expanded={moreOpen}
+          >
+            <MoreHorizontal size={18} />
+          </button>
+          <AnimatePresence>
+            {moreOpen && (
+              <>
+                <div className="fixed inset-0 z-40" onClick={() => setMoreOpen(false)} />
+                <motion.div
+                  initial={{ opacity: 0, y: -4 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0 }}
+                  transition={{ duration: 0.14 }}
+                  className="absolute right-0 top-10 z-50 w-48 rounded-xl border border-[var(--border)] bg-[var(--surface-elevated)] shadow-pop p-1.5"
+                  role="menu"
+                >
+                  <MenuBtn icon={Plus} label="New chat" onClick={() => { newConversation(); setMoreOpen(false); }} />
+                  <MenuBtn icon={Pencil} label="Rename" onClick={() => {
+                    setMoreOpen(false);
+                    if (activeConv) openModal('rename-chat', { name: activeConv.title, onRename: (t: string) => renameConversation(activeConv.id, t) });
+                  }} />
+                  <MenuBtn icon={Trash2} label="Delete" danger onClick={() => {
+                    setMoreOpen(false);
+                    if (activeConv) openModal('delete-chat', activeConv.id);
+                  }} />
+                </motion.div>
+              </>
             )}
-          </div>
-          <div className="flex items-center gap-2 shrink-0">
-            <ModelSelector compact />
-          </div>
-          <div className="relative shrink-0">
-            <button
-              onClick={() => setMoreOpen((o) => !o)}
-              className="icon-btn w-9 h-9"
-              aria-label="Conversation options"
-              aria-haspopup="menu"
-              aria-expanded={moreOpen}
-            >
-              <MoreHorizontal size={18} />
-            </button>
-            <AnimatePresence>
-              {moreOpen && (
-                <>
-                  <div className="fixed inset-0 z-40" onClick={() => setMoreOpen(false)} />
-                  <motion.div
-                    initial={{ opacity: 0, y: -4, scale: 0.98 }}
-                    animate={{ opacity: 1, y: 0, scale: 1 }}
-                    exit={{ opacity: 0 }}
-                    transition={{ duration: 0.15 }}
-                    className="absolute right-0 top-10 z-50 w-48 rounded-xl border border-[var(--border)] bg-[var(--surface-elevated)] shadow-pop p-1.5"
-                    role="menu"
-                  >
-                    <MenuBtn icon={Plus} label="New chat" onClick={() => { newConversation(); setMoreOpen(false); }} />
-                    <MenuBtn icon={Pencil} label="Rename" onClick={() => {
-                      setMoreOpen(false);
-                      if (activeConv) openModal('rename-chat', { name: activeConv.title, onRename: (t: string) => renameConversation(activeConv.id, t) });
-                    }} />
-                    <MenuBtn icon={Trash2} label="Delete" danger onClick={() => {
-                      setMoreOpen(false);
-                      if (activeConv) openModal('delete-chat', activeConv.id);
-                    }} />
-                  </motion.div>
-                </>
-              )}
-            </AnimatePresence>
-          </div>
-          {isGenerating && (
-            <button onClick={stopGenerating} className="btn-ghost h-8 px-3 text-[12.5px] shrink-0" aria-label="Stop generating">
-              <Square size={12} fill="currentColor" /> Stop
-            </button>
-          )}
-        </div>
-
-        {/* honesty banner */}
-        {offline && (
-          <div className="w-full mx-auto px-4 sm:px-8 pt-3">
-            <button
-              onClick={() => setView('settings')}
-              className="w-full flex items-center gap-2.5 rounded-xl border border-amber-500/25 bg-amber-500/[0.06] px-4 py-2 text-left hover:border-amber-500/40 transition-colors"
-            >
-              <Unplug size={14} className="text-amber-400 shrink-0" />
-              <span className="text-[12px] text-[var(--fg-secondary)]">
-                <span className="font-semibold text-amber-300">Local demo</span> &mdash; backend gateway not connected. Answers are local mocks.
-                <span className="text-[var(--fg-muted)]"> Tap to connect &rarr;</span>
-              </span>
-            </button>
-          </div>
-        )}
-
-        {messages.length === 0 ? (
-          /* Clean welcome state */
-          <div className="flex-1 overflow-y-auto">
-            <div className="min-h-full flex flex-col justify-center max-w-[640px] w-full mx-auto px-6 py-10">
-              <motion.div initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }} transition={{ duration: 0.35 }}>
-                <h1 className="font-bold tracking-tight text-[28px] sm:text-[34px] text-[var(--fg)]">
-                  {authUser?.displayName?.trim() ? `${greet}, ${authUser.displayName.trim()}.` : 'MetaIoid'}
-                  <br />
-                  <span className="text-[var(--fg-muted)] font-normal text-[22px] sm:text-[26px]">What are we working on?</span>
-                </h1>
-                <p className="mt-2 text-[14px] text-[var(--fg-muted)]">
-                  Ask a question, investigate a topic, or work through complex code.
-                </p>
-                <div className="mt-6 grid sm:grid-cols-2 gap-2.5">
-                  {[
-                    { label: 'Ask anything', prompt: 'Explain the core principles of quantum error correction simply' },
-                    { label: 'Research deeply', prompt: 'Research recent breakthroughs in solid-state battery technology' },
-                    { label: 'Work with code', prompt: 'Write a high-performance TypeScript debounce function with tests' },
-                    { label: 'Think through a problem', prompt: 'Help me break down and design a scalable event-driven architecture' },
-                  ].map((item, i) => (
-                    <motion.button
-                      key={item.label}
-                      initial={{ opacity: 0, y: 8 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.08 + i * 0.05 }}
-                      onClick={() => {
-                        draftN.current += 1;
-                        setDraft({ text: item.prompt, n: draftN.current });
-                      }}
-                      className="group relative rounded-xl border border-[var(--border)] bg-[var(--surface)] p-3.5 pr-8 text-left transition-all hover:bg-[var(--surface-hover)] hover:border-[var(--border-strong)] min-h-[72px]"
-                    >
-                      <span className="block text-[13.5px] font-semibold text-[var(--fg)]">{item.label}</span>
-                      <span className="block text-[12px] text-[var(--fg-muted)] mt-0.5 line-clamp-1">{item.prompt}</span>
-                      <ArrowRight
-                        size={14}
-                        aria-hidden
-                        className="absolute right-3 top-1/2 -translate-y-1/2 text-[var(--accent)] opacity-0 -translate-x-1.5 transition-all group-hover:opacity-100 group-hover:translate-x-0"
-                      />
-                    </motion.button>
-                  ))}
-                </div>
-              </motion.div>
-            </div>
-          </div>
-        ) : (
-          <ChatWindow
-            messages={messages}
-            onOpenWorkspace={(payload) => setActiveWorkspacePayload(payload)}
-          />
-        )}
-
-        {/* bottom composer */}
-        <div className="border-t border-[var(--border)] bg-[var(--bg)]/90 backdrop-blur-md pb-[max(0.75rem,env(safe-area-inset-bottom))]">
-          <div className="max-w-[760px] mx-auto px-3 sm:px-6 md:px-8 py-2.5 sm:py-3.5">
-            <CommandBar onCamera={() => setView('live')} injected={draft} />
-          </div>
+          </AnimatePresence>
         </div>
       </div>
 
-      {/* Focused Workspace Panel (Slide / Doc / Sheet / Code / Research) */}
-      <AnimatePresence>
-        {activeWorkspacePayload && (
-          <motion.div
-            initial={{ opacity: 0, x: 40 }}
-            animate={{ opacity: 1, x: 0 }}
-            exit={{ opacity: 0, x: 40 }}
-            transition={{ duration: 0.25, ease: 'easeOut' }}
-            className="fixed inset-0 z-40 lg:static lg:z-auto flex-1 lg:w-1/2 h-full min-h-0 bg-[var(--surface)] shadow-2xl lg:shadow-none"
-          >
-            <UnifiedWorkspacePanel
-              payload={activeWorkspacePayload}
-              onClose={() => setActiveWorkspacePayload(null)}
-            />
-          </motion.div>
-        )}
-      </AnimatePresence>
+      {/* conversation, or the single question that starts one */}
+      {messages.length === 0 ? (
+        <div className="flex-1 min-h-0 overflow-y-auto">
+          <div className="min-h-full flex flex-col justify-center max-w-[680px] w-full mx-auto px-6 py-8">
+            <motion.div initial={{ opacity: 0, y: 6 }} animate={{ opacity: 1, y: 0 }} transition={{ duration: 0.28, ease: 'easeOut' }}>
+              {firstName && <p className="text-[13px] text-[var(--fg-muted)] mb-1.5">{firstName}</p>}
+              <h2 className="text-[26px] sm:text-[32px] font-semibold tracking-tight text-[var(--fg)] leading-tight">
+                What are we working on?
+              </h2>
+              <div className="mt-6 grid grid-cols-2 gap-2">
+                {STARTERS.map(({ mode: m, sample, icon: Icon }) => (
+                  <button
+                    key={m.id}
+                    onClick={() => setMode(m)}
+                    className="group flex flex-col items-start gap-2 rounded-2xl border border-[var(--border)] bg-[var(--surface)] px-4 py-3.5 text-left transition-colors hover:bg-[var(--surface-hover)] hover:border-[var(--border-strong)] min-h-[84px]"
+                  >
+                    <Icon size={16} className="text-[var(--accent)]" />
+                    <span className="text-[13.5px] font-medium text-[var(--fg)]">{m.label}</span>
+                    <span className="text-[12px] text-[var(--fg-muted)] leading-snug">{sample}</span>
+                  </button>
+                ))}
+              </div>
+            </motion.div>
+          </div>
+        </div>
+      ) : (
+        <ChatWindow messages={messages} />
+      )}
+
+      {/* composer, grounded near the bottom */}
+      <div className="shrink-0 bg-[var(--bg)] pb-[74px] md:pb-3">
+        <div className="mx-auto max-w-[760px] px-4 sm:px-6 pt-2">
+          {offline && (
+            <button
+              onClick={() => setView('settings')}
+              className="mb-2 text-[11.5px] text-[var(--fg-muted)] hover:text-[var(--fg)] transition-colors"
+            >
+              Local demo — answers come from a small offline model. <span className="underline">Connect AI</span>
+            </button>
+          )}
+          <CommandBar mode={mode} onModeChange={setMode} onCamera={() => setView('live')} />
+        </div>
+      </div>
     </div>
   );
 }
@@ -224,9 +149,7 @@ function MenuBtn({ icon: Icon, label, danger, onClick }: { icon: typeof Plus; la
       onClick={onClick}
       role="menuitem"
       className={`w-full flex items-center gap-2.5 px-3 py-2 rounded-lg text-[13px] font-medium transition-colors ${
-        danger
-          ? 'text-red-400 hover:bg-red-500/10'
-          : 'text-[var(--fg)] hover:bg-[var(--surface-hover)]'
+        danger ? 'text-red-400 hover:bg-red-500/10' : 'text-[var(--fg)] hover:bg-[var(--surface-hover)]'
       }`}
     >
       <Icon size={14} /> {label}

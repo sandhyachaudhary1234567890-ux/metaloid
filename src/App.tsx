@@ -1,9 +1,9 @@
 import { useState, useEffect, useRef } from 'react';
-import { AnimatePresence, motion } from 'framer-motion';
+import { AnimatePresence, MotionConfig, motion } from 'framer-motion';
 import { useApp } from './lib/store';
 import { useKeyboardShortcuts } from './hooks/useKeyboardShortcuts';
 import { Sidebar, ConnectionPill } from './components/Sidebar';
-import { BottomNav, MobileMoreSheet } from './components/BottomNav';
+import { BottomNav } from './components/BottomNav';
 import { Header } from './components/Header';
 import { VoiceMode } from './components/VoiceMode';
 import { CommandPalette } from './components/CommandPalette';
@@ -14,49 +14,111 @@ import { SkillForgePanel } from './components/developer/SkillForgePanel';
 import { SkillsPanel } from './components/SkillsPanel';
 import { Toasts, ModalRoot } from './components/Overlays';
 import { StartupSequence } from './components/StartupSequence';
-import { HomeScreen } from './screens/HomeScreen';
 import { ChatScreen } from './screens/ChatScreen';
 import { LiveScreen } from './screens/LiveScreen';
 import { MemoryScreen } from './screens/MemoryScreen';
 import { HistoryScreen } from './screens/HistoryScreen';
 import { SettingsScreen } from './screens/SettingsScreen';
+import { HomeScreen } from './screens/HomeScreen';
 import { WorkspaceScreen } from './screens/WorkspaceScreen';
-import { AuthScreen } from './components/AuthScreen';
-import { Onboarding } from './components/Onboarding';
-import { WifiOff, Menu } from 'lucide-react';
+import { WifiOff, X, Archive, Library, Telescope, CheckCircle2 } from 'lucide-react';
 
 import { MetaIoidLockup, MetaIoidFavicon } from './components/brand';
+import { AuthScreen } from './screens/AuthScreen';
+import { useAuth } from './lib/auth';
+import { SyncProvider } from './lib/sync';
 
-function MobileTopBar() {
-  const { setMobileSidebarOpen } = useApp();
+function MobileTopBar({ onMore, moreOpen }: { onMore: () => void; moreOpen: boolean }) {
   return (
     <div className="md:hidden sticky top-0 z-30 border-b border-[var(--border)] bg-[var(--surface)]/90 backdrop-blur-md">
-      <div className="px-3 h-14 flex items-center gap-2">
-        <button
-          onClick={() => setMobileSidebarOpen(true)}
-          className="icon-btn w-9 h-9 rounded-lg text-[var(--fg-muted)] hover:text-[var(--fg)] shrink-0"
-          aria-label="Open menu"
-        >
-          <Menu size={20} />
+      <div className="px-4 h-[52px] flex items-center gap-2.5">
+        <button onClick={() => onMore()} aria-label={moreOpen ? 'Close menu' : 'More'} aria-expanded={moreOpen}
+          className="w-9 h-9 -ml-1 rounded-lg flex items-center justify-center text-[var(--fg-muted)] hover:text-[var(--fg)]">
+          {moreOpen ? <X size={18} /> : (
+            <span className="flex flex-col gap-[3px]" aria-hidden>
+              <span className="block w-[15px] h-[1.5px] bg-current rounded" />
+              <span className="block w-[15px] h-[1.5px] bg-current rounded" />
+              <span className="block w-[15px] h-[1.5px] bg-current rounded" />
+            </span>
+          )}
         </button>
-        <MetaIoidLockup variant="compact" size="sm" />
+        <button onClick={() => document.getElementById('main')?.scrollTo({ top: 0 })} aria-label="MetaIoid">
+          <MetaIoidLockup variant="compact" size="sm" />
+        </button>
         <span className="ml-auto"><ConnectionPill compact /></span>
       </div>
     </div>
   );
 }
 
-export default function App() {
-  useKeyboardShortcuts();
+const WORKSPACE_ITEMS = [
+  { id: 'projects' as const, label: 'Projects', hint: 'Workspaces and their instructions', icon: Archive },
+  { id: 'library' as const, label: 'Library', hint: 'Files MetaIoid has created', icon: Library },
+  { id: 'research' as const, label: 'Research', hint: 'Cited investigations', icon: Telescope },
+  { id: 'tasks' as const, label: 'Tasks', hint: 'Long-running agent work', icon: CheckCircle2 },
+];
+
+/** Secondary destinations on phones: workspaces plus the skills panel. */
+function MobileMoreSheet({ open, onClose }: { open: boolean; onClose: () => void }) {
+  const { setView, setSkillsOpen } = useApp();
+  const go = (id: (typeof WORKSPACE_ITEMS)[number]['id']) => { setView(id); onClose(); };
+  return (
+    <AnimatePresence>
+      {open && (
+        <>
+          <motion.button
+            key="scrim" initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }}
+            onClick={onClose} aria-label="Close menu"
+            className="md:hidden fixed inset-0 z-40 bg-black/40 backdrop-blur-[2px]"
+          />
+          <motion.div
+            key="sheet" initial={{ y: 24, opacity: 0 }} animate={{ y: 0, opacity: 1 }} exit={{ y: 24, opacity: 0 }}
+            transition={{ duration: 0.18, ease: 'easeOut' }}
+            className="md:hidden fixed inset-x-0 bottom-0 z-50 rounded-t-2xl border-t border-[var(--border)] bg-[var(--surface)] p-4 pb-8"
+            style={{ paddingBottom: 'max(2rem, env(safe-area-inset-bottom))' }}
+          >
+            <p className="text-[11px] font-semibold uppercase tracking-wider text-[var(--fg-faint)]">Workspace</p>
+            <div className="mt-2 grid grid-cols-2 gap-2">
+              {WORKSPACE_ITEMS.map((w) => (
+                <button key={w.id} onClick={() => go(w.id)}
+                  className="flex items-start gap-2.5 rounded-xl border border-[var(--border)] bg-[var(--surface-sunken)] p-3 text-left">
+                  <w.icon size={16} className="mt-0.5 text-[var(--accent)]" />
+                  <span className="min-w-0">
+                    <span className="block text-[13.5px] font-medium text-[var(--fg)]">{w.label}</span>
+                    <span className="block text-[11.5px] text-[var(--fg-muted)]">{w.hint}</span>
+                  </span>
+                </button>
+              ))}
+            </div>
+            <button
+              onClick={() => { setSkillsOpen(true); onClose(); }}
+              className="mt-3 w-full h-11 rounded-xl border border-[var(--border)] text-[13.5px] font-medium text-[var(--fg)]"
+            >
+              Skills
+            </button>
+          </motion.div>
+        </>
+      )}
+    </AnimatePresence>
+  );
+}
+
+function AppShell() {
+  const auth = useAuth();
+
+  // Gate on the session only when an auth service is actually configured:
+  // an unconfigured build must remain fully usable offline.
+  const gate = auth.configured && auth.status !== 'signed-in';
+  useKeyboardShortcuts(gate);
   const {
     view, newConversation, setView, status, setStatus, voiceOpen,
     settings, connection, missionsOpen, setMissionsOpen, missionDraft,
     skillForgeOpen, setSkillForgeOpen,
     skillsOpen, setSkillsOpen,
-    authUser, authReady, onboardingDone,
   } = useApp();
 
   const [moreOpen, setMoreOpen] = useState(false);
+
   const prevViewRef = useRef(view);
   const [intro, setIntro] = useState(
     () =>
@@ -65,67 +127,40 @@ export default function App() {
       !new URLSearchParams(window.location.search).has('no-intro')
   );
 
+  // Keep the document title honest without holding the UI back: navigation is
+  // instant, and the only motion is a 160ms cross-fade inside <main>.
   useEffect(() => {
     if (prevViewRef.current !== view) {
       prevViewRef.current = view;
-      MetaIoidFavicon.setDocumentTitle(view === 'home' ? undefined : view.charAt(0).toUpperCase() + view.slice(1));
+      MetaIoidFavicon.setDocumentTitle(view === 'chat' || view === 'home' ? undefined : view.charAt(0).toUpperCase() + view.slice(1));
     }
   }, [view]);
 
-  // Email-link handler: ?code= from Supabase verify/recovery links.
-  // Exchanges once, saves the session, cleans the URL; boot adopts it.
-  useEffect(() => {
-    const params = new URLSearchParams(window.location.search);
-    if (!params.has('code')) return;
-    (async () => {
-      try {
-        const { supabase, supabaseConfigured, saveSbSession } = await import('./lib/supabaseAuth');
-        if (!supabaseConfigured()) return;
-        const { data, error } = await supabase().auth.exchangeCodeForSession(window.location.search);
-        if (error || !data.session) return;
-        saveSbSession(data.session);
-        window.history.replaceState({}, '', window.location.pathname);
-        window.location.reload(); // boot adopts the sb session via /me
-      } catch {
-        window.history.replaceState({}, '', window.location.pathname);
-      }
-    })();
-  }, []);
-
   const meta: Record<string, { title: string; sub: string }> = {
-    projects: { title: 'Projects', sub: 'Persistent workspaces' },
-    library: { title: 'Library', sub: 'Created files and artifacts' },
-    research: { title: 'Research', sub: 'Cited investigations' },
-    tasks: { title: 'Tasks', sub: 'Resumable agent work' },
+    home: { title: 'Home', sub: 'Start here' },
     live: { title: 'Live', sub: 'Camera vision feed' },
     memory: { title: 'Memory Vault', sub: 'Personal durable context' },
     history: { title: 'History', sub: 'Past conversations' },
     settings: { title: 'Settings', sub: 'Configuration' },
+    projects: { title: 'Projects', sub: 'Persistent workspaces' },
+    library: { title: 'Library', sub: 'Files MetaIoid created' },
+    research: { title: 'Research', sub: 'Cited investigations' },
+    tasks: { title: 'Tasks', sub: 'Resumable agent work' },
   };
+  const head = meta[view] || { title: 'MetaIoid', sub: '' };
 
-  // ---- identity gates (online gateway only; offline demo needs no account) ----
-  if (!authReady || connection === 'checking') {
-    return (
-      <div className="h-full flex items-center justify-center bg-[var(--bg)] text-[var(--fg-muted)] text-[13.5px]">
-        Waking Metaloid…
-      </div>
-    );
-  }
-  if (view === 'auth') {
-    return (
-      <div className="h-full bg-[var(--bg)] text-[var(--fg)] overflow-hidden">
-        <AuthScreen />
-        <Toasts />
-      </div>
-    );
-  }
-  if (authUser && !onboardingDone) {
-    return (
-      <div className="h-full bg-[var(--bg)] text-[var(--fg)] overflow-hidden">
-        <Onboarding />
-        <Toasts />
-      </div>
-    );
+  if (gate) {
+    if (auth.status === 'loading') {
+      return (
+        <div className="h-full flex items-center justify-center bg-[var(--bg)] text-[var(--fg-muted)]">
+          <div className="flex flex-col items-center gap-3">
+            <div className="h-8 w-8 rounded-full border-2 border-[var(--border)] border-t-[var(--accent)] animate-spin" />
+            <span className="text-[12.5px] tracking-wide">Restoring your session…</span>
+          </div>
+        </div>
+      );
+    }
+    return <AuthScreen />;
   }
 
   return (
@@ -133,29 +168,28 @@ export default function App() {
       <Sidebar />
 
       <div className="flex-1 flex flex-col min-w-0 min-h-0">
-        {view !== 'chat' && <MobileTopBar />}
-        {view !== 'home' && view !== 'chat' && (
+        <MobileTopBar onMore={() => setMoreOpen(true)} moreOpen={moreOpen} />
+        {view !== 'chat' && (
           <div className="hidden md:block">
-            <Header
-              title={meta[view].title}
-              subtitle={meta[view].sub}
-            />
+            <Header title={head.title} subtitle={head.sub} />
           </div>
         )}
-        {view !== 'home' && view !== 'chat' && (
+        {view !== 'chat' && (
           <div className="md:hidden px-4 pt-4">
-            <h1 className="text-[20px] font-bold tracking-tight text-[var(--fg)]">{meta[view].title}</h1>
-            <p className="text-[12.5px] text-[var(--fg-muted)]">{meta[view].sub}</p>
+            <h1 className="text-[20px] font-bold tracking-tight text-[var(--fg)]">{head.title}</h1>
+            <p className="text-[12.5px] text-[var(--fg-muted)]">{head.sub}</p>
           </div>
         )}
 
         {status === 'error' && (
-          <div className="mx-4 sm:mx-8 mt-4 rounded-xl border border-red-500/25 bg-red-500/[0.06] p-4 flex flex-col sm:flex-row sm:items-center gap-3">
-            <span className="flex items-center gap-2 text-[13.5px] font-semibold text-red-400"><WifiOff size={16} /> Connection issue encountered.</span>
-            <span className="text-[12.5px] text-[var(--fg-muted)] flex-1">{connection === 'online' ? 'The request failed.' : 'Backend not connected — running local demo.'}</span>
+          <div className="mx-4 sm:mx-8 mt-3 rounded-xl border border-amber-500/20 bg-amber-500/[0.05] px-4 py-3 flex flex-col sm:flex-row sm:items-center gap-2.5">
+            <span className="flex items-center gap-2 text-[13px] font-medium text-amber-300"><WifiOff size={15} /> That request didn't go through.</span>
+            <span className="text-[12.5px] text-[var(--fg-muted)] flex-1">
+              {connection === 'online' ? 'The provider or network dropped it. Your message is still here.' : 'No gateway is connected, so answers come from the local demo.'}
+            </span>
             <span className="flex gap-2">
-              <button onClick={() => setStatus('idle')} className="h-9 px-3.5 rounded-lg bg-[var(--surface-elevated)] border border-[var(--border)] text-[12.5px]">Dismiss</button>
-              <button onClick={() => setView('settings')} className="h-9 px-3.5 rounded-lg bg-red-500 text-white text-[12.5px]">Check system</button>
+              <button onClick={() => setStatus('idle')} className="btn-ghost h-8 px-3 text-[12.5px]">Dismiss</button>
+              <button onClick={() => setView('settings')} className="btn-primary h-8 px-3 text-[12.5px]">Open settings</button>
             </span>
           </div>
         )}
@@ -164,10 +198,10 @@ export default function App() {
           <AnimatePresence mode="wait">
             <motion.div
               key={view}
-              initial={{ opacity: 0, y: 8 }}
-              animate={{ opacity: 1, y: 0 }}
-              exit={{ opacity: 0, y: -6 }}
-              transition={{ duration: 0.25, ease: [0.22, 1, 0.36, 1] }}
+              initial={{ opacity: 0 }}
+              animate={{ opacity: 1 }}
+              exit={{ opacity: 0 }}
+              transition={{ duration: 0.16, ease: 'easeOut' }}
               className={view === 'chat' ? 'h-full flex flex-col' : ''}
             >
               {view === 'home' && <HomeScreen />}
@@ -184,8 +218,7 @@ export default function App() {
           </AnimatePresence>
         </main>
 
-        {view !== 'chat' && <BottomNav onMore={() => setMoreOpen(true)} />}
-        <MobileMoreSheet open={moreOpen} onClose={() => setMoreOpen(false)} />
+        <BottomNav />
       </div>
 
       <AnimatePresence>{voiceOpen && <VoiceMode key="voice" />}</AnimatePresence>
@@ -194,6 +227,7 @@ export default function App() {
       <MissionsPanel open={missionsOpen} onClose={() => setMissionsOpen(false)} initialObjective={missionDraft} />
       <SkillForgePanel open={skillForgeOpen} onClose={() => setSkillForgeOpen(false)} />
       <SkillsPanel open={skillsOpen} onClose={() => setSkillsOpen(false)} />
+      <MobileMoreSheet open={moreOpen} onClose={() => setMoreOpen(false)} />
       <CommandPalette />
       <ModalRoot />
       <Toasts />
@@ -202,5 +236,22 @@ export default function App() {
       {intro && <StartupSequence onDone={() => setIntro(false)} />}
 
     </div>
+  );
+}
+
+/**
+ * The sync loop runs above the shell so the shell (and Settings) can read its
+ * state. It is a no-op when signed out — the sandbox demo never needs an
+ * account, and an unconfigured build never sees a login it cannot pass.
+ */
+export default function App() {
+  return (
+    // reducedMotion="user" makes every framer-motion animation honour the OS
+    // setting, matching the CSS rule in index.css.
+    <MotionConfig reducedMotion="user">
+      <SyncProvider>
+        <AppShell />
+      </SyncProvider>
+    </MotionConfig>
   );
 }

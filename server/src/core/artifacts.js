@@ -505,6 +505,7 @@ export async function deleteUserArtifacts(userId) {
     if (ids.length) await db.artBytesDel(userId, ids).catch(() => {});
     return ids.length;
   }
+  const mine = store.artifacts.filter((a) => a.userId === userId);
   for (const a of mine) {
     for (const v of a.versions || []) {
       try {

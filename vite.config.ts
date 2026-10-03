@@ -11,27 +11,80 @@ const keyPath = path.resolve(__dirname, 'certs', 'key.pem')
 const certPath = path.resolve(__dirname, 'certs', 'cert.pem')
 const tls = fs.existsSync(keyPath) && fs.existsSync(certPath)
 
-const proxyConfig = {
-  '/api': {
-    target: 'https://127.0.0.1:8787',
-    changeOrigin: true,
-    secure: false,
-  },
+// Same-origin gateway: the dev/preview server proxies /api to the local
+// gateway so a remote browser (tunnel, preview host, reverse proxy) reaches
+// it without knowing 127.0.0.1 — an unreachable gateway still degrades to
+// the app's honest offline/demo state. https + secure:false covers the local
+// gateway when its LAN certs exist.
+const apiProxy = {
+  '/api': { target: 'https://127.0.0.1:8787', changeOrigin: true, secure: false },
 }
 
+// The app lives under /app/ so the repo root can serve the marketing page.
+// Dev + preview get a tiny middleware that serves landing/index.html at "/"
+// — one URL shows the site, one shows the product, same as production.
+const landing = {
+  name: 'metaloid-landing',
+  configureServer(server: import('vite').ViteDevServer) {
+    server.middlewares.use((req, res, next) => {
+      const url = (req.url || '/').split('?')[0];
+      if (url === '/' || url === '/index.html' || url === '/landing') {
+        res.setHeader('Content-Type', 'text/html; charset=utf-8');
+        res.end(fs.readFileSync(path.resolve(__dirname, 'landing/index.html')));
+        return;
+      }
+      next();
+    });
+  },
+  configurePreviewServer(server: import('vite').PreviewServer) {
+    server.middlewares.use((req, res, next) => {
+      const url = (req.url || '/').split('?')[0];
+      if (url === '/' || url === '/index.html' || url === '/landing') {
+        res.setHeader('Content-Type', 'text/html; charset=utf-8');
+        res.end(fs.readFileSync(path.resolve(__dirname, 'landing/index.html')));
+        return;
+      }
+      next();
+    });
+  },
+};
+
 export default defineConfig({
-  plugins: [react()],
+  plugins: [react(), landing],
+  // product UI is served from /app/; the landing page owns /
+  base: '/app/',
   server: {
     port: 5173,
     host: '0.0.0.0',
+    allowedHosts: true,
+    proxy: apiProxy,
     https: tls ? { key: fs.readFileSync(keyPath), cert: fs.readFileSync(certPath) } : undefined,
-    proxy: proxyConfig,
   },
   preview: {
     port: 4173,
     host: '0.0.0.0',
+    allowedHosts: true,
+    proxy: apiProxy,
     https: tls ? { key: fs.readFileSync(keyPath), cert: fs.readFileSync(certPath) } : undefined,
-    proxy: proxyConfig,
   },
-  build: { outDir: 'dist' },
+  // dist/ is the whole deployable site: landing at the root, product in
+  // /app/ (assets + public/ follow the base automatically).
+  build: {
+    // The whole product builds into dist/app/ so that dist/ can also hold the
+    // marketing page at its root — one deployable artifact, two URLs.
+    outDir: 'dist/app',
+    emptyOutDir: true,
+    // Split the heavy, rarely-changing libraries out of the app chunk so the
+    // shell paints fast and a UI edit doesn't invalidate 800 kB of vendor code.
+    rollupOptions: {
+      output: {
+        manualChunks: {
+          'vendor-react': ['react', 'react-dom'],
+          'vendor-motion': ['framer-motion'],
+          'vendor-markdown': ['react-markdown', 'remark-gfm'],
+        },
+      },
+    },
+    chunkSizeWarningLimit: 900,
+  },
 })

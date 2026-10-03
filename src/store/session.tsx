@@ -11,7 +11,7 @@ import {
   getSession, setSession as saveSession, clearSession, onSessionChange,
   type AuthUser,
 } from '../lib/auth';
-import { saveSbSession, loadSbSession, sbAccessToken, sbSignOut, supabaseConfigured } from '../lib/supabaseAuth';
+import { saveSbSession, sbAccessToken, sbRefreshToken, sbSignOut, supabaseConfigured } from '../lib/supabaseAuth';
 import { authSignup as apiSignup, authLogin as apiLogin, authLogout as apiLogout, fetchMe as apiMe } from '../lib/transport';
 
 export interface ModalState {
@@ -58,8 +58,6 @@ interface SessionValue {
   setMissionsOpen: (b: boolean) => void;
   missionDraft: string;
   setMissionDraft: (t: string) => void;
-  deviceMorphOpen: boolean;
-  setDeviceMorphOpen: (b: boolean) => void;
   skillForgeOpen: boolean;
   setSkillForgeOpen: (b: boolean) => void;
   skillsOpen: boolean;
@@ -93,7 +91,7 @@ export function statusLabel(s: AgentStatus): string {
 }
 
 export function SessionProvider({ children }: { children: React.ReactNode }) {
-  const [view, setViewState] = useState<ViewId>('home');
+  const [view, setViewState] = useState<ViewId>('chat');
   const [status, setStatus] = useState<AgentStatus>('idle');
   const [settings, setSettings] = useState<AppSettings>(() => storage.loadSettings());
   const [connection, setConnection] = useState<ConnectionState>('checking');
@@ -109,7 +107,6 @@ export function SessionProvider({ children }: { children: React.ReactNode }) {
   const [osintTarget, setOsintTarget] = useState('');
   const [missionsOpen, setMissionsOpen] = useState(false);
   const [missionDraft, setMissionDraft] = useState('');
-  const [deviceMorphOpen, setDeviceMorphOpen] = useState(false);
   const [skillForgeOpen, setSkillForgeOpen] = useState(false);
   const [skillsOpen, setSkillsOpen] = useState(false);
   const [liveTaskId, setLiveTaskId] = useState<string | null>(null);
@@ -190,7 +187,7 @@ export function SessionProvider({ children }: { children: React.ReactNode }) {
       if (getSession() || !supabaseConfigured()) return false;
       const token = await sbAccessToken().catch(() => null);
       if (!token) return false;
-      saveSession({ access: token, refresh: loadSbSession()?.refresh_token || '', user: { id: 'sb:pending', handle: 'email', displayName: '', role: 'user', createdAt: '' } });
+      saveSession({ access: token, refresh: (await sbRefreshToken()) || '', user: { id: 'sb:pending', handle: 'email', displayName: '', role: 'user', createdAt: '' } });
       return true;
     };
     const s = getSession();
@@ -315,7 +312,6 @@ export function SessionProvider({ children }: { children: React.ReactNode }) {
     toolsOpen, setToolsOpen,
     osintOpen, setOsintOpen, osintTarget, setOsintTarget,
     missionsOpen, setMissionsOpen, missionDraft, setMissionDraft,
-    deviceMorphOpen, setDeviceMorphOpen,
     skillForgeOpen, setSkillForgeOpen,
     skillsOpen, setSkillsOpen,
     liveTaskId, setLiveTaskId,

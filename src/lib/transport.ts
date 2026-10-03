@@ -7,9 +7,18 @@ import { streamText } from './mockStreaming';
 import type { ConnectionState } from './types';
 import { authHeaders, throwIfAuth } from './auth';
 
+// Explicit VITE_API_URL always wins. Otherwise: on localhost, talk to the
+// local gateway directly; on any other host (tunnel / preview / reverse
+// proxy) fall back to the page's OWN ORIGIN (relative URLs), so a proxied
+// /api (see vite.config.ts) works without hardcoding a host the remote
+// browser could never reach.
+const LOCAL_HOSTS = /^(localhost|127\.0\.0\.1|\[::1\]|::1)$/i;
+const onLocalhost =
+  typeof window === 'undefined' || LOCAL_HOSTS.test(window.location.hostname);
+
 export const API_URL =
   (import.meta as unknown as { env?: Record<string, string> }).env?.VITE_API_URL ||
-  'https://127.0.0.1:8787';
+  (onLocalhost ? 'https://127.0.0.1:8787' : '');
 
 export interface ServiceHealth {
   server: boolean;
@@ -18,14 +27,34 @@ export interface ServiceHealth {
   vision: boolean;
   realtime: boolean;
   database: boolean;
+  /** 'openrouter' (real) | 'local-mock' (dev/demo provider) | null (none). */
+  provider?: string | null;
+  /** True when a key exists but the provider is unreachable — never show ONLINE. */
+  degraded?: boolean;
+  models?: { free?: number; total?: number; catalogue?: boolean; at?: string | null };
 }
 
 export const allDown: ServiceHealth = {
   server: false, ai: false, voice: false, vision: false, realtime: false, database: false,
+  provider: null, degraded: false,
 };
 
+// On a remote host a stored *loopback* URL (the default) can never work —
+// the browser would call its own machine — so it degrades to a relative,
+// same-origin base (proxied /api in dev/preview, see vite.config.ts).
+function remoteSafe(configured: string): string {
+  if (onLocalhost) return configured;
+  const c = (configured || '').trim();
+  if (!c) return '';
+  try {
+    return LOCAL_HOSTS.test(new URL(c).hostname) ? '' : c;
+  } catch {
+    return c;
+  }
+}
+
 function rawBase(configured: string): string {
-  const u = (configured || '').trim().replace(/\/$/, '');
+  const u = remoteSafe(configured).trim().replace(/\/$/, '');
   return u || API_URL;
 }
 
@@ -48,6 +77,19 @@ function altOf(base: string): string | null {
   return null;
 }
 
+/**
+ * Three distinct truths, never blurred:
+ *   mock      — answers, but the provider self-identifies as a local mock
+ *   degraded  — a key is configured, the provider is unreachable
+ *   online    — real provider, reachable
+ */
+function stateOf(h: ServiceHealth): ConnectionState {
+  if (!h.ai) return 'offline';
+  if (h.provider === 'local-mock') return 'mock';
+  if (h.degraded) return 'degraded';
+  return 'online';
+}
+
 async function probeHealth(base: string): Promise<ServiceHealth | null> {
   try {
     const res = await fetchTimeout(`${base}/api/health`, 5000);
@@ -56,6 +98,9 @@ async function probeHealth(base: string): Promise<ServiceHealth | null> {
     return {
       server: !!h.server, ai: !!h.ai, voice: !!h.voice,
       vision: !!h.vision, realtime: !!h.realtime, database: !!h.database,
+      provider: h.provider ?? null,
+      degraded: !!h.degraded,
+      models: h.models,
     };
   } catch {
     return null;
@@ -74,19 +119,20 @@ async function fetchTimeout(url: string, ms: number, init?: RequestInit): Promis
 
 /** Real probe. Empty backend + unreachable gateway => offline (demo). */
 export async function checkBackend(configuredUrl: string): Promise<{ state: ConnectionState; health: ServiceHealth }> {
-  const currentOrigin = typeof window !== 'undefined' && window.location ? window.location.origin : '';
-  const candidates: string[] = [];
-  if (currentOrigin && !candidates.includes(currentOrigin)) candidates.push(currentOrigin);
+  // always re-probe the configured value first: the user may have changed
+  // Backend URL mid-session, which invalidates any cached scheme
   const primary = rawBase(configuredUrl);
-  if (primary && !candidates.includes(primary)) candidates.push(primary);
+  const h1 = await probeHealth(primary);
+  if (h1) {
+    resolved = primary;
+    return { state: stateOf(h1), health: h1 };
+  }
   const alt = altOf(primary);
-  if (alt && !candidates.includes(alt)) candidates.push(alt);
-
-  for (const cand of candidates) {
-    const h = await probeHealth(cand);
-    if (h) {
-      resolved = cand;
-      return { state: h.ai ? 'online' : 'offline', health: h };
+  if (alt) {
+    const h2 = await probeHealth(alt);
+    if (h2) {
+      resolved = alt;
+      return { state: stateOf(h2), health: h2 };
     }
   }
   return { state: 'offline', health: allDown };
@@ -96,6 +142,8 @@ export interface LiveModel {
   id: string;
   name: string;
   tier: string;
+  /** Set by the gateway when a slug was rejected and is temporarily skipped. */
+  unavailable?: boolean;
 }
 
 let modelCache: { at: number; base: string; models: LiveModel[] } | null = null;
@@ -104,8 +152,7 @@ export async function getModels(configuredUrl: string): Promise<LiveModel[] | nu
   const base = baseOf(configuredUrl);
   if (modelCache && Date.now() - modelCache.at < 60000 && modelCache.base === base) return modelCache.models;
   try {
-    const res = await fetchTimeout(`${base}/api/models`, 8000, { headers: authHeaders() });
-    if (res.status === 401) throwIfAuth(res, null);
+    const res = await fetchTimeout(`${base}/api/models`, 8000);
     if (!res.ok) return null;
     const j = (await res.json()) as { models: LiveModel[] };
     modelCache = { at: Date.now(), base, models: j.models || [] };
@@ -121,6 +168,7 @@ export interface StreamResult {
   demo: boolean;
   model?: string;
   tier?: string;
+  provider?: string;
 }
 
 /**
@@ -139,34 +187,31 @@ export async function streamChat(
       userName?: string;
       memories?: { category: string; content: string }[];
       preferences?: Record<string, string>;
-      skills?: { name: string; description: string; instructions: string }[];
     };
     signal?: AbortSignal;
   },
   onToken: (partial: string) => void
 ): Promise<StreamResult> {
   const plan = planResponse(prompt);
-  // reachability check: test candidates (resolved, same-origin reverse proxy, primary, alt)
-  const currentOrigin = typeof window !== 'undefined' && window.location ? window.location.origin : '';
-  const candidates: string[] = [];
-  if (resolved && !candidates.includes(resolved)) candidates.push(resolved);
-  if (currentOrigin && !candidates.includes(currentOrigin)) candidates.push(currentOrigin);
-  const primary = rawBase(opts.configuredUrl);
-  if (primary && !candidates.includes(primary)) candidates.push(primary);
-  const alt = altOf(primary);
-  if (alt && !candidates.includes(alt)) candidates.push(alt);
+  // reachability with the same scheme fallback as checkBackend, so a stale
+  // stored URL (http vs https) never silently forces demo mode
+  const base = baseOf(opts.configuredUrl);
 
   let reachableBase: string | null = null;
-  for (const cand of candidates) {
-    try {
-      const h = await fetchTimeout(`${cand}/api/health`, 4000);
-      if (h.ok) {
-        reachableBase = cand;
-        resolved = cand;
-        break;
-      }
-    } catch {
-      /* try next candidate */
+  try {
+    const h = await fetchTimeout(`${base}/api/health`, 4000);
+    if (h.ok) reachableBase = base;
+  } catch { /* try alt below */ }
+  if (!reachableBase) {
+    const alt = altOf(base);
+    if (alt) {
+      try {
+        const h = await fetchTimeout(`${alt}/api/health`, 4000);
+        if (h.ok) {
+          reachableBase = alt;
+          resolved = alt;
+        }
+      } catch { /* demo path */ }
     }
   }
 
@@ -180,10 +225,9 @@ export async function streamChat(
   const res = await fetch(`${baseUrl}/api/chat`, {
     method: 'POST',
     signal: opts.signal,
-    headers: authHeaders({ 'Content-Type': 'application/json' }),
+    headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({ message: prompt, history: opts.history.slice(-10), task: opts.task, context: opts.context }),
   });
-  if (res.status === 401) throwIfAuth(res, null);
   if (!res.ok || !res.body) {
     const err = await res.json().catch(() => ({}));
     throw new Error((err as { error?: string }).error || `Gateway ${res.status}`);
@@ -192,7 +236,7 @@ export async function streamChat(
   const decoder = new TextDecoder();
   let buf = '';
   let full = '';
-  let meta: { model?: string; tier?: string } = {};
+  let meta: { model?: string; tier?: string; provider?: string; demo?: boolean } = {};
   for (;;) {
     const { done, value } = await reader.read();
     if (done) break;
@@ -202,13 +246,20 @@ export async function streamChat(
     for (const line of lines) {
       const s = line.trim();
       if (!s.startsWith('data:')) continue;
-      let ev: { meta?: { model: string; tier: string }; token?: string; done?: boolean; error?: string };
+      let ev: {
+        meta?: { model: string; tier: string; provider?: string; demo?: boolean };
+        token?: string; done?: boolean; error?: string; code?: string;
+      };
       try {
         ev = JSON.parse(s.slice(5).trim());
       } catch {
         continue; // partial chunk — wait for more
       }
-      if (ev.error) throw new Error(ev.error);
+      if (ev.error) {
+        const err = new Error(ev.error) as Error & { code?: string };
+        if (ev.code) err.code = ev.code;
+        throw err;
+      }
       if (ev.meta) meta = ev.meta;
       if (typeof ev.token === 'string') {
         full = ev.token;
@@ -216,12 +267,20 @@ export async function streamChat(
       }
       if (ev.done) {
         reader.cancel().catch(() => {});
-        return { text: full, detectedLang: plan.detectedLang, demo: false, model: meta.model, tier: meta.tier };
+        return {
+          text: full, detectedLang: plan.detectedLang,
+          demo: !!meta.demo || meta.provider === 'local-mock',
+          model: meta.model, tier: meta.tier, provider: meta.provider,
+        };
       }
     }
   }
   if (!full) throw new Error('Empty response from gateway.');
-  return { text: full, detectedLang: plan.detectedLang, demo: false, model: meta.model, tier: meta.tier };
+  return {
+    text: full, detectedLang: plan.detectedLang,
+    demo: !!meta.demo || meta.provider === 'local-mock',
+    model: meta.model, tier: meta.tier, provider: meta.provider,
+  };
 }
 
 // ---------------- OSINT client ----------------
@@ -240,24 +299,21 @@ export interface OsintFinding {
 export async function osintCreate(configuredUrl: string, target: string) {
   const res = await fetch(`${baseOf(configuredUrl)}/api/osint/investigations`, {
     method: 'POST',
-    headers: authHeaders({ 'Content-Type': 'application/json' }),
+    headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({ target }),
   });
   const j = await res.json();
-  if (res.status === 401) throwIfAuth(res, j);
   if (!res.ok) throw new Error(j.error || 'Invalid target.');
   return j as { id: string; target: string; type: string; status: string };
 }
 
 export async function osintRun(configuredUrl: string, id: string) {
-  const res = await fetch(`${baseOf(configuredUrl)}/api/osint/investigations/${id}/run`, { method: 'POST', headers: authHeaders() });
-  if (res.status === 401) throwIfAuth(res, null);
+  const res = await fetch(`${baseOf(configuredUrl)}/api/osint/investigations/${id}/run`, { method: 'POST' });
   if (!res.ok) throw new Error('Could not start investigation.');
 }
 
 export async function osintGet(configuredUrl: string, id: string) {
-  const res = await fetch(`${baseOf(configuredUrl)}/api/osint/investigations/${id}`, { headers: authHeaders() });
-  if (res.status === 401) throwIfAuth(res, null);
+  const res = await fetch(`${baseOf(configuredUrl)}/api/osint/investigations/${id}`);
   if (!res.ok) throw new Error('Investigation not found.');
   return res.json() as Promise<{
     id: string; target: string; type: string; status: string; progress: number;
@@ -270,10 +326,8 @@ export async function osintGet(configuredUrl: string, id: string) {
 
 export async function osintFindings(configuredUrl: string, id: string, type = 'all', confidence = 'all') {
   const res = await fetch(
-    `${baseOf(configuredUrl)}/api/osint/investigations/${id}/findings?type=${type}&confidence=${confidence}`,
-    { headers: authHeaders() }
+    `${baseOf(configuredUrl)}/api/osint/investigations/${id}/findings?type=${type}&confidence=${confidence}`
   );
-  if (res.status === 401) throwIfAuth(res, null);
   if (!res.ok) throw new Error('Findings unavailable.');
   const j = await res.json();
   return j.findings as OsintFinding[];
@@ -303,10 +357,9 @@ export interface Mission {
 async function missionReq(configuredUrl: string, path: string, init?: RequestInit) {
   const res = await fetch(`${baseOf(configuredUrl)}${path}`, {
     ...init,
-    headers: authHeaders({ 'Content-Type': 'application/json', ...((init?.headers as Record<string, string>) || {}) }),
+    headers: { 'Content-Type': 'application/json', ...(init?.headers || {}) },
   });
   const j = await res.json().catch(() => ({}));
-  if (res.status === 401) throwIfAuth(res, j as { code?: string });
   if (!res.ok) throw new Error((j as { error?: string }).error || `Mission API ${res.status}`);
   return j;
 }
@@ -356,19 +409,12 @@ export async function demoVision(hint: string): Promise<string> {
   return analyzeImage(hint);
 }
 
-// ---------------- Auth + user layer ----------------
-
-async function authReq(configuredUrl: string, path: string, init?: RequestInit) {
-  const res = await fetch(`${baseOf(configuredUrl)}${path}`, {
-    ...init,
-    headers: authHeaders({ 'Content-Type': 'application/json', ...((init?.headers as Record<string, string>) || {}) }),
-  });
-  const j = await res.json().catch(() => ({}));
-  if (res.status === 401) throwIfAuth(res, j as { code?: string });
-  if (!res.ok) throw new Error((j as { error?: string }).error || `Request failed (${res.status})`);
-  return j;
-}
-
+// ═══════════════════════════════════════════════════════════════════════════
+// Master-line API surface, merged in so the workspaces / skills / provider
+// platform built on that branch stays reachable from the polished shell.
+// Nothing here duplicates what is above: shared names (health, models, chat,
+// OSINT, missions) keep the single implementation defined earlier in the file.
+// ═══════════════════════════════════════════════════════════════════════════
 export interface AuthResponse {
   access: string;
   refresh: string;
@@ -376,6 +422,7 @@ export interface AuthResponse {
   profile: Record<string, unknown>;
   session: { id: string };
 }
+
 
 export async function authSignup(configuredUrl: string, handle: string, displayName: string, passcode: string) {
   const j = await authReq(configuredUrl, '/api/auth/signup', {
@@ -385,6 +432,7 @@ export async function authSignup(configuredUrl: string, handle: string, displayN
   return j as AuthResponse;
 }
 
+
 export async function authLogin(configuredUrl: string, handle: string, passcode: string) {
   const j = await authReq(configuredUrl, '/api/auth/login', {
     method: 'POST',
@@ -392,6 +440,7 @@ export async function authLogin(configuredUrl: string, handle: string, passcode:
   });
   return j as AuthResponse;
 }
+
 
 export async function authRefresh(configuredUrl: string, refresh: string) {
   const j = await authReq(configuredUrl, '/api/auth/refresh', {
@@ -401,47 +450,57 @@ export async function authRefresh(configuredUrl: string, refresh: string) {
   return j as { access: string; refresh: string; session: { id: string } };
 }
 
+
 export async function authLogout(configuredUrl: string) {
   await authReq(configuredUrl, '/api/auth/logout', { method: 'POST' });
 }
+
 
 export async function fetchMe(configuredUrl: string) {
   const j = await authReq(configuredUrl, '/api/auth/me');
   return j as { user: AuthResponse['user']; profile: Record<string, unknown>; usage: Record<string, unknown> };
 }
 
+
 export async function fetchProfile(configuredUrl: string) {
   const j = await authReq(configuredUrl, '/api/profile');
   return j as { profile: Record<string, unknown>; plan: string };
 }
+
 
 export async function saveProfile(configuredUrl: string, patch: Record<string, unknown>) {
   const j = await authReq(configuredUrl, '/api/profile', { method: 'PUT', body: JSON.stringify(patch) });
   return (j as { profile: Record<string, unknown> }).profile;
 }
 
+
 export async function submitOnboarding(configuredUrl: string, answers: Record<string, unknown>) {
   const j = await authReq(configuredUrl, '/api/onboarding', { method: 'POST', body: JSON.stringify(answers) });
   return (j as { profile: Record<string, unknown> }).profile;
 }
 
+
 export async function fetchUsage(configuredUrl: string) {
   return authReq(configuredUrl, '/api/usage') as Promise<Record<string, unknown>>;
 }
+
 
 export async function exportAccount(configuredUrl: string) {
   return authReq(configuredUrl, '/api/account/export') as Promise<Record<string, unknown>>;
 }
 
+
 export async function deleteAccount(configuredUrl: string) {
   return authReq(configuredUrl, '/api/account', { method: 'DELETE', body: JSON.stringify({ confirm: 'DELETE' }) });
 }
+
 
 export async function forgetAllServerMemories(configuredUrl: string) {
   return authReq(configuredUrl, '/api/memory', { method: 'DELETE', body: JSON.stringify({ all: true }) });
 }
 
 // ---------------- Devices ----------------
+
 
 export interface PairedDevice {
   id: string;
@@ -451,10 +510,12 @@ export interface PairedDevice {
   lastSeenAt: string | null;
 }
 
+
 export async function fetchDevices(configuredUrl: string) {
   const j = await authReq(configuredUrl, '/api/devices');
   return (j as { devices: PairedDevice[] }).devices;
 }
+
 
 export async function requestDevicePairing(configuredUrl: string, deviceName: string) {
   const j = await authReq(configuredUrl, '/api/devices/pair', {
@@ -464,6 +525,7 @@ export async function requestDevicePairing(configuredUrl: string, deviceName: st
   return j as { code: string; expiresInSec: number };
 }
 
+
 export async function confirmDevicePairing(configuredUrl: string, code: string, deviceId: string) {
   const j = await authReq(configuredUrl, '/api/devices/confirm', {
     method: 'POST',
@@ -472,15 +534,18 @@ export async function confirmDevicePairing(configuredUrl: string, code: string, 
   return (j as { device: PairedDevice }).device;
 }
 
+
 export async function revokeDevice(configuredUrl: string, id: string) {
   await authReq(configuredUrl, `/api/devices/${id}`, { method: 'DELETE' });
 }
+
 
 export async function logoutEverywhere(configuredUrl: string) {
   return authReq(configuredUrl, '/api/auth/logout-all', { method: 'POST' });
 }
 
 // ---------------- Projects / workspaces ----------------
+
 
 export interface Workspace {
   id: string;
@@ -492,26 +557,31 @@ export interface Workspace {
   updatedAt: string;
 }
 
+
 export async function fetchWorkspaces(configuredUrl: string) {
   const j = await authReq(configuredUrl, '/api/workspaces');
   return (j as { workspaces: Workspace[] }).workspaces;
 }
+
 
 export async function createWorkspace(configuredUrl: string, input: Pick<Workspace, 'name'> & Partial<Pick<Workspace, 'kind' | 'instructions'>>) {
   const j = await authReq(configuredUrl, '/api/workspaces', { method: 'POST', body: JSON.stringify(input) });
   return (j as { workspace: Workspace }).workspace;
 }
 
+
 export async function updateWorkspace(configuredUrl: string, id: string, patch: Partial<Pick<Workspace, 'name' | 'instructions'>>) {
   const j = await authReq(configuredUrl, `/api/workspaces/${id}`, { method: 'PUT', body: JSON.stringify(patch) });
   return (j as { workspace: Workspace }).workspace;
 }
+
 
 export async function deleteWorkspace(configuredUrl: string, id: string) {
   await authReq(configuredUrl, `/api/workspaces/${id}`, { method: 'DELETE' });
 }
 
 // ---------------- Universal Skills ----------------
+
 
 export interface SkillCard {
   id: string;
@@ -531,25 +601,30 @@ export interface SkillCard {
   lastUsedAt: string | null;
 }
 
+
 export async function fetchSkills(configuredUrl: string) {
   const j = await authReq(configuredUrl, '/api/skills');
   return (j as { skills: SkillCard[] }).skills;
 }
+
 
 export async function fetchSkill(configuredUrl: string, id: string) {
   const j = await authReq(configuredUrl, `/api/skills/${id}`);
   return (j as { skill: Record<string, unknown> }).skill;
 }
 
+
 export async function createSkill(configuredUrl: string, fields: Record<string, unknown>) {
   const j = await authReq(configuredUrl, '/api/skills', { method: 'POST', body: JSON.stringify(fields) });
   return j as { skill: SkillCard; warnings: string[] };
 }
 
+
 export async function importSkill(configuredUrl: string, pkg: Record<string, unknown>) {
   const j = await authReq(configuredUrl, '/api/skills/import', { method: 'POST', body: JSON.stringify(pkg) });
   return j as { skill: SkillCard; warnings: string[] };
 }
+
 
 export async function uploadSkillZip(configuredUrl: string, zipBase64: string, scope = 'user') {
   const j = await authReq(configuredUrl, '/api/skills/import', {
@@ -558,6 +633,7 @@ export async function uploadSkillZip(configuredUrl: string, zipBase64: string, s
   });
   return j as { skill: SkillCard; warnings: string[] };
 }
+
 
 export interface SkillInspectPayload {
   ok: boolean;
@@ -583,38 +659,46 @@ export interface SkillInspectPayload {
   security: { risk: string; findings: { file: string; issue: string; level: string }[] } | null;
 }
 
+
 export async function validateSkill(configuredUrl: string, pkg: Record<string, unknown>) {
   return authReq(configuredUrl, '/api/skills/validate', { method: 'POST', body: JSON.stringify(pkg) }) as Promise<SkillInspectPayload>;
 }
+
 
 export async function updateSkill(configuredUrl: string, id: string, pkg: Record<string, unknown>, note = '') {
   const j = await authReq(configuredUrl, `/api/skills/${id}`, { method: 'PUT', body: JSON.stringify({ ...pkg, note }) });
   return j as { skill: SkillCard; warnings: string[] };
 }
 
+
 export async function rollbackSkill(configuredUrl: string, id: string, version: string) {
   const j = await authReq(configuredUrl, `/api/skills/${id}/rollback/${version}`, { method: 'POST' });
   return (j as { skill: SkillCard }).skill;
 }
+
 
 export async function setSkillEnabled(configuredUrl: string, id: string, enabled: boolean) {
   const j = await authReq(configuredUrl, `/api/skills/${id}/${enabled ? 'enable' : 'disable'}`, { method: 'POST' });
   return (j as { skill: SkillCard }).skill;
 }
 
+
 export async function duplicateSkill(configuredUrl: string, id: string) {
   const j = await authReq(configuredUrl, `/api/skills/${id}/duplicate`, { method: 'POST' });
   return (j as { skill: SkillCard }).skill;
 }
 
+
 export async function deleteSkill(configuredUrl: string, id: string) {
   await authReq(configuredUrl, `/api/skills/${id}`, { method: 'DELETE' });
 }
+
 
 export async function testSkill(configuredUrl: string, id: string, input: Record<string, unknown> = {}) {
   const j = await authReq(configuredUrl, `/api/skills/${id}/test`, { method: 'POST', body: JSON.stringify({ input }) });
   return j as { verdict: string; checks: { name: string; verdict: string; detail: string }[] };
 }
+
 
 export async function invokeSkill(configuredUrl: string, id: string, input: Record<string, unknown> = {}, reason = '') {
   const { status, body } = await authReqRaw(configuredUrl, `/api/skills/${id}/invoke`, {
@@ -626,6 +710,7 @@ export async function invokeSkill(configuredUrl: string, id: string, input: Reco
   return body;
 }
 
+
 export async function invokeSkillCommand(configuredUrl: string, command: string, input: Record<string, unknown> = {}) {
   const { status, body } = await authReqRaw(configuredUrl, '/api/skills/invoke-command', {
     method: 'POST',
@@ -636,12 +721,14 @@ export async function invokeSkillCommand(configuredUrl: string, command: string,
   return body;
 }
 
+
 export class SkillNotFoundError extends Error {
   constructor() {
     super('Unknown skill command.');
     this.name = 'SkillNotFoundError';
   }
 }
+
 
 export class SkillInvokeError extends Error {
   details: Record<string, unknown>;
@@ -663,6 +750,7 @@ async function authReqRaw(configuredUrl: string, path: string, init?: RequestIni
   return { status: res.status, body };
 }
 
+
 export interface SkillCandidate {
   skillId: string;
   name: string;
@@ -672,25 +760,30 @@ export interface SkillCandidate {
   command: string | null;
 }
 
+
 export async function discoverSkills(configuredUrl: string, task: string) {
   const j = await authReq(configuredUrl, '/api/skills/discover', { method: 'POST', body: JSON.stringify({ task }) });
   return (j as { candidates: SkillCandidate[] }).candidates;
 }
+
 
 export async function fetchSkillAudit(configuredUrl: string, id: string) {
   const j = await authReq(configuredUrl, `/api/skills/${id}/audit`);
   return (j as { audit: { at: string; event: string; detail: string }[] }).audit;
 }
 
+
 export async function fetchSkillDiff(configuredUrl: string, id: string, from: string, to?: string) {
   const j = await authReq(configuredUrl, `/api/skills/${id}/diff?from=${encodeURIComponent(from)}${to ? `&to=${encodeURIComponent(to)}` : ''}`);
   return j as { ok: boolean; from: string; to: string; diff: Record<string, unknown>; legacy?: boolean };
 }
 
+
 export async function fetchSkillRuntimes(configuredUrl: string) {
   const j = await authReq(configuredUrl, '/api/skills/runtimes');
   return (j as { runtimes: { kind: string; available: boolean; runs: string[]; note: string }[] }).runtimes;
 }
+
 
 export interface SkillSchedule {
   id: string;
@@ -703,25 +796,30 @@ export interface SkillSchedule {
   runs: number;
 }
 
+
 export async function fetchSkillSchedules(configuredUrl: string) {
   const j = await authReq(configuredUrl, '/api/skill-schedules');
   return (j as { schedules: SkillSchedule[] }).schedules;
 }
+
 
 export async function createSkillSchedule(configuredUrl: string, skillId: string, cadence: string) {
   const j = await authReq(configuredUrl, '/api/skill-schedules', { method: 'POST', body: JSON.stringify({ skillId, cadence }) });
   return j as { schedule: SkillSchedule; note: string };
 }
 
+
 export async function runSkillSchedule(configuredUrl: string, id: string) {
   return authReq(configuredUrl, `/api/skill-schedules/${id}/run`, { method: 'POST' });
 }
+
 
 export async function deleteSkillSchedule(configuredUrl: string, id: string) {
   await authReq(configuredUrl, `/api/skill-schedules/${id}`, { method: 'DELETE' });
 }
 
 // ---------------- Artifacts (real files) ----------------
+
 
 export interface ArtifactMeta {
   id: string;
@@ -736,6 +834,7 @@ export interface ArtifactMeta {
   updatedAt: string;
 }
 
+
 export interface ActivityWireEvent {
   taskId: string;
   timestamp: number;
@@ -746,6 +845,7 @@ export interface ActivityWireEvent {
 }
 
 /** Agent artifact pipeline over SSE: feeds server activity events + final artifact. */
+
 export async function generateArtifact(
   configuredUrl: string,
   input: { kind?: 'pptx' | 'docx'; requestText?: string; topic?: string; slides?: unknown[]; blocks?: unknown[]; slidesCount?: number; detail?: string; projectId?: string; conversationId?: string },
@@ -793,20 +893,24 @@ export async function generateArtifact(
   return outcome;
 }
 
+
 export async function fetchArtifacts(configuredUrl: string, projectId?: string) {
   const j = await authReq(configuredUrl, `/api/artifacts${projectId ? `?projectId=${encodeURIComponent(projectId)}` : ''}`);
   return (j as { artifacts: ArtifactMeta[] }).artifacts;
 }
+
 
 export async function validateArtifactApi(configuredUrl: string, id: string) {
   const j = await authReq(configuredUrl, `/api/artifacts/${id}/validate`, { method: 'POST' });
   return j as { verification: ArtifactMeta['verification'] };
 }
 
+
 export async function renderArtifactApi(configuredUrl: string, id: string) {
   const j = await authReq(configuredUrl, `/api/artifacts/${id}/render`, { method: 'POST' });
   return j as { rendered: boolean; message?: string; pdfBytes?: number; previews?: number; artifact: ArtifactMeta };
 }
+
 
 export async function finalizeArtifactApi(configuredUrl: string, id: string, projectId?: string) {
   const j = await authReq(configuredUrl, `/api/artifacts/${id}/finalize`, {
@@ -815,6 +919,7 @@ export async function finalizeArtifactApi(configuredUrl: string, id: string, pro
   });
   return (j as { artifact: ArtifactMeta }).artifact;
 }
+
 
 export async function editSlideApi(configuredUrl: string, id: string, slide: number, opts: { title?: string; bullets?: string[] }) {
   const j = await authReq(configuredUrl, `/api/artifacts/${id}/edit-slide`, {
@@ -825,6 +930,7 @@ export async function editSlideApi(configuredUrl: string, id: string, slide: num
 }
 
 /** Download bytes with the session token (no token in URLs). */
+
 export async function downloadArtifactBlob(configuredUrl: string, id: string): Promise<{ blob: Blob; name: string }> {
   const res = await fetch(`${baseOf(configuredUrl)}/api/artifacts/${id}/download`, { headers: authHeaders() });
   if (res.status === 401) throwIfAuth(res, null);
@@ -837,6 +943,7 @@ export async function downloadArtifactBlob(configuredUrl: string, id: string): P
 
 // ---------------- AI Providers (BYOK) ----------------
 
+
 export interface ProviderInfo {
   providerId: string;
   name: string;
@@ -848,6 +955,7 @@ export interface ProviderInfo {
   adapter: boolean;
 }
 
+
 export interface CredentialInfo {
   id: string;
   providerId: string;
@@ -856,30 +964,36 @@ export interface CredentialInfo {
   redacted: string;
 }
 
+
 export async function fetchProviders(configuredUrl: string) {
   const j = await authReq(configuredUrl, '/api/providers');
   return (j as { providers: ProviderInfo[] }).providers;
 }
+
 
 export async function fetchProviderModels(configuredUrl: string, providerId: string) {
   const j = await authReq(configuredUrl, `/api/providers/${providerId}/models`);
   return (j as { models: { modelId: string; displayName: string; capabilities: string[]; contextLimit: number | null }[] }).models;
 }
 
+
 export async function refreshProviderModels(configuredUrl: string, providerId: string) {
   const j = await authReq(configuredUrl, `/api/providers/${providerId}/models/refresh`, { method: 'POST' });
   return j as { ok: boolean; count: number; live: boolean };
 }
+
 
 export async function fetchProviderHelp(configuredUrl: string, providerId: string) {
   const j = await authReq(configuredUrl, `/api/providers/${providerId}/help`);
   return j as { providerId: string; name: string; keyUrl: string | null; docsUrl: string | null; pricingUrl: string | null; steps: string[] };
 }
 
+
 export async function fetchCredentials(configuredUrl: string) {
   const j = await authReq(configuredUrl, '/api/providers/credentials');
   return (j as { credentials: CredentialInfo[] }).credentials;
 }
+
 
 export async function connectCredential(configuredUrl: string, providerId: string, credential: string) {
   const j = await authReq(configuredUrl, '/api/providers/credentials', {
@@ -889,10 +1003,12 @@ export async function connectCredential(configuredUrl: string, providerId: strin
   return j as CredentialInfo;
 }
 
+
 export async function testCredential(configuredUrl: string, credentialId: string) {
   const j = await authReq(configuredUrl, `/api/providers/credentials/${credentialId}/test`, { method: 'POST' });
   return j as { ok: boolean; status: string; latencyMs: number; error: string | null };
 }
+
 
 export async function rotateCredential(configuredUrl: string, credentialId: string, credential: string) {
   const j = await authReq(configuredUrl, `/api/providers/credentials/${credentialId}`, {
@@ -902,9 +1018,11 @@ export async function rotateCredential(configuredUrl: string, credentialId: stri
   return j;
 }
 
+
 export async function disconnectCredential(configuredUrl: string, credentialId: string) {
   await authReq(configuredUrl, `/api/providers/credentials/${credentialId}`, { method: 'DELETE' });
 }
+
 
 export interface RoutingPrefs {
   defaultProvider: string | null;
@@ -913,20 +1031,24 @@ export interface RoutingPrefs {
   defaultModel: string;
 }
 
+
 export async function fetchRouting(configuredUrl: string) {
   const j = await authReq(configuredUrl, '/api/providers/routing');
   return (j as { routing: RoutingPrefs }).routing;
 }
+
 
 export async function saveRouting(configuredUrl: string, patch: Partial<RoutingPrefs>) {
   const j = await authReq(configuredUrl, '/api/providers/routing', { method: 'PUT', body: JSON.stringify(patch) });
   return (j as { routing: RoutingPrefs }).routing;
 }
 
+
 export async function fetchProviderHealth(configuredUrl: string) {
   const j = await authReq(configuredUrl, '/api/providers/health/user');
   return (j as { health: Record<string, { status: string; latency?: number; lastChecked?: string }> }).health;
 }
+
 
 export async function fetchProviderUsage(configuredUrl: string) {
   const j = await authReq(configuredUrl, '/api/providers/usage');
@@ -939,7 +1061,21 @@ export async function fetchProviderUsage(configuredUrl: string) {
   }).usage;
 }
 
+
 export async function fetchModelCatalog(configuredUrl: string, providerId?: string) {
   const j = await authReq(configuredUrl, `/api/models/catalog${providerId ? `?providerId=${providerId}` : ''}`);
   return (j as { models: { providerId: string; modelId: string; displayName: string; capabilities: Record<string, boolean> }[] }).models;
+}
+
+/** Authenticated JSON request: bearer token from the single identity module,
+ *  a 401 clears the session and raises AUTH_REQUIRED for the UI. */
+async function authReq(configuredUrl: string, path: string, init?: RequestInit) {
+  const res = await fetch(`${baseOf(configuredUrl)}${path}`, {
+    ...init,
+    headers: authHeaders({ 'Content-Type': 'application/json', ...((init?.headers as Record<string, string>) || {}) }),
+  });
+  const j = await res.json().catch(() => ({}));
+  if (res.status === 401) throwIfAuth(res, j as { code?: string });
+  if (!res.ok) throw new Error((j as { error?: string }).error || `Request failed (${res.status})`);
+  return j;
 }

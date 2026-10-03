@@ -1,18 +1,12 @@
 import { memo, useEffect, useRef, useState } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
-import { Eye, Check, Loader2, Pencil, ArrowDown, RotateCcw, Image as ImageIcon, FileText } from 'lucide-react';
+import { Eye, Check, Pencil, ArrowDown, RotateCcw, Image as ImageIcon, FileText } from 'lucide-react';
 import type { ChatMessage } from '../lib/types';
 import { useApp } from '../lib/store';
 import { Markdown } from './chat/Markdown';
 import { MessageActions } from './chat/MessageActions';
 import { formatSize } from './CommandBar';
-import { ThinkingLinesSpinner } from './animations/ThinkingLinesSpinner';
-import { LiveActivity } from './LiveActivity';
-import { ArtifactCard } from './ArtifactCard';
-import { MinimalActivity } from './MinimalActivity';
-import type { PlatformArtifactPayload } from '../lib/artifacts/artifactGenerator';
 import { cn } from '../lib/cn';
-import { AiSetupModal } from './setup/AiSetupModal';
 
 // Editorial conversation surface: user turns are clean elevated prompt blocks,
 // assistant turns are pure editorial typography. Intelligent autoscroll,
@@ -21,9 +15,11 @@ import { AiSetupModal } from './setup/AiSetupModal';
 function ToolCard({ t }: { t: NonNullable<ChatMessage['toolActivity']>[number] }) {
   return (
     <div className="flex items-center gap-3 rounded-xl border border-[var(--border)] bg-[var(--surface)] px-3.5 py-2.5" role="status">
-      <span className={cn('w-7 h-7 rounded-lg flex items-center justify-center border shrink-0',
-        t.state === 'running' ? 'border-[var(--accent)] bg-[var(--accent-subtle)]' : 'border-emerald-500/25 bg-emerald-500/10')}>
-        {t.state === 'running' ? <Loader2 size={13} className="animate-spin text-[var(--accent)]" /> : <Check size={13} className="text-emerald-400" />}
+      <span className={cn('w-6 h-6 rounded-lg flex items-center justify-center border shrink-0',
+        t.state === 'running' ? 'border-[var(--accent)]/40 bg-[var(--accent-subtle)]' : 'border-[var(--border)] bg-[var(--surface-elevated)]')}>
+        {t.state === 'running'
+          ? <span className="w-1.5 h-1.5 rounded-full bg-[var(--accent)] animate-pulse" />
+          : <Check size={12} className="text-[var(--fg-muted)]" />}
       </span>
       <span className="flex-1 min-w-0">
         <span className="flex items-center gap-2 text-[13px] font-medium text-[var(--fg)]">
@@ -32,11 +28,7 @@ function ToolCard({ t }: { t: NonNullable<ChatMessage['toolActivity']>[number] }
         </span>
         <span className="block text-[11.5px] text-[var(--fg-muted)] truncate">{t.state === 'running' ? t.detail : 'Complete'}</span>
       </span>
-      {t.state === 'running' && (
-        <span className="flex gap-1" aria-hidden>
-          {[0, 1, 2].map((i) => <span key={i} className="w-1.5 h-1.5 rounded-full bg-[var(--accent)] animate-pulse" style={{ animationDelay: `${i * 0.2}s` }} />)}
-        </span>
-      )}
+
     </div>
   );
 }
@@ -80,7 +72,7 @@ const UserBubble = memo(function UserBubble({ msg, interactive = true }: { msg: 
   return (
     <motion.div initial={{ opacity: 0, y: 8 }} animate={{ opacity: 1, y: 0 }} transition={{ duration: 0.2 }} className="flex justify-end group">
       <div className="max-w-[84%] sm:max-w-[75%]">
-        <div className="rounded-2xl rounded-br-md bg-[var(--surface-elevated)] border border-[var(--border)] px-4 py-3 text-[14.5px] leading-relaxed text-[var(--fg)] shadow-sm">
+        <div className="rounded-2xl rounded-br-lg bg-[var(--surface-elevated)] border border-[var(--border)] px-4 py-2.5 text-[14.5px] leading-relaxed text-[var(--fg)]">
           {msg.vision && (
             <span className="inline-flex items-center gap-1.5 text-[11px] font-semibold text-blue-400 bg-blue-400/10 border border-blue-400/20 rounded-md px-2 py-0.5 mb-2">
               <Eye size={12} /> CAMERA CAPTURE
@@ -115,11 +107,9 @@ const UserBubble = memo(function UserBubble({ msg, interactive = true }: { msg: 
                 setDraft(msg.content);
                 setEditing(true);
               }}
-              className="opacity-0 group-hover:opacity-100 focus-within:opacity-100 transition-opacity duration-150 icon-btn w-8 h-8 rounded-lg"
-              aria-label="Edit message"
-              title="Edit and resend"
+              className="msg-actions icon-btn w-6 h-6" aria-label="Edit message" title="Edit and resend"
             >
-              <Pencil size={13} />
+              <Pencil size={12} />
             </button>
           )}
         </div>
@@ -128,20 +118,8 @@ const UserBubble = memo(function UserBubble({ msg, interactive = true }: { msg: 
   );
 });
 
-const AssistantBubble = memo(function AssistantBubble({
-  msg,
-  isLast,
-  interactive = true,
-  onOpenWorkspace,
-  onOpenSetup,
-}: {
-  msg: ChatMessage;
-  isLast: boolean;
-  interactive?: boolean;
-  onOpenWorkspace?: (payload: PlatformArtifactPayload) => void;
-  onOpenSetup?: () => void;
-}) {
-  const { toast, regenerate, setFeedback, setVersionIndex, retryFailed, isGenerating, setView } = useApp();
+const AssistantBubble = memo(function AssistantBubble({ msg, isLast, interactive = true }: { msg: ChatMessage; isLast: boolean; interactive?: boolean }) {
+  const { toast, regenerate, setFeedback, setVersionIndex, retryFailed, isGenerating, connection, setView } = useApp();
   const versions = msg.versions ?? [];
   const shown = msg.versionIndex !== undefined && msg.versionIndex >= 0 ? versions[msg.versionIndex] ?? msg.content : msg.content;
   const hasTool = (msg.toolActivity?.length ?? 0) > 0 && (msg.versionIndex === undefined || msg.versionIndex < 0);
@@ -149,28 +127,17 @@ const AssistantBubble = memo(function AssistantBubble({
   if (msg.error && !msg.content) {
     return (
       <motion.div initial={{ opacity: 0, y: 8 }} animate={{ opacity: 1, y: 0 }} className="flex justify-start">
-        <div className="rounded-xl border border-red-500/25 bg-red-500/[0.06] p-4 max-w-[94%] sm:max-w-[84%]">
-          <p className="text-[13.5px] font-semibold text-red-300">Connect an AI model to continue.</p>
-          <p className="text-[12.5px] text-[var(--fg-muted)] mt-1 leading-relaxed">
-            MetaIoid needs an active AI connection to generate responses. Connect a free model or your own API key.
+        <div className="rounded-xl border border-red-500/25 bg-red-500/[0.06] px-4 py-3 max-w-[94%] sm:max-w-[84%]">
+          <p className="text-[13.5px] font-medium text-[var(--fg)]">That reply didn't come through.</p>
+          <p className="text-[12.5px] text-[var(--fg-muted)] mt-1">
+            {connection === 'online' ? 'The provider stopped mid-answer. Your message is still above.' : 'No AI is connected yet, so answers come from the local demo.'}
           </p>
-          <div className="flex flex-wrap items-center gap-2 mt-3">
-            <button
-              onClick={() => onOpenSetup?.()}
-              className="btn-primary h-8 px-3 text-[12px] font-semibold"
-            >
-              Set Up AI
+          <span className="flex items-center gap-2 mt-2.5">
+            <button onClick={() => retryFailed(msg.id)} className="btn-ghost h-8 px-3 text-[12.5px]">
+              <RotateCcw size={12} /> Try again
             </button>
-            <button
-              onClick={() => setView('settings')}
-              className="btn-ghost h-8 px-3 text-[12px]"
-            >
-              Choose Provider
-            </button>
-            <button onClick={() => retryFailed(msg.id)} className="btn-ghost h-8 px-3 text-[12px]">
-              <RotateCcw size={12} /> Retry
-            </button>
-          </div>
+            <button onClick={() => setView('settings')} className="btn-ghost h-8 px-3 text-[12.5px]">Choose another AI</button>
+          </span>
         </div>
       </motion.div>
     );
@@ -183,14 +150,6 @@ const AssistantBubble = memo(function AssistantBubble({
           <span className="inline-flex items-center gap-1.5 text-[11px] font-semibold text-blue-400 bg-blue-400/10 border border-blue-400/20 rounded-md px-2 py-0.5 mb-2">
             <Eye size={12} /> VISION CONTEXT
           </span>
-        )}
-        {msg.activity && (
-          <MinimalActivity
-            label={msg.activity.label}
-            stages={msg.activity.stages}
-            currentStageIndex={msg.activity.currentStageIndex}
-            isComplete={msg.activity.isComplete}
-          />
         )}
         {hasTool && (
           <div className="mb-2.5 space-y-2">
@@ -213,25 +172,21 @@ const AssistantBubble = memo(function AssistantBubble({
           <span className="inline-block w-[6px] h-[14px] ml-1 align-middle rounded-sm bg-[var(--accent)] animate-pulse" aria-label="Generating" />
         ) : null}
         {!msg.streaming && shown && interactive && (
-          <div className="opacity-0 group-hover:opacity-100 focus-within:opacity-100 transition-opacity duration-150 mt-1">
-            <MessageActions
-              content={shown}
-              isLast={isLast}
-              feedback={msg.feedback}
-              versions={versions}
-              versionIndex={msg.versionIndex ?? -1}
-              onRegenerate={() => {
-                if (!isGenerating) regenerate(msg.id);
-                else toast({ title: 'Generation in progress', desc: 'Stop the active stream before regenerating' });
-              }}
-              onFeedback={(f) => setFeedback(msg.id, f)}
-              onVersion={(i) => setVersionIndex(msg.id, i)}
-            />
-          </div>
+          <MessageActions
+            content={shown}
+            isLast={isLast}
+            feedback={msg.feedback}
+            versions={versions}
+            versionIndex={msg.versionIndex ?? -1}
+            onRegenerate={() => {
+              if (!isGenerating) regenerate(msg.id);
+              else toast({ title: 'Generation in progress', desc: 'Stop the active stream before regenerating' });
+            }}
+            onFeedback={(f) => setFeedback(msg.id, f)}
+            onVersion={(i) => setVersionIndex(msg.id, i)}
+          />
         )}
-        {!msg.streaming && msg.artifact && (
-          <ArtifactCard artifact={msg.artifact} onOpenWorkspace={onOpenWorkspace} />
-        )}
+
       </div>
     </motion.div>
   );
@@ -239,33 +194,25 @@ const AssistantBubble = memo(function AssistantBubble({
 
 export function ThinkingDots({ label = 'Thinking…' }: { label?: string }) {
   return (
-    <div className="flex items-center gap-3 text-[13px] text-[var(--fg-muted)]" role="status" aria-live="polite">
-      <ThinkingLinesSpinner size={24} lineColor="var(--accent)" ballColor="var(--fg)" />
-      <span className="font-medium text-[var(--fg-secondary)]">{label}</span>
+    <div className="flex items-center gap-2.5 py-1" role="status" aria-live="polite">
+      <span className="flex gap-1" aria-hidden>
+        {[0, 1, 2].map((i) => (
+          <motion.span
+            key={i} className="w-1.5 h-1.5 rounded-full bg-[var(--fg-muted)]"
+            animate={{ opacity: [0.25, 1, 0.25] }}
+            transition={{ duration: 1.1, repeat: Infinity, delay: i * 0.16 }}
+          />
+        ))}
+      </span>
+      <span className="text-[13px] font-medium text-[var(--fg-secondary)]">{label}</span>
     </div>
   );
 }
 
-/** Live engine when a task is tracked, honest spinner otherwise. */
-export function LiveActivityBlock({ fallbackLabel }: { fallbackLabel: string }) {
-  const { liveTaskId } = useApp();
-  if (liveTaskId) return <LiveActivity />;
-  return <ThinkingDots label={fallbackLabel} />;
-}
-
-export function ChatWindow({
-  messages,
-  live = false,
-  onOpenWorkspace,
-}: {
-  messages: ChatMessage[];
-  live?: boolean;
-  onOpenWorkspace?: (payload: PlatformArtifactPayload) => void;
-}) {
+export function ChatWindow({ messages, live = false }: { messages: ChatMessage[]; live?: boolean }) {
   const scrollRef = useRef<HTMLDivElement>(null);
   const [stick, setStick] = useState(true);
   const [showJump, setShowJump] = useState(false);
-  const [setupOpen, setSetupOpen] = useState(false);
   const { status, statusText } = useApp();
   const stickRef = useRef(true);
   stickRef.current = stick;
@@ -309,14 +256,14 @@ export function ChatWindow({
   if (messages.length === 0) {
     return (
       <div className="flex-1 flex flex-col items-center justify-center text-center px-6 py-16">
-        <p className="text-[14.5px] text-[var(--fg)]">No messages yet.</p>
-        <p className="text-[13px] text-[var(--fg-muted)] mt-1 max-w-[320px]">Ask a question or select a prompt below to get started.</p>
+        <p className="text-[14.5px] text-[var(--fg)]">Nothing here yet.</p>
+        <p className="text-[13px] text-[var(--fg-muted)] mt-1 max-w-[320px]">Say something below and it will show up in this thread.</p>
       </div>
     );
   }
 
   return (
-    <div className="flex-1 min-h-0 relative flex flex-col" aria-live="polite">
+    <div className="flex-1 min-h-0 relative flex flex-col">
       <div ref={scrollRef} onScroll={onScroll} className="flex-1 overflow-y-auto px-4 sm:px-8 py-6">
         <div className={cn('mx-auto space-y-6', live ? 'max-w-[560px]' : 'max-w-[760px]')}>
           <AnimatePresence initial={false}>
@@ -324,19 +271,12 @@ export function ChatWindow({
               m.role === 'user' ? (
                 <UserBubble key={m.id} msg={m} interactive={!live} />
               ) : (
-                <AssistantBubble
-                  key={m.id}
-                  msg={m}
-                  isLast={i === lastAsstIdx}
-                  interactive={!live}
-                  onOpenWorkspace={onOpenWorkspace}
-                  onOpenSetup={() => setSetupOpen(true)}
-                />
+                <AssistantBubble key={m.id} msg={m} isLast={i === lastAsstIdx} interactive={!live} />
               )
             )}
           </AnimatePresence>
           {status !== 'idle' && status !== 'error' && (
-            <div className="pt-1"><LiveActivityBlock fallbackLabel={statusText} /></div>
+            <div className="pt-1"><ThinkingDots label={statusText} /></div>
           )}
         </div>
       </div>
@@ -352,17 +292,6 @@ export function ChatWindow({
           </motion.button>
         )}
       </AnimatePresence>
-
-      {setupOpen && (
-        <div className="fixed inset-0 z-50 bg-black/75 backdrop-blur-sm flex items-center justify-center p-4">
-          <div className="w-full max-w-[620px] max-h-[92vh] overflow-y-auto">
-            <AiSetupModal
-              canSkip={true}
-              onComplete={() => setSetupOpen(false)}
-            />
-          </div>
-        </div>
-      )}
     </div>
   );
 }

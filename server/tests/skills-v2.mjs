@@ -115,9 +115,9 @@ const v1 = pkg.validatePackage({ zipBase64: b64(z1) });
 assert.equal(v1.ok, true, 'valid folder ZIP passes: ' + (v1.errors || []).join(';'));
 assert.ok(v1.package.scripts['scripts/main.js'], 'prefix stripped');
 assert.equal(v1.package.manifest.license, 'MIT', 'license parsed');
-const i1 = store.installSkill(A, v1.package, { scope: 'user', source: 'imported' });
+const i1 = await store.installSkill(A, v1.package, { scope: 'user', source: 'imported' });
 assert.equal(i1.ok, true);
-const inv1 = rt.invokeSkill(A, i1.skill.id, { input: { x: 42 } });
+const inv1 = await rt.invokeSkill(A, i1.skill.id, { input: { x: 42 } });
 assert.equal(inv1.ok && inv1.executed && inv1.result.echo, 42, 'zipped JS skill executes');
 const z2 = buildZip([{ name: 'skill.md', data: MD('Root Skill', 'A skill with skill.md at the archive root for testing.') }], { deflate: true });
 const v2 = pkg.validatePackage({ zipBase64: b64(z2) });
@@ -163,14 +163,14 @@ pass('manifest ext (license/entrypoints/plugins/providers)');
 
 // ---- diff ----
 const base = pkg.validatePackage({ 'skill.md': MD('Diff Skill', 'Base description for diff testing purposes now.') });
-const di = store.installSkill(A, base.package, { scope: 'user', source: 'created' });
+const di = await store.installSkill(A, base.package, { scope: 'user', source: 'created' });
 const upd = pkg.validatePackage({ 'skill.md': MD('Diff Skill', 'CHANGED description for diff testing purposes now.') });
-store.updateSkill(A, di.skill.id, upd.package, 'tune');
+await store.updateSkill(A, di.skill.id, upd.package, 'tune');
 const { diffVersions } = await import('../src/core/skillStore.js');
-const d = diffVersions(A, di.skill.id, '1.0.0');
+const d = await diffVersions(A, di.skill.id, '1.0.0');
 assert.equal(d.ok, true);
 assert.ok(d.diff.description, 'description change shown');
-assert.equal(diffVersions(B, di.skill.id, '1.0.0'), null, 'B sees no diff');
+assert.equal(await diffVersions(B, di.skill.id, '1.0.0'), null, 'B sees no diff');
 pass('update diff (description change, cross-user blocked)');
 
 // ---- runtime adapters ----
@@ -194,11 +194,11 @@ pass('schedule contract (register/list/remove, scoped)');
 // ---- initiative policies ----
 const mis = { id: 'm1', objective: 'Research agent security posture thoroughly' };
 const rep = pkg.validatePackage({ 'skill.md': MD('Preso Skill', 'Build slide presentations from research findings and data automatically.') });
-const ps = store.installSkill(A, rep.package, { scope: 'user', source: 'created' });
-const allAuto = (await import('../src/core/skillDiscovery.js')).discoverFor(A, 'Report on completed mission: Research agent security posture thoroughly. Deliverables, presentation, document, summary.', {});
+const ps = await store.installSkill(A, rep.package, { scope: 'user', source: 'created' });
+const allAuto = await (await import('../src/core/skillDiscovery.js')).discoverFor(A, 'Report on completed mission: Research agent security posture thoroughly. Deliverables, presentation, document, summary.', {});
 assert.ok(allAuto.some((c) => c.skillId === ps.skill.id && c.auto), 'follow-up skill auto-matches mission context');
 for (const [mode, want] of [['passive', 'suggested'], ['assisted', 'suggested'], ['proactive', 'queue'], ['autonomous', 'run']]) {
-  const r = init.proposeFollowups({ getProfile: () => ({ autonomy: mode }) }, A, mis);
+  const r = await init.proposeFollowups({ getProfile: async () => ({ autonomy: mode }) }, A, mis);
   assert.equal(r.action, want, `policy ${mode} → ${want}, got ${r.action}`);
 }
 pass('initiative policies (suggest/suggest/queue/run)');
@@ -210,7 +210,7 @@ const mkSkill = (i) => pkg.validatePackage({
 });
 for (let i = 0; i < 1000; i++) {
   const g = mkSkill(i);
-  store.installSkill(benchUser, g.package, { scope: 'user', source: 'created' });
+  await store.installSkill(benchUser, g.package, { scope: 'user', source: 'created' });
 }
 const benchTask = 'frobnicate workflow number 500 with quux processing tasks';
 const bench = {};
@@ -220,7 +220,7 @@ for (const n of [10, 100, 500, 1000]) {
 }
 {
   const t0 = Date.now();
-  const c = (await import('../src/core/skillDiscovery.js')).discoverFor(benchUser, benchTask, {});
+  const c = await (await import('../src/core/skillDiscovery.js')).discoverFor(benchUser, benchTask, {});
   bench.n1000 = Date.now() - t0;
   assert.ok(c.some((x) => x.name === 'Bench Skill 500'), 'finds skill 500/1000');
 }
@@ -228,7 +228,7 @@ for (const n of [10, 100, 500]) {
   const u = users.createUser({ handle: 'bmk' + n, passcode: 'pass1234' }).user.id;
   for (let i = 0; i < n; i++) {
     const g = mkSkill(i);
-    store.installSkill(u, g.package, { scope: 'user', source: 'created' });
+    await store.installSkill(u, g.package, { scope: 'user', source: 'created' });
   }
   const t0 = Date.now();
   (await import('../src/core/skillDiscovery.js')).discoverFor(u, `frobnicate workflow number ${n - 1} with quux processing tasks`, {});
@@ -240,17 +240,17 @@ pass('benchmark 10/100/500/1000 under budget');
 
 // ---- discovery quality: strong/weak/negative/unrelated/competing ----
 const q = pkg.validatePackage({ 'skill.md': MD('PPT QA Skill', 'Validate PowerPoint presentations for layout, factual consistency, broken elements and presentation quality.') });
-const qq = store.installSkill(A, q.package, { scope: 'user', source: 'created' });
-const D = (await import('../src/core/skillDiscovery.js')).discoverFor;
-const strong = D(A, 'Check this PPT for layout and factual consistency please');
+const qq = await store.installSkill(A, q.package, { scope: 'user', source: 'created' });
+const D = async (...a) => (await (await import('../src/core/skillDiscovery.js')).discoverFor(...a));
+const strong = await D(A, 'Check this PPT for layout and factual consistency please');
 assert.ok(strong[0]?.skillId === qq.skill.id && strong[0].auto, 'strong match wins + auto');
-const weak = D(A, 'presentation');
+const weak = await D(A, 'presentation');
 assert.ok(weak.some((c) => c.skillId === qq.skill.id) && !weak.find((c) => c.skillId === qq.skill.id)?.auto, 'weak match listed, not auto');
-const neg = D(A, 'bake a chocolate cake recipe');
+const neg = await D(A, 'bake a chocolate cake recipe');
 assert.ok(!neg.some((c) => c.skillId === qq.skill.id), 'unrelated never matches');
 const comp = pkg.validatePackage({ 'skill.md': MD('Slide Deck Skill', 'Create new slide decks and presentations from scratch with templates.') });
-const cc = store.installSkill(A, comp.package, { scope: 'user', source: 'created' });
-const race = D(A, 'Validate my PowerPoint presentation for broken elements and factual consistency');
+const cc = await store.installSkill(A, comp.package, { scope: 'user', source: 'created' });
+const race = await D(A, 'Validate my PowerPoint presentation for broken elements and factual consistency');
 assert.ok(race[0]?.skillId === qq.skill.id, 'specific QA beats generic creator');
 void cc;
 pass('discovery quality (strong/weak/negative/unrelated/competing)');

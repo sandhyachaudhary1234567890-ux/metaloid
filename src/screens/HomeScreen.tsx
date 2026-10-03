@@ -6,7 +6,7 @@ import {
   Command, Mic, StopCircle, ArrowRight, Activity, CheckCircle2,
 } from 'lucide-react';
 import { useApp } from '../lib/store';
-import { CommandBar, type ComposerMode } from '../components/CommandBar';
+import { CommandBar, COMPOSER_MODES, type ComposerMode } from '../components/CommandBar';
 import { TopBar, type HomeTab } from '../components/TopBar';
 import { greetingFor, getStrings } from '../lib/i18n';
 import { timeAgo, cn } from '../lib/cn';
@@ -24,14 +24,9 @@ const BlackHoleStage = lazy(() =>
 // Architectural instrument core, clean composer, contextual modes,
 // honest system status, and recent activity.
 
-const MODES: ComposerMode[] = [
-  { id: 'ask', label: 'Ask', prefix: '', hint: 'Ask anything…', desc: 'Balanced responses for everyday tasks' },
-  { id: 'research', label: 'Deep Research', prefix: 'Research deeply: ', hint: 'What should I research?', desc: 'Thorough investigation with sources' },
-  { id: 'image', label: 'Create Image', prefix: '/imagine ', hint: 'Describe the image…', desc: 'Free AI images via Puter — no key needed' },
-  { id: 'analyze', label: 'Analyze', prefix: 'Analyze: ', hint: 'What should I analyze?', desc: 'Break down data, text or ideas' },
-  { id: 'code', label: 'Code', prefix: 'Write code for: ', hint: 'Describe what to build…', desc: 'Write and debug code' },
-  { id: 'brainstorm', label: 'Brainstorm', prefix: 'Brainstorm ideas for: ', hint: 'What should we brainstorm?', desc: 'Divergent ideas, then converge' },
-];
+// The composer's own mode list is the single source of truth for how a
+// message is framed; this screen just picks the starting label.
+const MODES = COMPOSER_MODES;
 
 const RECENT_ICONS = [MessageSquare, ImageIcon, FileText, ImageIcon, Code2];
 
@@ -45,7 +40,7 @@ export function HomeScreen() {
   const greet = greetingFor(new Date(), language);
   const recent = conversations.slice(0, 5);
   const [tab, setTab] = useState<HomeTab>('chat');
-  const [mode, setMode] = useState<ComposerMode>(MODES[0]);
+  const [mode, setMode] = useState<ComposerMode>(MODES.ask);
 
   // Proactive and Ready State hooks
   const [notices] = useState(() => MetaIoidNoticedEngine.getNotices());
@@ -195,19 +190,17 @@ export function HomeScreen() {
             className="mt-4 max-w-[720px] mx-auto"
           >
             <CommandBar
-              large
+              autoFocus
               onCamera={() => setView('live')}
               mode={mode}
-              onModeClear={() => setMode(MODES[0])}
-              onModeSelect={(m) => setMode(m)}
-              availableModes={MODES}
+              onModeChange={(m) => setMode(m)}
             />
           </motion.div>
 
           {/* Quick modes: Research, Build, Analyze */}
           <div className="mt-3 flex items-center justify-center gap-2">
             <button
-              onClick={() => setMode(MODES[1])}
+              onClick={() => setMode(MODES.research)}
               className={cn(
                 "px-3.5 py-1 rounded-full text-[12px] font-medium transition-all border",
                 mode.id === 'research'
@@ -218,10 +211,10 @@ export function HomeScreen() {
               Research
             </button>
             <button
-              onClick={() => setMode(MODES[4])}
+              onClick={() => setMode(MODES.build)}
               className={cn(
                 "px-3.5 py-1 rounded-full text-[12px] font-medium transition-all border",
-                mode.id === 'code'
+                mode.id === 'build'
                   ? "bg-[var(--accent)] text-white border-[var(--accent)]"
                   : "bg-[var(--surface)] text-[var(--fg-muted)] border-[var(--border)] hover:border-[var(--border-strong)]"
               )}
@@ -229,7 +222,7 @@ export function HomeScreen() {
               Build
             </button>
             <button
-              onClick={() => setMode(MODES[3])}
+              onClick={() => setMode(MODES.analyze)}
               className={cn(
                 "px-3.5 py-1 rounded-full text-[12px] font-medium transition-all border",
                 mode.id === 'analyze'

@@ -1,5 +1,6 @@
 // METALOID product types — single source of truth for domain shapes.
-// Primary IA only exposes capabilities that have a real runtime contract.
+// Primary IA: home · chat · live · memory · history · settings
+// Tools are contextual (drawers / inline cards), never a route.
 
 export type AgentStatus =
   | 'idle'
@@ -17,10 +18,11 @@ export type LanguageId =
 export type ModelId = 'auto' | 'fast' | 'balanced' | 'smart' | 'vision';
 
 export type ViewId =
-  | 'home' | 'chat' | 'projects' | 'library' | 'research' | 'tasks'
-  | 'live' | 'memory' | 'history' | 'settings' | 'auth';
+  | 'home' | 'chat' | 'live' | 'memory' | 'history' | 'settings'
+  // master-line surfaces, seamed into the polished shell rather than dropped
+  | 'projects' | 'library' | 'research' | 'tasks';
 
-export type ConnectionState = 'checking' | 'online' | 'offline';
+export type ConnectionState = 'checking' | 'online' | 'offline' | 'mock' | 'degraded';
 
 export interface ToolActivity {
   id: string;
@@ -60,22 +62,6 @@ export interface ChatMessage {
   edited?: boolean;
   /** attachments sent with a user message */
   attachments?: Attachment[];
-  /** real file artifact attached to an assistant message */
-  artifact?: {
-    id: string;
-    name: string;
-    kind: string;
-    status: string;
-    version?: number;
-    payload?: any;
-  };
-  /** minimal calm activity progression */
-  activity?: {
-    label: string;
-    stages: string[];
-    currentStageIndex: number;
-    isComplete?: boolean;
-  };
   /** generation failed — bubble shows compact error + Retry */
   error?: boolean;
 }
@@ -135,6 +121,7 @@ export interface ToastItem {
   id: string;
   title: string;
   desc?: string;
+  /** Master-line panels raise coloured toasts; the shell renders them. */
   tone?: 'success' | 'error' | 'info';
 }
 

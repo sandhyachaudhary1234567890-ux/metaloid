@@ -980,10 +980,3 @@ export async function rateCheck(key, max, windowMs) {
   return { ok: fresh ? count <= max : true, count };
 }
 
-/** Crash recovery at boot: stale RUNNING → QUEUED with a checkpoint note. */
-export async function msnRecover() {
-  const r = await q(`update missions set status='QUEUED', updated_at=now(),
-    data = jsonb_set(data, '{timeline}', coalesce(data->'timeline','[]'::jsonb) || jsonb_build_object('at', now()::text, 'event', 'Recovered', 'detail', 'Gateway restarted; mission re-queued from checkpoint.'))
-    where status='RUNNING' returning id`, [], 'msnRecover');
-  return r.rows.length;
-}

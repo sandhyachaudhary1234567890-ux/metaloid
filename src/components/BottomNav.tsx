@@ -1,95 +1,70 @@
-import { AnimatePresence, motion } from 'framer-motion';
-import { Home, MessageSquare, FolderKanban, Library, Mic, History, Settings, Plus, ListTodo } from 'lucide-react';
+import { motion } from 'framer-motion';
+import { MessageSquare, History, Telescope, Settings, Mic } from 'lucide-react';
 import { useApp } from '../lib/store';
-import type { ViewId } from '../lib/types';
 import { cn } from '../lib/cn';
 
-// Mobile navigation with 48px+ touch targets, semantic theme tokens,
-// and clean integrated voice activation FAB.
+// Mobile navigation: four 48px targets and one unmistakable action.
+// Voice is centred because it is the fastest way to talk to MetaIoid, and it is
+// the only control here that is not a destination.
 
-export function BottomNav({ onMore }: { onMore: () => void }) {
-  const { view, setView, setVoiceOpen } = useApp();
-  const items = [
-    { id: 'home' as const, label: 'Home', icon: Home },
-    { id: 'chat' as const, label: 'Chat', icon: MessageSquare },
-    { id: 'projects' as const, label: 'Projects', icon: FolderKanban },
-    { id: 'library' as const, label: 'Library', icon: Library },
-  ];
+type Item = { id: 'chat' | 'history' | 'research' | 'settings'; label: string; icon: typeof MessageSquare };
+
+const LEFT: Item[] = [
+  { id: 'chat', label: 'Chat', icon: MessageSquare },
+  { id: 'history', label: 'History', icon: History },
+];
+const RIGHT: Item[] = [
+  { id: 'research', label: 'Research', icon: Telescope },
+  { id: 'settings', label: 'Settings', icon: Settings },
+];
+
+export function BottomNav() {
+  const { view, setView, setVoiceOpen, osintOpen, setOsintOpen } = useApp();
+
+  const go = (id: Item['id']) => {
+    if (id === 'research') { setOsintOpen(true); return; }
+    setView(id);
+  };
+  const active = (id: Item['id']) => (id === 'research' ? osintOpen : view === id);
+
   return (
     <nav
       className="md:hidden fixed bottom-0 inset-x-0 z-40 border-t border-[var(--border)] bg-[var(--surface)]/95 backdrop-blur-xl text-[var(--fg)]"
       style={{ paddingBottom: 'env(safe-area-inset-bottom)' }}
-      aria-label="Mobile navigation"
+      aria-label="Primary"
     >
-      <div className="relative grid grid-cols-5 px-2 pt-1 pb-1.5">
-        {items.slice(0, 2).map((n) => (
-          <NavBtn key={n.id} active={view === n.id} label={n.label} Icon={n.icon} onClick={() => { setView(n.id); }} />
+      <div className="grid grid-cols-5 px-1 pt-1 pb-1.5">
+        {LEFT.map((n) => (
+          <NavBtn key={n.id} {...n} active={active(n.id)} onClick={() => go(n.id)} />
         ))}
-        <div className="flex justify-center -mt-6">
+        <div className="flex justify-center">
           <button
             onClick={() => setVoiceOpen(true)}
             aria-label="Start voice mode"
-            className="w-[52px] h-[52px] rounded-full bg-[var(--accent)] text-white flex items-center justify-center shadow-md active:scale-95 transition-all border-4 border-[var(--bg)]"
+            className="w-[52px] h-[52px] -mt-1 rounded-full bg-[var(--accent)] text-white flex items-center justify-center shadow-md active:scale-95 transition-transform"
           >
-            <Mic size={20} />
+            <Mic size={21} />
           </button>
         </div>
-        {items.slice(2).map((n) => (
-          <NavBtn key={n.id} active={view === n.id} label={n.label} Icon={n.icon} onClick={() => setView(n.id)} />
+        {RIGHT.map((n) => (
+          <NavBtn key={n.id} {...n} active={active(n.id)} onClick={() => go(n.id)} />
         ))}
       </div>
-      <button onClick={onMore} className="absolute right-2 top-1 icon-btn w-10 h-10" aria-label="More options">
-        <Plus size={18} />
-      </button>
     </nav>
   );
 }
 
-function NavBtn({ active, label, Icon, onClick }: { active: boolean; label: string; Icon: typeof Home; onClick: () => void }) {
+function NavBtn({ label, icon: Icon, active, onClick }: { label: string; icon: typeof MessageSquare; active: boolean; onClick: () => void }) {
   return (
-    <button onClick={onClick} className="flex flex-col items-center gap-1 py-1.5 min-h-[48px] relative" aria-label={label} aria-current={active ? 'page' : undefined}>
-      {active && <motion.span layoutId="mnav-dot" className="absolute top-0 w-6 h-[2.5px] rounded-full bg-[var(--accent)]" />}
+    <button
+      onClick={onClick}
+      className="flex flex-col items-center justify-center gap-1 min-h-[54px] relative"
+      aria-label={label}
+      aria-current={active ? 'page' : undefined}
+    >
+      {active && <motion.span layoutId="mnav-dot" className="absolute top-0 w-5 h-[2px] rounded-full bg-[var(--accent)]" />}
       <Icon size={20} strokeWidth={active ? 2 : 1.7} className={active ? 'text-[var(--accent)]' : 'text-[var(--fg-muted)]'} />
-      <span className={cn('text-[10.5px] font-medium', active ? 'text-[var(--fg)]' : 'text-[var(--fg-muted)]')}>{label}</span>
+      <span className={cn('text-[10.5px] font-medium leading-none', active ? 'text-[var(--fg)]' : 'text-[var(--fg-muted)]')}>{label}</span>
     </button>
-  );
-}
-
-export function MobileMoreSheet({ open, onClose }: { open: boolean; onClose: () => void }) {
-  const { setView, newConversation } = useApp();
-  const go = (v: ViewId, fresh = false) => {
-    if (fresh) newConversation();
-    setView(v);
-    onClose();
-  };
-  return (
-    <AnimatePresence>
-      {open && (
-        <>
-          <motion.div className="fixed inset-0 z-50 bg-black/60 md:hidden" initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} onClick={onClose} />
-          <motion.div
-            initial={{ y: '100%' }} animate={{ y: 0 }} exit={{ y: '100%' }}
-            transition={{ type: 'spring', damping: 28, stiffness: 280 }}
-            className="fixed inset-x-0 bottom-0 z-50 rounded-t-3xl border-t border-[var(--border)] bg-[var(--surface-elevated)] p-5 pb-8 md:hidden text-[var(--fg)]"
-          >
-            <div className="w-10 h-1 bg-[var(--border-strong)] rounded-full mx-auto mb-4" />
-            <div className="space-y-1">
-              <button onClick={() => go('chat', true)} className="w-full flex items-center gap-3 px-4 h-12 rounded-xl text-[14px] font-medium hover:bg-[var(--surface-hover)]">
-                <Plus size={18} /> New conversation
-              </button>
-              <button onClick={() => go('history')} className="w-full flex items-center gap-3 px-4 h-12 rounded-xl text-[14px] font-medium hover:bg-[var(--surface-hover)]">
-                <History size={18} /> History & past turns
-              </button>
-              <button onClick={() => go('tasks')} className="w-full flex items-center gap-3 px-4 h-12 rounded-xl text-[14px] font-medium hover:bg-[var(--surface-hover)]">
-                <ListTodo size={18} /> Tasks
-              </button>
-              <button onClick={() => go('settings')} className="w-full flex items-center gap-3 px-4 h-12 rounded-xl text-[14px] font-medium hover:bg-[var(--surface-hover)]">
-                <Settings size={18} /> Settings
-              </button>
-            </div>
-          </motion.div>
-        </>
-      )}
-    </AnimatePresence>
   );
 }

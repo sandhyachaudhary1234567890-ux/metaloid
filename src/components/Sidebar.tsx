@@ -1,124 +1,149 @@
-import { useMemo, useState } from 'react';
-import { motion, AnimatePresence } from 'framer-motion';
-import {
-  MessageSquare, Settings, ChevronLeft, ChevronRight,
-  Plus, FolderKanban, Library, ListTodo, MoreHorizontal,
-  Pencil, Trash2, User, Code2, X
-} from 'lucide-react';
+import { motion } from 'framer-motion';
+import { MessageSquare, History, Telescope, Settings, ChevronLeft, ChevronRight, Plus, Archive, Library, CheckCircle2, Sparkles } from 'lucide-react';
 import { useApp } from '../lib/store';
-import type { ViewId } from '../lib/types';
+import { useAuth } from '../lib/auth';
 import { cn } from '../lib/cn';
-import { MetaIoidMark, MetaIoidWordmark, MetaIoidLockup } from './brand';
+import { MetaIoidMark, MetaIoidLockup } from './brand';
 
-const NAV: { id: ViewId; label: string; icon: typeof MessageSquare }[] = [
+// Primary navigation: four destinations, nothing else.
+//
+// Chat is the product, so it leads; History and Research are the two things you
+// reach for around a conversation; Settings holds everything configuration
+// shaped (voice, memory, providers, account). Live camera lives in the
+// composer, memory lives in Settings and in context — neither needs a
+// permanent slot competing with the conversation.
+
+type NavId = 'chat' | 'history' | 'research' | 'settings';
+
+const NAV: { id: NavId; label: string; icon: typeof MessageSquare }[] = [
   { id: 'chat', label: 'Chat', icon: MessageSquare },
-  { id: 'projects', label: 'Projects', icon: FolderKanban },
-  { id: 'library', label: 'Library', icon: Library },
-  { id: 'tasks', label: 'Tasks', icon: ListTodo },
+  { id: 'history', label: 'History', icon: History },
+  { id: 'research', label: 'Research', icon: Telescope },
 ];
 
-export function LiveIndicator({ compact = false }: { compact?: boolean }) {
-  const { connection, recheckConnection } = useApp();
+// Master-line surfaces (workspaces, artifacts, tasks) stay reachable from the
+// same shell instead of living in parallel navigation.
+const WORKSPACE: { id: 'projects' | 'library' | 'tasks'; label: string; icon: typeof MessageSquare }[] = [
+  { id: 'projects', label: 'Projects', icon: Archive },
+  { id: 'library', label: 'Library', icon: Library },
+  { id: 'tasks', label: 'Tasks', icon: CheckCircle2 },
+];
+
+/** Quiet, honest connection state. Never says ONLINE because a variable is set. */
+export function ConnectionPill({ compact = false }: { compact?: boolean }) {
+  const { connection, recheckConnection, health } = useApp();
+  const base = cn(
+    'inline-flex items-center gap-1.5 rounded-full border font-medium transition-colors',
+    compact ? 'px-2 py-[3px] text-[10px]' : 'px-2.5 py-1 text-[11px]',
+  );
 
   if (connection === 'online') {
     return (
-      <span className={cn('inline-flex items-center gap-1.5 text-emerald-600 dark:text-emerald-400 font-semibold tracking-wide', compact ? 'text-[10px]' : 'text-[10.5px]')}>
-        <span className="h-1.5 w-1.5 rounded-full bg-emerald-500 animate-pulse" />
-        <span>LIVE</span>
+      <span
+        title={`Live provider: ${health?.provider || 'openrouter'}${health?.models?.free ? ` · ${health.models.free} free models` : ''}`}
+        className={cn(base, 'border-emerald-500/20 text-emerald-400/90')}
+      >
+        <span className="h-1.5 w-1.5 rounded-full bg-emerald-400" /> ONLINE
       </span>
+    );
+  }
+  if (connection === 'mock') {
+    return (
+      <button
+        onClick={() => recheckConnection()}
+        title="Sandbox provider — real streaming, canned model. Everything works end to end with no API key. Add a key for live models."
+        className={cn(base, 'border-violet-500/25 text-violet-300/90 hover:border-violet-400/50')}
+      >
+        <span className="h-1.5 w-1.5 rounded-full bg-violet-400" /> SANDBOX
+      </button>
+    );
+  }
+  if (connection === 'degraded') {
+    return (
+      <button
+        onClick={() => recheckConnection()}
+        title="A provider key is set but the gateway cannot reach it. Replies will fail until this clears."
+        className={cn(base, 'border-amber-500/25 text-amber-300/90 hover:border-amber-400/50')}
+      >
+        <span className="h-1.5 w-1.5 rounded-full bg-amber-300" /> DEGRADED
+      </button>
     );
   }
   if (connection === 'checking') {
     return (
-      <span className={cn('inline-flex items-center gap-1.5 text-amber-500/80 font-medium tracking-wide', compact ? 'text-[10px]' : 'text-[10.5px]')}>
-        <span className="h-1.5 w-1.5 rounded-full bg-amber-400 animate-pulse" />
-        <span>CHECKING</span>
+      <span className={cn(base, 'border-[var(--border)] text-[var(--fg-muted)]')}>
+        <span className="h-1.5 w-1.5 rounded-full bg-[var(--fg-muted)] animate-pulse" /> CHECKING
       </span>
     );
   }
   return (
     <button
       onClick={() => recheckConnection()}
-      title="Backend disconnected. Click to recheck."
-      className={cn('inline-flex items-center gap-1.5 text-[var(--fg-muted)] hover:text-[var(--fg)] transition-colors', compact ? 'text-[10px]' : 'text-[10.5px]', 'font-medium')}
+      title="No gateway connected — running the local demo. Click to retry."
+      className={cn(base, 'border-[var(--border)] text-[var(--fg-muted)] hover:text-[var(--fg)] hover:border-[var(--border-strong)]')}
     >
-      <span className="h-1.5 w-1.5 rounded-full bg-[var(--fg-subtle)]" />
-      <span>DEMO</span>
+      <span className="h-1.5 w-1.5 rounded-full bg-[var(--fg-muted)]" /> LOCAL DEMO
     </button>
   );
 }
 
-export const ConnectionPill = LiveIndicator;
+/** One honest line about where the user's data lives. No invented "Synced". */
+function StorageLine() {
+  const auth = useAuth();
+  const signedIn = auth.status === 'signed-in';
+  const text = !auth.configured
+    ? 'Local demo · stays on this device'
+    : signedIn
+      ? `Syncing · ${auth.user?.email ?? 'signed in'}`
+      : 'On this device · sign in to sync';
+  return (
+    <p className="px-3 text-[11px] leading-relaxed text-[var(--fg-subtle)]">{text}</p>
+  );
+}
 
 export function Sidebar() {
-  const {
-    view, setView, sidebarCollapsed, setSidebarCollapsed,
-    mobileSidebarOpen, setMobileSidebarOpen,
-    newConversation, conversations, selectConversation, activeId,
-    openModal, renameConversation,
-  } = useApp();
+  const { view, setView, sidebarCollapsed, setSidebarCollapsed, newConversation, osintOpen, setOsintOpen, setSkillsOpen } = useApp();
 
-  const [activeMenuId, setActiveMenuId] = useState<string | null>(null);
-
-  // Group conversations into Today, Yesterday, and Previous 7 Days
-  const groupedChats = useMemo(() => {
-    const now = Date.now();
-    const oneDay = 24 * 60 * 60 * 1000;
-    const today: typeof conversations = [];
-    const yesterday: typeof conversations = [];
-    const previous: typeof conversations = [];
-
-    conversations.forEach((c) => {
-      const age = now - (c.updatedAt || c.createdAt);
-      if (age < oneDay) today.push(c);
-      else if (age < 2 * oneDay) yesterday.push(c);
-      else previous.push(c);
-    });
-
-    return [
-      { label: 'Today', items: today },
-      { label: 'Yesterday', items: yesterday },
-      { label: 'Previous 7 days', items: previous.slice(0, 15) },
-    ].filter((g) => g.items.length > 0);
-  }, [conversations]);
+  const go = (id: NavId) => {
+    if (id === 'research') { setOsintOpen(true); return; }
+    setView(id);
+  };
+  const active = (id: NavId) => (id === 'research' ? osintOpen : view === id);
 
   if (sidebarCollapsed) {
     return (
-      <aside className="hidden md:flex w-[68px] shrink-0 flex-col items-center py-4 border-r border-[var(--border-subtle)] bg-[var(--surface)] text-[var(--fg)]" aria-label="Primary">
-        <button onClick={() => setView('chat')} aria-label="MetaIoid home" title="Home" className="hover:scale-105 transition-transform my-1">
-          <MetaIoidMark size={28} />
+      <aside className="hidden md:flex w-[64px] shrink-0 flex-col items-center py-4 border-r border-[var(--border)] bg-[var(--surface)] text-[var(--fg)]" aria-label="Primary">
+        <button onClick={() => setView('chat')} aria-label="MetaIoid" title="Chat" className="my-1">
+          <MetaIoidMark size={26} />
         </button>
-        <div className="mt-2 mb-4">
-          <LiveIndicator compact />
-        </div>
-        <nav className="flex flex-col gap-1.5" aria-label="Collapsed navigation">
-          <button
-            title="New Chat"
-            aria-label="New Chat"
-            onClick={() => { newConversation(); setView('chat'); }}
-            className="w-10 h-10 rounded-xl flex items-center justify-center border border-[var(--border)] bg-[var(--surface-elevated)] hover:bg-[var(--surface-hover)] text-[var(--fg)] shadow-xs transition-all"
-          >
-            <Plus size={17} strokeWidth={2.2} />
-          </button>
+        <nav className="flex flex-col gap-1 mt-4" aria-label="Collapsed navigation">
           {NAV.map((n) => (
             <button
-              key={n.id} title={n.label} aria-label={n.label} onClick={() => setView(n.id)}
-              className={cn('w-10 h-10 rounded-xl flex items-center justify-center transition-all',
-                view === n.id ? 'bg-[var(--accent-subtle)] text-[var(--accent)] border border-[var(--accent)]/30' : 'text-[var(--fg-muted)] hover:text-[var(--fg)] hover:bg-[var(--surface-hover)]')}
+              key={n.id} title={n.label} aria-label={n.label} onClick={() => go(n.id)}
+              className={cn('w-10 h-10 rounded-xl flex items-center justify-center transition-colors',
+                active(n.id) ? 'bg-[var(--accent-subtle)] text-[var(--accent)]' : 'text-[var(--fg-muted)] hover:text-[var(--fg)] hover:bg-[var(--surface-hover)]')}
             >
               <n.icon size={18} strokeWidth={1.8} />
             </button>
           ))}
         </nav>
-        <div className="mt-auto flex flex-col gap-1.5 items-center">
-          <button title="Expand sidebar" aria-label="Expand sidebar" onClick={() => setSidebarCollapsed(false)} className="w-10 h-10 rounded-xl flex items-center justify-center text-[var(--fg-muted)] hover:text-[var(--fg)] hover:bg-[var(--surface-hover)]">
-            <ChevronRight size={17} />
+        <div className="mt-auto flex flex-col gap-1 items-center">
+          <button title="New chat" aria-label="New chat" onClick={() => { newConversation(); setView('chat'); }}
+            className="w-10 h-10 rounded-xl flex items-center justify-center text-[var(--fg-muted)] hover:text-[var(--accent)] hover:bg-[var(--surface-hover)]">
+            <Plus size={18} />
+          </button>
+          <button title="Skills" aria-label="Skills" onClick={() => setSkillsOpen(true)}
+            className="w-10 h-10 rounded-xl flex items-center justify-center text-[var(--fg-muted)] hover:text-[var(--fg)] hover:bg-[var(--surface-hover)]">
+            <Sparkles size={17} />
           </button>
           <button title="Settings" aria-label="Settings" onClick={() => setView('settings')}
             className={cn('w-10 h-10 rounded-xl flex items-center justify-center transition-colors',
-              view === 'settings' ? 'bg-[var(--accent-subtle)] text-[var(--accent)] border border-[var(--accent)]/30' : 'text-[var(--fg-muted)] hover:text-[var(--fg)] hover:bg-[var(--surface-hover)]')}
-          >
+              view === 'settings' ? 'bg-[var(--accent-subtle)] text-[var(--accent)]' : 'text-[var(--fg-muted)] hover:text-[var(--fg)] hover:bg-[var(--surface-hover)]')}>
             <Settings size={18} strokeWidth={1.8} />
+          </button>
+          <button title="Expand sidebar" aria-label="Expand sidebar" onClick={() => setSidebarCollapsed(false)}
+            className="w-10 h-10 rounded-xl flex items-center justify-center text-[var(--fg-muted)] hover:text-[var(--fg)] hover:bg-[var(--surface-hover)]">
+            <ChevronRight size={17} />
           </button>
         </div>
       </aside>
@@ -126,284 +151,76 @@ export function Sidebar() {
   }
 
   return (
-    <>
-      <aside className="hidden md:flex w-[256px] shrink-0 flex-col border-r border-[var(--border-subtle)] bg-[var(--surface)] text-[var(--fg)] select-none" aria-label="Primary">
-        <div className="px-4 pt-4 pb-3">
-          <div className="flex items-center justify-between">
-            <div className="flex items-center gap-2 min-w-0">
-              <MetaIoidMark size={22} className="shrink-0" />
-              <MetaIoidWordmark height={14} className="shrink-0" />
-              <LiveIndicator />
-            </div>
-            <button onClick={() => setSidebarCollapsed(true)} className="icon-btn w-7 h-7 rounded-lg text-[var(--fg-muted)] hover:text-[var(--fg)] shrink-0 ml-1" aria-label="Collapse sidebar" title="Collapse">
-              <ChevronLeft size={15} />
-            </button>
-          </div>
-
-        {/* Refined Integrated New Chat Button */}
-        <button
-          onClick={() => { newConversation(); setView('chat'); }}
-          className="w-full mt-3.5 h-9 px-3.5 rounded-xl text-[13px] font-medium inline-flex items-center justify-between border border-[var(--border)] bg-[var(--surface-elevated)] hover:bg-[var(--surface-hover)] hover:border-[var(--border-strong)] text-[var(--fg)] shadow-xs transition-all active:scale-[0.99]"
-        >
-          <span className="flex items-center gap-2">
-            <Plus size={15} strokeWidth={2.2} className="text-[var(--accent)]" />
-            <span>New chat</span>
-          </span>
-          <kbd className="font-mono text-[10px] text-[var(--fg-muted)] border border-[var(--border)] rounded px-1.5 py-0.5">⌘N</kbd>
+    <aside className="hidden md:flex w-[248px] shrink-0 flex-col border-r border-[var(--border)] bg-[var(--surface)] text-[var(--fg)] select-none" aria-label="Primary">
+      <div className="px-4 pt-5 pb-3">
+        <div className="flex items-center justify-between">
+          <button onClick={() => setView('chat')} className="min-w-0" aria-label="MetaIoid home">
+            <MetaIoidLockup variant="full" size="md" />
+          </button>
+          <button onClick={() => setSidebarCollapsed(true)} className="icon-btn w-7 h-7" aria-label="Collapse sidebar" title="Collapse">
+            <ChevronLeft size={15} />
+          </button>
+        </div>
+        <div className="mt-3"><ConnectionPill compact /></div>
+        <button onClick={() => { newConversation(); setView('chat'); }} className="btn-primary w-full mt-4 h-9 text-[13px]">
+          <Plus size={15} /> New chat
         </button>
       </div>
 
       <nav className="px-3 space-y-0.5" aria-label="Main navigation">
         {NAV.map((n) => {
-          const active = view === n.id;
+          const on = active(n.id);
           return (
             <button
-              key={n.id} onClick={() => setView(n.id)}
-              className={cn('w-full flex items-center gap-2.5 px-3 h-8.5 rounded-lg text-[13px] font-medium transition-all relative',
-                active ? 'bg-[var(--surface-elevated)] text-[var(--fg)] shadow-xs' : 'text-[var(--fg-muted)] hover:text-[var(--fg)] hover:bg-[var(--surface-hover)]')}
+              key={n.id} onClick={() => go(n.id)}
+              aria-current={on ? 'page' : undefined}
+              className={cn('w-full flex items-center gap-3 px-3 h-10 rounded-xl text-[13.5px] font-medium transition-colors relative',
+                on ? 'bg-[var(--surface-elevated)] text-[var(--fg)]' : 'text-[var(--fg-muted)] hover:text-[var(--fg)] hover:bg-[var(--surface-hover)]')}
             >
-              {active && <motion.span layoutId="nav-pill" className="absolute left-1 top-2 bottom-2 w-[2px] rounded-full bg-[var(--accent)]" />}
-              <n.icon size={15} strokeWidth={active ? 2 : 1.8} className={active ? 'text-[var(--accent)]' : 'text-[var(--fg-muted)]'} />
-              <span>{n.label}</span>
+              {on && <motion.span layoutId="nav-pill" className="absolute left-0 top-2 bottom-2 w-[2px] rounded-full bg-[var(--accent)]" />}
+              <n.icon size={16} strokeWidth={on ? 2 : 1.8} />
+              {n.label}
             </button>
           );
         })}
       </nav>
 
-      {/* Grouped Recent Chats */}
-      <div className="px-3 mt-4 flex-1 overflow-y-auto min-h-0 space-y-4">
-        {groupedChats.map((group) => (
-          <div key={group.label}>
-            <p className="px-3 pb-1 text-[11px] font-semibold text-[var(--fg-muted)] tracking-wider">
-              {group.label}
-            </p>
-            <div className="space-y-0.5">
-              {group.items.map((c) => {
-                const isSelected = view === 'chat' && activeId === c.id;
-                const isMenuOpen = activeMenuId === c.id;
-                return (
-                  <div key={c.id} className="relative group">
-                    <button
-                      onClick={() => {
-                        selectConversation(c.id);
-                        setView('chat');
-                      }}
-                      className={cn(
-                        'w-full text-left px-3 py-1.5 rounded-lg text-[12.5px] truncate transition-colors block pr-8',
-                        isSelected
-                          ? 'bg-[var(--surface-elevated)] text-[var(--fg)] font-medium shadow-xs'
-                          : 'text-[var(--fg-secondary)] hover:bg-[var(--surface-hover)] hover:text-[var(--fg)]'
-                      )}
-                      title={c.title}
-                    >
-                      {c.title || 'Untitled conversation'}
-                    </button>
+      <nav className="px-3 mt-4" aria-label="Workspace" hidden={false}>
+        <p className="px-3 pb-1 text-[10.5px] font-semibold uppercase tracking-wider text-[var(--fg-faint)]">Workspace</p>
+        <div className="space-y-0.5">
+          {WORKSPACE.map((n) => {
+            const on = view === n.id;
+            return (
+              <button
+                key={n.id} onClick={() => setView(n.id)} aria-current={on ? 'page' : undefined}
+                className={cn('w-full flex items-center gap-3 px-3 h-9 rounded-xl text-[13px] transition-colors',
+                  on ? 'bg-[var(--surface-elevated)] text-[var(--fg)]' : 'text-[var(--fg-muted)] hover:text-[var(--fg)] hover:bg-[var(--surface-hover)]')}
+              >
+                <n.icon size={15} strokeWidth={on ? 2 : 1.8} />
+                {n.label}
+              </button>
+            );
+          })}
+          <button
+            onClick={() => setSkillsOpen(true)}
+            className="w-full flex items-center gap-3 px-3 h-9 rounded-xl text-[13px] text-[var(--fg-muted)] hover:text-[var(--fg)] hover:bg-[var(--surface-hover)]"
+          >
+            <Sparkles size={15} strokeWidth={1.8} /> Skills
+          </button>
+        </div>
+      </nav>
 
-                    {/* Contextual Action Trigger */}
-                    <button
-                      onClick={(e) => {
-                        e.stopPropagation();
-                        setActiveMenuId(isMenuOpen ? null : c.id);
-                      }}
-                      className={cn(
-                        'absolute right-1.5 top-1/2 -translate-y-1/2 icon-btn w-6 h-6 rounded text-[var(--fg-muted)] hover:text-[var(--fg)] transition-opacity',
-                        isMenuOpen ? 'opacity-100' : 'opacity-0 group-hover:opacity-100'
-                      )}
-                      aria-label="Chat options"
-                    >
-                      <MoreHorizontal size={13} />
-                    </button>
-
-                    {/* Context Menu */}
-                    <AnimatePresence>
-                      {isMenuOpen && (
-                        <>
-                          <div className="fixed inset-0 z-40" onClick={() => setActiveMenuId(null)} />
-                          <motion.div
-                            initial={{ opacity: 0, scale: 0.95 }}
-                            animate={{ opacity: 1, scale: 1 }}
-                            exit={{ opacity: 0 }}
-                            className="absolute right-0 top-full mt-1 z-50 w-36 rounded-xl border border-[var(--border)] bg-[var(--surface-elevated)] shadow-pop p-1"
-                          >
-                            <button
-                              onClick={() => {
-                                setActiveMenuId(null);
-                                openModal('rename-chat', { name: c.title, onRename: (t: string) => renameConversation(c.id, t) });
-                              }}
-                              className="w-full flex items-center gap-2 px-2.5 py-1.5 rounded-lg text-[12px] text-[var(--fg)] hover:bg-[var(--surface-hover)]"
-                            >
-                              <Pencil size={12} /> Rename
-                            </button>
-                            <button
-                              onClick={() => {
-                                setActiveMenuId(null);
-                                openModal('delete-chat', c.id);
-                              }}
-                              className="w-full flex items-center gap-2 px-2.5 py-1.5 rounded-lg text-[12px] text-red-400 hover:bg-red-500/10"
-                            >
-                              <Trash2 size={12} /> Delete
-                            </button>
-                          </motion.div>
-                        </>
-                      )}
-                    </AnimatePresence>
-                  </div>
-                );
-              })}
-            </div>
-          </div>
-        ))}
-      </div>
-
-      {/* Bottom User & Settings Area */}
-      <div className="mt-auto px-3 py-3 border-t border-[var(--border-subtle)] space-y-1">
+      <div className="mt-auto px-3 pb-4 space-y-2">
         <button
           onClick={() => setView('settings')}
-          className={cn('w-full flex items-center gap-2.5 px-3 h-8.5 rounded-lg text-[13px] font-medium transition-colors',
-            view === 'settings' ? 'bg-[var(--surface-elevated)] text-[var(--fg)] shadow-xs' : 'text-[var(--fg-muted)] hover:text-[var(--fg)] hover:bg-[var(--surface-hover)]'
-          )}
+          aria-current={view === 'settings' ? 'page' : undefined}
+          className={cn('w-full flex items-center gap-3 px-3 h-10 rounded-xl text-[13.5px] transition-colors',
+            view === 'settings' ? 'bg-[var(--surface-elevated)] text-[var(--fg)]' : 'text-[var(--fg-muted)] hover:text-[var(--fg)] hover:bg-[var(--surface-hover)]')}
         >
-          <Settings size={15} />
-          <span>Settings</span>
+          <Settings size={16} /> Settings
         </button>
-
-        {/* User Account Row */}
-        <div className="flex items-center justify-between px-3 py-2 rounded-lg text-[13px]">
-          <div className="flex items-center gap-2.5 min-w-0">
-            <span className="w-6 h-6 rounded-full bg-[var(--accent)]/15 border border-[var(--accent)]/30 flex items-center justify-center text-[var(--accent)] text-[11px] font-bold">
-              A
-            </span>
-            <span className="font-medium text-[var(--fg)] truncate text-[12.5px]">Aryan</span>
-          </div>
-          <span className="text-[10px] font-mono text-[var(--fg-subtle)]">Free</span>
-        </div>
+        <StorageLine />
       </div>
     </aside>
-
-    {/* Mobile Navigation Drawer */}
-    <AnimatePresence>
-      {mobileSidebarOpen && (
-        <>
-          <motion.div
-            initial={{ opacity: 0 }}
-            animate={{ opacity: 1 }}
-            exit={{ opacity: 0 }}
-            transition={{ duration: 0.2 }}
-            onClick={() => setMobileSidebarOpen(false)}
-            className="fixed inset-0 z-50 bg-black/60 backdrop-blur-xs md:hidden"
-            aria-hidden
-          />
-          <motion.aside
-            initial={{ x: '-100%' }}
-            animate={{ x: 0 }}
-            exit={{ x: '-100%' }}
-            transition={{ type: 'spring', damping: 28, stiffness: 280 }}
-            className="fixed inset-y-0 left-0 z-50 w-[min(300px,85vw)] bg-[var(--surface)] border-r border-[var(--border)] flex flex-col md:hidden text-[var(--fg)] shadow-2xl select-none"
-            aria-label="Mobile navigation drawer"
-          >
-            <div className="px-4 pt-4 pb-3">
-              <div className="flex items-center justify-between">
-                <div className="flex items-center gap-2 min-w-0">
-                  <MetaIoidMark size={22} className="shrink-0" />
-                  <MetaIoidWordmark height={14} className="shrink-0" />
-                  <LiveIndicator />
-                </div>
-                <button
-                  onClick={() => setMobileSidebarOpen(false)}
-                  className="icon-btn w-8 h-8 rounded-lg text-[var(--fg-muted)] hover:text-[var(--fg)]"
-                  aria-label="Close drawer"
-                >
-                  <X size={18} />
-                </button>
-              </div>
-
-              <button
-                onClick={() => { newConversation(); setView('chat'); setMobileSidebarOpen(false); }}
-                className="w-full mt-3.5 h-10 px-3.5 rounded-xl text-[13.5px] font-medium inline-flex items-center justify-between border border-[var(--border)] bg-[var(--surface-elevated)] hover:bg-[var(--surface-hover)] text-[var(--fg)] shadow-xs transition-all active:scale-[0.99]"
-              >
-                <span className="flex items-center gap-2">
-                  <Plus size={16} strokeWidth={2.2} className="text-[var(--accent)]" />
-                  <span>New chat</span>
-                </span>
-              </button>
-            </div>
-
-            <nav className="px-3 space-y-0.5" aria-label="Mobile navigation">
-              {NAV.map((n) => {
-                const active = view === n.id;
-                return (
-                  <button
-                    key={n.id}
-                    onClick={() => { setView(n.id); setMobileSidebarOpen(false); }}
-                    className={cn('w-full flex items-center gap-2.5 px-3 h-9 rounded-lg text-[13.5px] font-medium transition-all relative',
-                      active ? 'bg-[var(--surface-elevated)] text-[var(--fg)] shadow-xs' : 'text-[var(--fg-muted)] hover:text-[var(--fg)] hover:bg-[var(--surface-hover)]')}
-                  >
-                    {active && <motion.span layoutId="mobile-nav-pill" className="absolute left-1 top-2 bottom-2 w-[2px] rounded-full bg-[var(--accent)]" />}
-                    <n.icon size={16} strokeWidth={active ? 2 : 1.8} className={active ? 'text-[var(--accent)]' : 'text-[var(--fg-muted)]'} />
-                    <span>{n.label}</span>
-                  </button>
-                );
-              })}
-            </nav>
-
-            <div className="px-3 mt-4 flex-1 overflow-y-auto min-h-0 space-y-4">
-              {groupedChats.map((group) => (
-                <div key={group.label}>
-                  <p className="px-3 pb-1 text-[11px] font-semibold text-[var(--fg-muted)] tracking-wider">
-                    {group.label}
-                  </p>
-                  <div className="space-y-0.5">
-                    {group.items.map((c) => {
-                      const isSelected = view === 'chat' && activeId === c.id;
-                      return (
-                        <button
-                          key={c.id}
-                          onClick={() => {
-                            selectConversation(c.id);
-                            setView('chat');
-                            setMobileSidebarOpen(false);
-                          }}
-                          className={cn(
-                            'w-full text-left px-3 py-2 rounded-lg text-[13px] truncate transition-colors block',
-                            isSelected
-                              ? 'bg-[var(--surface-elevated)] text-[var(--fg)] font-medium shadow-xs'
-                              : 'text-[var(--fg-secondary)] hover:bg-[var(--surface-hover)] hover:text-[var(--fg)]'
-                          )}
-                          title={c.title}
-                        >
-                          {c.title || 'Untitled conversation'}
-                        </button>
-                      );
-                    })}
-                  </div>
-                </div>
-              ))}
-            </div>
-
-            <div className="mt-auto px-3 py-3 border-t border-[var(--border-subtle)] space-y-1">
-              <button
-                onClick={() => { setView('settings'); setMobileSidebarOpen(false); }}
-                className={cn('w-full flex items-center gap-2.5 px-3 h-9 rounded-lg text-[13.5px] font-medium transition-colors',
-                  view === 'settings' ? 'bg-[var(--surface-elevated)] text-[var(--fg)] shadow-xs' : 'text-[var(--fg-muted)] hover:text-[var(--fg)] hover:bg-[var(--surface-hover)]'
-                )}
-              >
-                <Settings size={16} />
-                <span>Settings</span>
-              </button>
-              <div className="flex items-center justify-between px-3 py-2 rounded-lg text-[13px]">
-                <div className="flex items-center gap-2.5 min-w-0">
-                  <span className="w-6 h-6 rounded-full bg-[var(--accent)]/15 border border-[var(--accent)]/30 flex items-center justify-center text-[var(--accent)] text-[11px] font-bold">
-                    A
-                  </span>
-                  <span className="font-medium text-[var(--fg)] truncate text-[12.5px]">Aryan</span>
-                </div>
-                <span className="text-[10px] font-mono text-[var(--fg-subtle)]">Free</span>
-              </div>
-            </div>
-          </motion.aside>
-        </>
-      )}
-    </AnimatePresence>
-  </>
   );
 }

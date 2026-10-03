@@ -23,13 +23,13 @@
   const env = { ...process.env, PORT: '8892', METALOID_DATA_DIR: tmp, METALOID_AUTH_LIMIT: '1000', SUPABASE_DB: 'supabase' };
   // inherit server/.env Supabase vars
   try {
-    const dotenv = fs.readFileSync('C:\\metaloid\\server\\.env', 'utf8');
+    const dotenv = fs.readFileSync(path.join(process.cwd(), 'server', '.env'), 'utf8');
     for (const line of dotenv.split('\n')) {
       const m = line.match(/^\s*(SUPABASE_[A-Z_]+)\s*=\s*(.*)\s*$/);
       if (m && !env[m[1]]) env[m[1]] = m[2].trim();
     }
   } catch {}
-  const gw = spawn('node', ['server/src/index.js'], { cwd: 'C:\\metaloid', env, stdio: 'ignore' });
+  const gw = spawn(process.execPath, ['server/src/index.js'], { cwd: require('node:path').resolve(__dirname, '..', '..'), env, stdio: 'ignore' });
   const j = async (r) => r.json().catch(() => ({}));
   const api = async (method, p, token, body) => {
     const r = await fetch(B + p, {

@@ -24,6 +24,9 @@ voicetest/*.wav
 # env (never commit keys — prototype must stay key-free)
 .env
 .env.*
+# …but the templates document every variable, so they do ship
+!.env.example
+!server/.env.example
 
 # editor
 .vscode/
@@ -31,3 +34,8 @@ voicetest/*.wav
 *.swp
 .DS_Store
 Thumbs.db
+
+# generated test/build scratch
+coverage/
+.vitest/
+tsconfig.tsbuildinfo

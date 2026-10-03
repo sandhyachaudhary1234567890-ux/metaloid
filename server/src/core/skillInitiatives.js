@@ -13,7 +13,7 @@ export async function proposeFollowups({ getProfile, createMissionFn }, userId, 
   const profile = getProfile ? await getProfile(userId) : { autonomy: 'assisted' };
   const autonomy = profile.autonomy || 'assisted';
   const ctx = `Report on completed mission: ${mission.objective}. Deliverables, presentation, document, summary, next steps, verify, publish, share.`;
-  const cands = discoverFor(userId, ctx, {}).filter((c) => c.auto).slice(0, 2);
+  const cands = (await discoverFor(userId, ctx, {})).filter((c) => c.auto).slice(0, 2);
   const suggestions = cands.map((c) => ({ skillId: c.skillId, name: c.name, score: c.score, reason: 'relevant to completed mission output' }));
   emit('skill.followups_proposed', { user: userId, mission: mission.id, count: suggestions.length, autonomy });
   if ((autonomy === 'passive' || autonomy === 'assisted') || !suggestions.length) {

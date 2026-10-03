@@ -63,6 +63,11 @@ interface ChatValue {
   ) => { promise: Promise<string>; abort: () => void };
   stopSpeculative: () => void;
   commitSpeculativeTurn: (transcript: string, full: string) => void;
+  /** Merge conversations fetched from the account API (deduped by id). */
+  importConversations: (rows: {
+    id: string; title: string; createdAt: number; updatedAt: number;
+    messages: { id: string; role: 'user' | 'assistant'; content: string; createdAt: number }[];
+  }[]) => void;
 }
 
 const Ctx = createContext<ChatValue | null>(null);
@@ -129,6 +134,23 @@ export function ChatProvider({ children }: { children: React.ReactNode }) {
   const pinConversation = useCallback((id: string) => {
     setConversations((prev) => prev.map((c) => (c.id === id ? { ...c, pinned: !c.pinned } : c)));
   }, []);
+
+/**
+ * A conversation title that reads like a heading rather than a truncated
+ * string: mode prefixes dropped, cut on a word boundary, sentence-cased.
+ */
+function titleFrom(text: string): string {
+  const cleaned = text
+    .replace(/^(research deeply|research|build|analyze|analyse|search the web for|calculate)\s*:\s*/i, '')
+    .replace(/\s+/g, ' ')
+    .trim();
+  const base = cleaned || text.trim();
+  if (base.length <= 42) return base.charAt(0).toUpperCase() + base.slice(1);
+  const cut = base.slice(0, 42);
+  const at = cut.lastIndexOf(' ');
+  return (at > 24 ? cut.slice(0, at) : cut).replace(/[,;:.!?\-–—]+$/, '') + '…';
+}
+
   const renameConversation = useCallback((id: string, title: string) => {
     setConversations((prev) => prev.map((c) => (c.id === id ? { ...c, title } : c)));
   }, []);
@@ -200,7 +222,7 @@ export function ChatProvider({ children }: { children: React.ReactNode }) {
     if (!convId) {
       convId = uid('conv');
       const c: Conversation = {
-        id: convId, title: clean.slice(0, 42) || 'Voice conversation',
+        id: convId, title: titleFrom(clean) || 'Voice conversation',
         preview: clean.slice(0, 90),
         createdAt: Date.now(), updatedAt: Date.now(),
         messages: [], model: settings.model, language: settings.defaultLanguage,
@@ -223,7 +245,7 @@ export function ChatProvider({ children }: { children: React.ReactNode }) {
     };
     setConversations((prev) => prev.map((c) => {
       if (c.id !== convId) return c;
-      const title = c.messages.length === 0 ? clean.slice(0, 42) : c.title;
+      const title = c.messages.length === 0 ? titleFrom(clean) : c.title;
       return { ...c, title, updatedAt: Date.now(), messages: [...c.messages, userMsg, asst] };
     }));
   }, [activeId, addMemory, settings, setToolsOpen, setView]);
@@ -243,7 +265,7 @@ export function ChatProvider({ children }: { children: React.ReactNode }) {
     if (!convId) {
       convId = uid('conv');
       const c: Conversation = {
-        id: convId, title: clean.slice(0, 42) || 'Voice conversation',
+        id: convId, title: titleFrom(clean) || 'Voice conversation',
         preview: clean.slice(0, 90),
         createdAt: Date.now(), updatedAt: Date.now(),
         messages: [], model: settings.model, language: settings.defaultLanguage,
@@ -254,7 +276,7 @@ export function ChatProvider({ children }: { children: React.ReactNode }) {
     const userMsg: ChatMessage = { id: uid('msg'), role: 'user', content: clean, createdAt: Date.now() };
     setConversations((prev) => prev.map((c) => {
       if (c.id !== convId) return c;
-      const title = c.messages.length === 0 ? clean.slice(0, 42) : c.title;
+      const title = c.messages.length === 0 ? titleFrom(clean) : c.title;
       return { ...c, title, updatedAt: Date.now(), messages: [...c.messages, userMsg] };
     }));
 
@@ -370,7 +392,7 @@ export function ChatProvider({ children }: { children: React.ReactNode }) {
     if (!convId) {
       convId = uid('conv');
       const c: Conversation = {
-        id: convId, title: clean.slice(0, 42) || 'New conversation',
+        id: convId, title: titleFrom(clean) || 'New conversation',
         preview: clean.slice(0, 90),
         createdAt: Date.now(), updatedAt: Date.now(),
         messages: [], model: settings.model, language: settings.defaultLanguage,
@@ -384,7 +406,7 @@ export function ChatProvider({ children }: { children: React.ReactNode }) {
     };
     setConversations((prev) => prev.map((c) => {
       if (c.id !== convId) return c;
-      const title = c.messages.length === 0 ? clean.slice(0, 42) : c.title;
+      const title = c.messages.length === 0 ? titleFrom(clean) : c.title;
       const preview = c.messages.length === 0 ? clean.slice(0, 90) : c.preview;
       return { ...c, title, preview, updatedAt: Date.now(), messages: [...c.messages, userMsg] };
     }));
@@ -1020,6 +1042,41 @@ export function ChatProvider({ children }: { children: React.ReactNode }) {
     }
   }, [activeId, addMemory, connection, conversations, isGenerating, memories, settings, setLiveTaskId, setMissionsOpen, setMissionDraft, setOsintOpen, setOsintTarget, setStatus, setToolsOpen, setView, toast]);
 
+  /**
+   * Account sync entry point. Additive: it only inserts conversations whose
+   * ids are not already present, so it can never duplicate or reorder what
+   * the user already has locally.
+   */
+  const importConversations = useCallback((rows: {
+    id: string; title: string; createdAt: number; updatedAt: number;
+    messages: { id: string; role: 'user' | 'assistant'; content: string; createdAt: number }[];
+  }[]) => {
+    if (!rows.length) return;
+    setConversations((prev) => {
+      const existing = new Set(prev.map((c) => c.id));
+      const incoming = rows
+        .filter((r) => !existing.has(r.id))
+        .map((r) => ({
+          id: r.id,
+          title: r.title,
+          createdAt: r.createdAt,
+          updatedAt: r.updatedAt,
+          pinned: false,
+          model: settings.model,
+          language: settings.defaultLanguage,
+          preview: r.messages[r.messages.length - 1]?.content.slice(0, 120),
+          messages: r.messages
+            .slice()
+            .sort((a, b) => a.createdAt - b.createdAt)
+            .map((m) => ({
+              id: m.id, role: m.role, content: m.content, createdAt: m.createdAt,
+            })),
+        }));
+      if (!incoming.length) return prev;
+      return [...incoming, ...prev].sort((a, b) => (b.updatedAt ?? b.createdAt) - (a.updatedAt ?? a.createdAt));
+    });
+  }, []);
+
   const regenerate = useCallback(async (msgId?: string) => {
     const conv = conversations.find((c) => c.id === activeId);
     if (!conv || isGenerating) return;
@@ -1141,6 +1198,7 @@ export function ChatProvider({ children }: { children: React.ReactNode }) {
       renameConversation, sendMessage, regenerate, speakMessage, stopGenerating,
       runVoiceTurn, stopVoiceTurn, speculativeTurn, stopSpeculative, commitSpeculativeTurn,
       setFeedback, setVersionIndex, editAndResend, retryFailed,
+      importConversations,
     }}>
       {children}
     </Ctx.Provider>

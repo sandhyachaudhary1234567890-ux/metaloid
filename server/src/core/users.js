@@ -192,6 +192,22 @@ export function deleteUserCascade(userId) {
 
 // ---------- express middleware ----------
 
+const LOCAL_AUTH = { userId: 'local:owner', accountId: 'local:owner', sessionId: 'local', deviceId: null, role: 'owner', via: 'local' };
+
+/** Explicit production disables the local fallback; showcase/opt-in enables it
+ *  anywhere; otherwise it applies only to a same-machine caller when no auth
+ *  backend is configured at all. */
+function localOpenMode(req) {
+  if (process.env.METALOID_MODE === 'production') return false;
+  if (process.env.METALOID_MODE === 'showcase' || process.env.METALOID_ALLOW_ANONYMOUS === 'true') return true;
+  const authConfiguredNow = Boolean(
+    process.env.SUPABASE_JWKS_URL || process.env.SUPABASE_JWT_SECRET || process.env.SUPABASE_PUBLIC_KEY_PEM
+  );
+  if (authConfiguredNow) return false;
+  const ip = String((req.socket && req.socket.remoteAddress) || '');
+  return ip === '::1' || ip.startsWith('127.') || ip.startsWith('::ffff:127.');
+}
+
 /** Attaches req.auth or rejects 401. Never trusts frontend ownership claims.
  * Local sessions first (fast path); Supabase Auth JWTs accepted as fallback
  * so Supabase-authenticated users work end-to-end. Supabase user ids are
@@ -205,12 +221,25 @@ export async function requireAuth(req, res, next) {
     req.auth = auth;
     return next();
   }
+  if (!token && localOpenMode(req)) {
+    // Local dev/demo only: no auth backend is configured and the caller is on
+    // this machine (or the operator explicitly asked for showcase), so
+    // owner-scoped routes run under one local identity instead of 401ing.
+    // A network caller NEVER takes this path, and METALOID_MODE=production
+    // disables it outright — that is what keeps a deployed gateway from
+    // becoming an anonymous proxy for the owner's provider key.
+    req.auth = LOCAL_AUTH;
+    return next();
+  }
   if (token) {
     try {
-      const { supabaseUser } = await import('./supabase.js');
-      const su = await supabaseUser(token);
-      if (su) {
-        req.auth = { userId: 'sb:' + su.id, accountId: 'sb:' + su.id, sessionId: 'sb-session', deviceId: null, via: 'supabase', email: su.email };
+      // ONE Supabase verifier for the whole server: server/src/auth.js checks
+      // the JWT (JWKS / public key / HS256 secret) and returns the raw Supabase
+      // user id, which is also what RLS compares against auth.uid().
+      const { verifyToken } = await import('../auth.js');
+      const su = await verifyToken(token);
+      if (su && su.id) {
+        req.auth = { userId: su.id, accountId: su.id, sessionId: 'sb-session', deviceId: null, via: 'supabase', email: su.email };
         return next();
       }
     } catch { /* fall through to 401 */ }
