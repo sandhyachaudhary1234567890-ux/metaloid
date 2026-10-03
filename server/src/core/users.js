@@ -200,6 +200,15 @@ const LOCAL_AUTH = { userId: 'local:owner', accountId: 'local:owner', sessionId:
  *  backend is configured at all. */
 function localOpenMode(req) {
   if (process.env.METALOID_MODE === 'production') return false;
+  // A hosted platform is never somebody's development machine. Vercel's own
+  // marker is checked here so the fallback cannot depend on remembering to set
+  // METALOID_MODE: a deployment that forgot it, and whose verifier is missing
+  // or misspelled, would otherwise fall through to the loopback test below —
+  // and behind a reverse proxy a loopback-looking remote address is not a
+  // strong guarantee. The consequence of getting this wrong is that /api/chat
+  // becomes an anonymous route to the platform's provider key, so it fails
+  // closed. Local development, which never sets VERCEL, is unaffected.
+  if (process.env.VERCEL) return false;
   if (process.env.METALOID_MODE === 'showcase' || process.env.METALOID_ALLOW_ANONYMOUS === 'true') return true;
   // Ask auth.js, which is the module that actually verifies tokens. This used
   // to re-derive the answer from a hand-written list of env var names, and it

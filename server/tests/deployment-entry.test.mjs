@@ -199,6 +199,85 @@ test('a saved model drives a streamed reply on the deployed entry', async () => 
   assert.ok(Array.isArray(catalogue.json.models) && catalogue.json.models.length > 0, 'the model list is served');
 });
 
+// §19, release-blocking: an unauthenticated caller must not be able to spend
+// the platform's provider key. This asserts the rejection *and* that no model
+// request was made — a 401 alone would not prove the provider was never called.
+test('unauthenticated /api/chat is refused, and no model request is made', async () => {
+  // Count only genuine model traffic. The provider records every request it
+  // sees, including the /__calls poll itself, so counting raw entries would
+  // make this assertion inflate by its own measurement.
+  const modelCalls = async () => {
+    const all = await fetch(`http://127.0.0.1:${providerPort}/__calls`).then((r) => r.json());
+    return all.filter((c) => c.path.endsWith('/chat/completions')).length;
+  };
+
+  const before = await modelCalls();
+
+  const res = await fetch(`${base}/api/chat`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ message: 'spend the platform key' }),
+  });
+  const body = await res.text();
+
+  assert.ok(res.status >= 400, `expected a rejection, got ${res.status}: ${body.slice(0, 200)}`);
+  assert.ok(!/data:\s*\{/.test(body), 'an unauthenticated call must not receive a token stream');
+
+  assert.equal(await modelCalls(), before, 'an unauthenticated call reached the model provider');
+});
+
+// The same question for the legacy surface, which is the one that actually
+// carries the risk. /api/chat sits behind auth.js's verifier, which has no
+// local fallback, so it is closed by construction. The older routes go through
+// core/users.js's requireAuth, which DOES have a local-owner fallback for
+// development — and on a hosted deployment that forgot to configure a verifier
+// it would otherwise answer as the owner to any caller. VERCEL is the marker
+// that makes it fail closed.
+test('hosted legacy routes do not fall back to a local owner identity', async () => {
+  for (const path_ of ['/api/memory', '/api/missions', '/api/usage', '/api/debug/summary']) {
+    const r = await fetch(`${base}${path_}`);
+    assert.ok(
+      r.status === 401 || r.status === 403 || r.status === 503,
+      `${path_} answered ${r.status} to an unauthenticated caller on a hosted deployment`
+    );
+  }
+});
+
+test('a hosted deployment with no verifier still refuses the legacy routes', async () => {
+  // Separate process, because a verifier configured here would hide the case
+  // this is about: no verifier at all, on a hosted host.
+  const child = spawn(process.execPath, [path.join(HERE, '_entry-noauth-server.mjs')], {
+    cwd: ROOT, stdio: ['ignore', 'pipe', 'pipe'],
+    env: { ...process.env },
+  });
+  let out = '';
+  const port = await new Promise((resolve, reject) => {
+    const timer = setTimeout(() => reject(new Error(`no port from the entry server; got: ${out.slice(0, 300)}`)), 15_000);
+    child.stdout.on('data', (d) => {
+      out += d;
+      const m = /READY (\d+)/.exec(out);
+      if (m) { clearTimeout(timer); resolve(Number(m[1])); }
+    });
+    child.stderr.on('data', (d) => { out += d; });
+    child.on('exit', () => { clearTimeout(timer); reject(new Error(`entry server exited early: ${out.slice(0, 300)}`)); });
+  });
+
+  try {
+    const health = await fetch(`http://127.0.0.1:${port}/api/health`).then((r) => r.json());
+    assert.equal(health.auth?.configured, false, 'this control must run with no verifier configured');
+
+    for (const path_ of ['/api/memory', '/api/missions', '/api/usage', '/api/debug/summary']) {
+      const r = await fetch(`http://127.0.0.1:${port}${path_}`);
+      assert.ok(
+        r.status === 401 || r.status === 403 || r.status === 503,
+        `${path_} answered ${r.status} to an unauthenticated caller on a hosted deployment with no verifier`
+      );
+    }
+  } finally {
+    child.kill('SIGKILL');
+  }
+});
+
 test('a wrong route is a clean 404, and unknown api paths are not SPA html', async () => {
   const nope = await api('GET', '/api/v1/does-not-exist', { token: tokenA });
   assert.equal(nope.status, 404);

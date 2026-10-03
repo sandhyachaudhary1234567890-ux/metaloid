@@ -299,7 +299,7 @@ export class OpenRouterAdapter extends ProviderAdapter {
       const response = await fetch(`${this.baseUrl}/models`, {
         headers: {
           'Authorization': `Bearer ${credential.credential}`,
-          'HTTP-Referer': 'http://localhost:5173',
+          'HTTP-Referer': process.env.PUBLIC_APP_URL || 'http://localhost:5173',
           'X-Title': 'METALOID'
         },
         signal: AbortSignal.timeout(8000)
@@ -357,7 +357,7 @@ export class OpenRouterAdapter extends ProviderAdapter {
         headers: {
           'Content-Type': 'application/json',
           'Authorization': `Bearer ${credential.credential}`,
-          'HTTP-Referer': 'http://localhost:5173',
+          'HTTP-Referer': process.env.PUBLIC_APP_URL || 'http://localhost:5173',
           'X-Title': 'METALOID'
         },
         body: JSON.stringify({
@@ -408,7 +408,7 @@ export class OpenRouterAdapter extends ProviderAdapter {
           headers: {
             'Content-Type': 'application/json',
             'Authorization': `Bearer ${credential.credential}`,
-            'HTTP-Referer': 'http://localhost:5173',
+            'HTTP-Referer': process.env.PUBLIC_APP_URL || 'http://localhost:5173',
             'X-Title': 'METALOID'
           },
           body: JSON.stringify({
