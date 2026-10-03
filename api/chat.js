@@ -1,6 +1,4 @@
-const OPENROUTER_KEY =
-  process.env.OPENROUTER_API_KEY ||
-  'REMOVED';
+const OPENROUTER_KEY = process.env.OPENROUTER_API_KEY || '';
 
 const CANDIDATE_MODELS = [
   'meta-llama/llama-3.3-70b-instruct:free',
