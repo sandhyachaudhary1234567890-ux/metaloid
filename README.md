@@ -93,7 +93,7 @@ METALOID runs in two honest modes and says which one it is in:
 
 | Mode | What you get | How to enter it |
 |---|---|---|
-| **Local / sandbox** | everything on-device, no accounts, no network identity required | leave `VITE_SUPABASE_*` empty |
+| **Development** | everything on-device, no accounts, no network identity required. Not a shipping configuration. | leave `VITE_SUPABASE_*` empty |
 | **Account** | real Supabase identity (email + password, verification, reset), conversations/memories synced to Postgres, per-user provider keys, usage + tasks queryable by web *and* Android | set `VITE_SUPABASE_URL` + `VITE_SUPABASE_ANON_KEY` |
 
 **Division of labour** — Supabase owns identity, Postgres, RLS and private
@@ -103,12 +103,58 @@ traffic never goes through Supabase.* The browser talks to the gateway with the
 user's own JWT, so Postgres evaluates RLS as that user; the service-role key
 exists only to sign private objects and to complete an account deletion.
 
+### Environment matrix
+
+One table, three classes. Nothing in the first class may ever appear in the
+second, and a value is never duplicated across both.
+
+**PUBLIC — bundled into the browser.** Safe because the anon key can do
+nothing RLS does not allow, and the API URL is just an address.
+
+| Variable | Notes |
+|---|---|
+| `VITE_SUPABASE_URL` | Project URL. Public by design. |
+| `VITE_SUPABASE_ANON_KEY` | RLS-scoped. Public by design. |
+| `VITE_API_URL` | Gateway origin. Leave unset in local dev (Vite proxies `/api`). |
+
+**SERVER-ONLY — the gateway process.** Never in a `VITE_*` variable, never in
+the repo, never in a response body. Provider keys go in through the API,
+are encrypted with `METALOID_ENCRYPTION_KEYS`, and are never returned —
+`GET /api/v1/provider/credentials` emits a mask (`…0000`) and nothing else.
+
+| Variable | Why it is secret |
+|---|---|
+| `SUPABASE_DB`, `SUPABASE_DB_POOL_URL` | Direct database access; selecting the durable driver. |
+| `SUPABASE_JWT_PUBLIC_KEY` \| `SUPABASE_JWKS_URL` \| `SUPABASE_JWT_SECRET` | Token verification. This is the only thing that makes a request's identity trustworthy. |
+| `SUPABASE_SERVICE_ROLE_KEY` | Bypasses RLS. Used for signed URLs and account erasure, always with an explicit `user_id` predicate. |
+| `SUPABASE_URL`, `SUPABASE_ANON_KEY` | Server-side token introspection fallback. |
+| `METALOID_ENCRYPTION_KEYS`, `METALOID_ENCRYPTION_ACTIVE` | Wraps every stored provider key. Without them the gateway refuses to store a key at all rather than writing it in the clear. |
+| `OPENROUTER_API_KEY`, `NVIDIA_API_KEY` | Platform provider credit. |
+| `METALOID_MODE=production` | Disables the local anonymous fallback outright. |
+| `ALLOW_ORIGINS` | CORS allow-list. |
+| `GITHUB_TOKEN` | Only for the codebase-index tools. |
+
+**OPTIONAL — behaviour tuning with a sane default.**
+
+| Variable | Default |
+|---|---|
+| `METALOID_DATA_DIR` | `server/data` locally, `/tmp/metaloid` on Vercel |
+| `BIND_HOST`, `PORT` | `0.0.0.0`, `8787` |
+| `OPENROUTER_BASE`, `NVIDIA_BASE` | The vendor endpoints. Point them at a proxy or an OpenAI-compatible gateway. |
+| `METALOID_MODE=showcase`, `METALOID_ALLOW_ANONYMOUS` | Off. Enables the same-machine anonymous owner identity for demos only. |
+| `METALOID_PG_POOL_MAX`, `METALOID_JOB_CONCURRENCY`, `METALOID_AUTH_LIMIT` | `5`, `2`, `20` |
+| `ALLOW_LOCAL_ORIGINS`, `ALLOW_MOBILE_ORIGINS`, `ALLOW_VERCEL_PREVIEWS` | Off |
+| `SUPABASE_JWT_ISSUER`, `SUPABASE_JWT_AUDIENCE` | Unset, `authenticated` |
+| `PUBLIC_APP_URL` | Unset |
+
 ### Setting up Supabase
 
 1. **Create the project**, then *Project Settings → API* and copy the project
    URL plus the **anon** key into `.env.local` (see `.env.example`). The anon
    key is safe in the browser — it can do nothing that RLS does not allow.
-2. **Apply the migrations** in order, either with the SQL editor or the CLI:
+2. **Apply the migrations** in order. They are the only description of the
+   schema — there is no second `schema.sql` to paste, because one used to
+   exist and had drifted into a database the gateway could not query:
 
    ```bash
    supabase link --project-ref <ref>
@@ -126,6 +172,19 @@ exists only to sign private objects and to complete an account deletion.
 
    Buckets: `attachments`, `generated`, `avatars` and `artifacts`, all
    **private**; downloads are signed URLs created after an ownership check.
+
+   Proof, not assertion: `node supabase/tests/rls.pglite.mjs` applies every
+   migration to a real PostgreSQL engine, rebuilds the Supabase environment and
+   then grants `anon`/`authenticated` **full** table privileges — the worst case
+   a project can be in — so the 157 properties it checks come from the policies
+   rather than from a missing grant.
+
+   **A production deployment must set `SUPABASE_DB=supabase` and
+   `SUPABASE_DB_POOL_URL`.** Without them the gateway falls back to a local
+   JSON store, which on a serverless host is `/tmp`: the app looks like it
+   works and loses every conversation when the instance recycles.
+   `/api/health` reports the live driver as `data.driver`, so the difference is
+   visible rather than silent.
 3. **Configure the gateway** from `server/.env.example`: service-role key, anon
    key, JWT verification settings, and `METALOID_ENCRYPTION_KEYS`. Without the
    encryption key the gateway refuses to store provider credentials rather than
