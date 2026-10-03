@@ -77,6 +77,50 @@ the catalogue call — never because a variable is set.
 
 ---
 
+## Accounts, sync, and production data
+
+METALOID runs in two honest modes and says which one it is in:
+
+| Mode | What you get | How to enter it |
+|---|---|---|
+| **Local / sandbox** | everything on-device, no accounts, no network identity required | leave `VITE_SUPABASE_*` empty |
+| **Account** | real Supabase identity (email + password, verification, reset), conversations/memories synced to Postgres, per-user provider keys, usage + tasks queryable by web *and* Android | set `VITE_SUPABASE_URL` + `VITE_SUPABASE_ANON_KEY` |
+
+**Division of labour** — Supabase owns identity, Postgres, RLS and private
+object storage. The MetaIoid gateway keeps owning chat, streaming, provider
+routing, agent runtime, research/browser/voice and business logic. *Model
+traffic never goes through Supabase.* The browser talks to the gateway with the
+user's own JWT, so Postgres evaluates RLS as that user; the service-role key
+exists only to sign private objects and to complete an account deletion.
+
+### Setting up Supabase
+
+1. **Create the project**, then *Project Settings → API* and copy the project
+   URL plus the **anon** key into `.env.local` (see `.env.example`). The anon
+   key is safe in the browser — it can do nothing that RLS does not allow.
+2. **Apply the migrations** in order, either with the SQL editor or the CLI:
+
+   ```bash
+   supabase link --project-ref <ref>
+   supabase db push          # supabase/migrations/0001..0003
+   ```
+
+   `0001_core_schema.sql` (tables, UUIDs, FKs, cursors, indexes),
+   `0002_rls_and_grants.sql` (owner-only RLS on every user table, grants,
+   trigger for `profiles`), `0003_storage.sql` (three **private** buckets and
+   their policies). They are plain SQL — re-runnable on any Postgres 15+.
+3. **Configure the gateway** from `server/.env.example`: service-role key, anon
+   key, JWT verification settings, and `METALOID_ENCRYPTION_KEYS`. Without the
+   encryption key the gateway refuses to store provider credentials rather than
+   storing them weakly.
+4. **Turn on email** — *Authentication → Providers → Email*, and set the
+   redirect URLs to `<site>/app/`. Verification and password-reset links land
+   back on the app, which opens the right screen.
+5. **Verify**: `GET /api/health` distinguishes `database`, `auth`,
+   `provider_configured`, `provider_healthy` and `storage` separately. It
+   reports values it actually observed — it never says ONLINE because an env
+   var exists.
+
 ## What is inside
 
 | Layer | Where | What it does |
@@ -119,23 +163,62 @@ Now:
 ## Tests
 
 ```bash
-npm test          # typecheck + 44 tests (app + gateway)
+npm test          # typecheck + 85 tests + 205 security assertions
 ```
 
-- **32 app tests** (vitest + jsdom): transport contract, the four connection
-  states, every screen rendering (including Live with no camera), a full chat
-  round-trip with stubbed SSE, and the voice segmenter — including the
-  Devanagari danda regression that once stopped Hindi from being spoken.
-- **12 gateway tests** (node:test) against `server/tests/fake-provider.mjs`, a
-  controllable provider that can fail the first N models, return 401/429, emit
-  an empty stream or drop the socket — so failover, quarantine and error
-  honesty are proven, not asserted.
+- **49 app tests** (vitest + jsdom): transport contract, the account layer
+  (unconfigured build stays local, session restore, sign-out, recovery mode,
+  and every Supabase error translated into a sentence a person can act on),
+  the `/api/v1` repository contract (no identity in any request body, masked
+  credentials only, cursor pagination, delete confirmation, signed URLs), the
+  four connection states, every screen rendering (including Live with no
+  camera), a full chat round-trip with stubbed SSE, and the voice segmenter —
+  including the Devanagari danda regression that once stopped Hindi from being
+  spoken.
+- **36 gateway tests** (node:test): 12 against `server/tests/fake-provider.mjs`
+  (a controllable provider that fails the first N models, returns 401/429,
+  emits an empty stream or drops the socket — so failover, quarantine and
+  error honesty are proven, not asserted), 15 API/authz tests over the
+  `/api/v1` surface (including per-account rate-limit isolation), and 9
+  credential-encryption tests that run in separate child processes so a
+  rotation or a missing key genuinely proves something.
 
 ```bash
 npm run test:app        # frontend only
 npm run test:server     # gateway only
+npm run test:rls        # RLS security matrix (no database server needed)
 npm run test:server -- --watch
 ```
+
+**Row Level Security is executed, not asserted.** Two suites prove the same
+matrix — anonymous SELECT/INSERT/UPDATE/DELETE, owner CRUD, non-owner
+SELECT/UPDATE/DELETE, private-storage path isolation, and account-deletion
+cascades:
+
+```bash
+npm run test:rls     # both suites, no database server required
+```
+
+- `supabase/tests/rls.pglite.mjs` applies the real migrations to PGlite
+  (PostgreSQL compiled to WebAssembly), recreates `auth.uid()` / `auth.users` /
+  the `storage` schema, then probes **157 properties**. It grants `anon` and
+  `authenticated` full table privileges first, so whatever blocks an attacker is
+  the *policy*, not a missing GRANT — and every probe runs as a non-superuser,
+  because a superuser bypasses RLS and would prove nothing.
+- `supabase/tests/rls_pgtap.pglite.mjs` runs `supabase/tests/rls_test.sql`
+  (plan 48) unmodified against the same stack with a minimal pgTAP
+  implementation, so the file you run against your hosted project is a file
+  that has actually been run.
+
+On a real project, run the same file with `supabase test db`. Running these
+found three real bugs before deployment: `storage.objects` RLS was only
+platform-default rather than stated in the migration; the attachment upload key
+handed to clients repeated the bucket name (which the storage policy — correctly
+— rejects); and the pgTAP helpers set a `role` GUC instead of switching role, so
+the hosted suite would not have tested what it claimed.
+
+The application-level half of the same story (identity always from the JWT,
+never from the request body) is covered by the API tests above.
 
 ---
 
@@ -157,8 +240,25 @@ in-memory missions, OSINT jobs, long SSE streams — it cannot be serverless):
 | `ALLOW_ORIGINS` | `https://<your-site>` |
 | `OPENROUTER_API_KEY` | your key (**rotate anything ever pasted in chat**) |
 | `NVIDIA_ENABLED` | `false` unless the account is entitled |
+| `SUPABASE_URL` / `SUPABASE_ANON_KEY` | project URL + anon key |
+| `SUPABASE_SERVICE_ROLE_KEY` | **server-only** — object signing, deletion |
+| `SUPABASE_JWKS_URL` (+ `_ISSUER`, `_AUDIENCE`) | verifies user JWTs |
+| `METALOID_ENCRYPTION_KEYS` / `_ACTIVE` | `openssl rand -base64 32`, rotation-friendly |
+| `METALOID_DATA_DRIVER` | `supabase` in production, `local` for the demo |
 
-Health check: `GET /api/health` → `ai: true`. `render.yaml` is a blueprint.
+Health check: `GET /api/health` reports `database`, `auth`, `provider_configured`,
+`provider_healthy` and `storage` as separate observed facts — an unset variable
+never reads as ONLINE. `render.yaml` is a blueprint. Full variable list, marked
+client-safe vs server-only, in `.env.example` and `server/.env.example`.
+
+**Backup, restore, rollback.** Take backups with `supabase db dump` (daily at
+minimum) plus Storage object versioning; restore into a scratch project, run
+`supabase/tests/rls_test.sql` there, and only then point DNS at it. Rollback of
+an app deploy is a Vercel/Render revert; rollback of a *schema* change is a new
+forward migration — migrations are append-only, never edited in place. An
+encryption-key rotation is `METALOID_ENCRYPTION_KEYS` gaining a `k2`, then
+`METALOID_ENCRYPTION_ACTIVE=k2`, then a re-encrypt backfill; old keys are kept
+until every row has been rewritten.
 
 ### Same-Wi-Fi phone testing
 
@@ -180,7 +280,21 @@ phone. Details and firewall notes: [`server/README.md`](server/README.md).
 - input caps on every route (message length, body size), per-IP rate limits,
   unhandled-rejection armour, and a graceful drain on SIGTERM;
 - nothing secret is ever logged, and `server/src/core/memory.js` redacts
-  key-shaped strings before they can be stored as memories.
+  key-shaped strings before they can be stored as memories;
+- **RLS is mandatory on every user table** — owner-only policies, no
+  `USING (true)`, and the gateway holds a user-scoped client built from the
+  caller's JWT for normal traffic;
+- the service-role key is used for exactly three jobs (signing private objects,
+  storage cleanup during deletion, deleting the auth user) and never reaches a
+  browser, an APK, a repo or a response;
+- user provider API keys are stored **encrypted** with AES-256-GCM under a key
+  from the environment, in a versioned envelope
+  (`v1:<keyId>:<iv>:<tag>:<ciphertext>`); API responses contain only
+  `connected | invalid | needs_setup` plus a masked identifier such as
+  `sk-or-…4f2a`. There is no route that returns a raw key, and no log line
+  that contains one;
+- demo mode can never masquerade as a real connection: SANDBOX / LOCAL DEMO /
+  ONLINE / DEGRADED are computed from observed facts.
 
 ## Layout
 
@@ -189,9 +303,22 @@ landing/               marketing page (served at /)
 src/                   the product (served at /app/)
   lib/transport.ts     the only network layer
   lib/voice/           streaming voice loop
+  lib/supabase.ts      the only place the browser client is created
+  lib/auth.tsx         sessions: signup, login, verify, reset, sign-out
+  lib/repo.ts          the only place the app calls /api/v1
+  screens/AuthScreen.tsx
 server/                gateway (Express + SSE)
   src/openrouter.js    model router, failover, quarantine
-  tests/               gateway tests + fake provider
+  src/api/v1.js        the authenticated product API (web + Android)
+  src/auth.js          JWT verification (JWKS / public key / HS256)
+  src/crypto.js        AES-256-GCM envelope for provider credentials
+  src/data/            local + Supabase drivers behind one interface
+  tools/loadtest.mjs   measured load, not claimed load
+  tests/               gateway + API tests, fake provider
+supabase/
+  migrations/          0001 schema · 0002 RLS · 0003 storage
+  tests/rls_test.sql   pgTAP: anonymous / owner / non-owner on every table
+docs/ANDROID_API.md    the contract Android builds against
 scripts/showcase.mjs   one-command demo
 ```
 
@@ -200,8 +327,18 @@ scripts/showcase.mjs   one-command demo
 Working today: streaming chat with failover · voice loop with barge-in ·
 vision path · missions with approvals and checkpoints · OSINT investigations
 with reports · memory vault with redaction · model router and picker · landing
-page · 30 tests · deploy-ready build.
+page · real accounts with verified email, sync, per-user provider keys,
+usage and agent-task state · 85 tests + 205 security assertions · deploy-ready build.
 
-Deliberately still local-first: history and memories are browser storage until
-you point the app at a server database. Provider keys are yours; nothing is
-proxied through anyone else.
+Local-first by default and account-backed when you want it: point the app at a
+Supabase project and conversations, memories, preferences and tasks follow the
+user across devices — including the Android client, which talks only to these
+APIs and never to the tables. Provider keys are yours; nothing is proxied
+through anyone else.
+
+**Known limits, stated honestly:** the load numbers are in
+[`docs/ANDROID_API.md`](docs/ANDROID_API.md#11-load-characteristics) — measured on
+a laptop against the local driver, not on production Supabase, so treat them as
+a lower bound and a bottleneck list rather than a capacity claim. RLS policies
+ship as SQL with pgTAP tests that must be run against a real database. There is
+no admin console, no team/org model, and no billing.

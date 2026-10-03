@@ -1,10 +1,15 @@
 import { useEffect } from 'react';
 import { useApp } from '../lib/store';
 
-export function useKeyboardShortcuts() {
+/**
+ * Global accelerators. `disabled` is used while the sign-in gate is up so a
+ * keystroke cannot open a palette or a voice overlay behind the auth screen.
+ */
+export function useKeyboardShortcuts(disabled = false) {
   const { setPaletteOpen, paletteOpen, closeModal, setVoiceOpen, voiceOpen, newConversation, setView } = useApp();
 
   useEffect(() => {
+    if (disabled) return;
     const onKey = (e: KeyboardEvent) => {
       const mod = e.metaKey || e.ctrlKey;
       if (mod && e.key.toLowerCase() === 'k') {

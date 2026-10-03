@@ -11,13 +11,18 @@
 -- counts rows. If a policy is missing or wrong, the counts change and the
 -- suite fails.
 --
+-- Assertion style: a data-modifying statement is run on its own line and the
+-- result is then inspected. PostgreSQL refuses a data-modifying CTE inside a
+-- function argument ("must be at the top level"), so `is((with … ) …)` is not
+-- usable — every DML probe here is a plain statement followed by a check.
+--
 --   anon            → sees nothing, writes nothing
 --   owner (A)       → full DML on A's rows
 --   non-owner (B)   → zero rows, zero successful updates/deletes
 -- ═══════════════════════════════════════════════════════════════════════
 
 begin;
-select plan(34);
+select plan(48);
 
 -- ── fixtures: two auth users and one row each ──────────────────────────
 insert into auth.users (id, instance_id, aud, role, email, encrypted_password, email_confirmed_at, created_at, updated_at)
@@ -67,15 +72,46 @@ insert into public.attachments (id, user_id, conversation_id, bucket, storage_pa
   ('bbbbbbbb-0000-0000-0000-0000000000aa', '22222222-2222-2222-2222-222222222222', 'bbbbbbbb-0000-0000-0000-000000000001', 'attachments', 'attachments/22222222-2222-2222-2222-222222222222/bbbbbbbb-0000-0000-0000-0000000000aa/b.txt', 'b.txt')
 on conflict (id) do nothing;
 
--- ── helpers that mimic PostgREST ───────────────────────────────────────
-create or replace function pg_temp.as_anon() returns void language sql as $$
-  select set_config('role', 'anon', true), set_config('request.jwt.claims', '{}', true);
-$$;
+-- ── private storage fixtures ───────────────────────────────────────────
+-- storage.objects.name is the key INSIDE the bucket (the bucket is a separate
+-- column), so it starts at the owner id. public.attachments.storage_path keeps
+-- the fully-qualified form.
+insert into storage.objects (id, bucket_id, name, owner) values
+  ('aaaaaaaa-0000-0000-0000-0000000000f1', 'attachments',
+   '11111111-1111-1111-1111-111111111111/aaaaaaaa-0000-0000-0000-0000000000aa/a.txt',
+   '11111111-1111-1111-1111-111111111111'),
+  ('bbbbbbbb-0000-0000-0000-0000000000f1', 'attachments',
+   '22222222-2222-2222-2222-222222222222/bbbbbbbb-0000-0000-0000-0000000000aa/b.txt',
+   '22222222-2222-2222-2222-222222222222')
+on conflict (id) do nothing;
 
-create or replace function pg_temp.as_user(uid uuid) returns void language sql as $$
-  select set_config('role', 'authenticated', true),
-         set_config('request.jwt.claims', json_build_object('sub', uid::text, 'role', 'authenticated')::text, true);
-$$;
+-- ── helpers that mimic PostgREST ───────────────────────────────────────
+-- These switch the *actual* role, not just the `role` GUC: a superuser (and a
+-- table owner, without FORCE RLS) bypasses row level security entirely, so a
+-- helper that only sets a GUC would make every assertion below meaningless.
+create or replace function pg_temp.as_anon() returns void language plpgsql as $$
+begin
+  perform set_config('request.jwt.claim.sub', '', true);
+  perform set_config('request.jwt.claim.role', 'anon', true);
+  perform set_config('request.jwt.claims', '{"role":"anon"}', true);
+  execute 'set local role anon';
+end $$;
+
+-- returns the session to the connecting role, so an assertion can inspect what
+-- a probe under `anon` / `authenticated` actually did
+create or replace function pg_temp.as_admin() returns void language plpgsql as $$
+begin
+  execute 'reset role';
+end $$;
+
+create or replace function pg_temp.as_user(uid uuid) returns void language plpgsql as $$
+begin
+  perform set_config('request.jwt.claim.sub', uid::text, true);
+  perform set_config('request.jwt.claim.role', 'authenticated', true);
+  perform set_config('request.jwt.claims',
+    json_build_object('sub', uid::text, 'role', 'authenticated')::text, true);
+  execute 'set local role authenticated';
+end $$;
 
 -- ══════════════════════ ANON: nothing at all ══════════════════════════
 select pg_temp.as_anon();
@@ -101,13 +137,27 @@ select throws_ok(
      values ('11111111-1111-1111-1111-111111111111', 'anon memory') $$,
   '42501', null, 'anon: memories INSERT is denied');
 
-select is(
-  (with u as (update public.conversations set title = 'hacked' returning 1) select count(*) from u),
-  0::bigint, 'anon: conversations UPDATE touches no rows');
+select pg_temp.as_anon();
+update public.conversations set title = 'hacked';
+select pg_temp.as_admin();
+select is((select count(*) from public.conversations where title = 'hacked'), 0::bigint,
+  'anon: conversations UPDATE touches no rows');
+select pg_temp.as_anon();
 
-select is(
-  (with d as (delete from public.messages returning 1) select count(*) from d),
-  0::bigint, 'anon: messages DELETE touches no rows');
+select is((select count(*) from storage.objects), 0::bigint,
+  'anon: private storage objects are invisible');
+select throws_ok(
+  $$ insert into storage.objects (bucket_id, name)
+     values ('attachments', '11111111-1111-1111-1111-111111111111/x/y.txt') $$,
+  '42501', null, 'anon: cannot write into private storage');
+select is((select count(*) from storage.buckets where public), 0::bigint,
+  'anon: no bucket is public');
+
+delete from public.messages;
+select pg_temp.as_admin();
+select is((select count(*) from public.messages), 2::bigint,
+  'anon: messages DELETE touches no rows');
+select pg_temp.as_anon();
 
 -- ══════════════════════ OWNER (A): full access to A ═══════════════════
 select pg_temp.as_user('11111111-1111-1111-1111-111111111111');
@@ -122,6 +172,18 @@ select is((select count(*) from public.profiles), 1::bigint,
   'owner: sees exactly their own profile');
 select is((select count(*) from public.attachments), 1::bigint,
   'owner: sees exactly their own attachment');
+select is((select count(*) from storage.objects
+           where name like '11111111-1111-1111-1111-111111111111/%'), 1::bigint,
+  'owner: sees exactly their own stored object');
+select lives_ok(
+  $$ insert into storage.objects (bucket_id, name)
+     values ('attachments', '11111111-1111-1111-1111-111111111111/new/file.txt') $$,
+  'owner: can write under their own folder');
+select throws_ok(
+  $$ insert into storage.objects (bucket_id, name)
+     values ('attachments', 'attachments/11111111-1111-1111-1111-111111111111/x/y.txt') $$,
+  '42501', null,
+  'owner: a key that repeats the bucket name is rejected (bucket is not part of the key)');
 select is((select count(*) from public.agent_tasks), 1::bigint,
   'owner: sees exactly their own agent task');
 select is((select count(*) from public.usage_events), 1::bigint,
@@ -172,29 +234,34 @@ select is((select count(*) from public.user_provider_credentials
            where user_id = '11111111-1111-1111-1111-111111111111'), 0::bigint,
   'non-owner: cannot SELECT user A provider credentials (the critical test)');
 
-select is(
-  (with u as (update public.conversations set title = 'pwned'
-              where id = 'aaaaaaaa-0000-0000-0000-000000000001' returning 1)
-   select count(*) from u),
-  0::bigint, 'non-owner: cannot UPDATE user A conversation');
+select pg_temp.as_user('22222222-2222-2222-2222-222222222222');
+update public.conversations set title = 'pwned'
+  where id = 'aaaaaaaa-0000-0000-0000-000000000001';
+select pg_temp.as_admin();
+select is((select count(*) from public.conversations where title = 'pwned'), 0::bigint,
+  'non-owner: cannot UPDATE user A conversation');
 
-select is(
-  (with u as (update public.memories set content = 'pwned'
-              where user_id = '11111111-1111-1111-1111-111111111111' returning 1)
-   select count(*) from u),
-  0::bigint, 'non-owner: cannot UPDATE user A memories');
+select pg_temp.as_user('22222222-2222-2222-2222-222222222222');
+update public.memories set content = 'pwned'
+  where user_id = '11111111-1111-1111-1111-111111111111';
+select pg_temp.as_admin();
+select is((select count(*) from public.memories where content = 'pwned'), 0::bigint,
+  'non-owner: cannot UPDATE user A memories');
 
-select is(
-  (with d as (delete from public.conversations
-              where id = 'aaaaaaaa-0000-0000-0000-000000000001' returning 1)
-   select count(*) from d),
-  0::bigint, 'non-owner: cannot DELETE user A conversation');
+select pg_temp.as_user('22222222-2222-2222-2222-222222222222');
+delete from public.conversations where id = 'aaaaaaaa-0000-0000-0000-000000000001';
+select pg_temp.as_admin();
+select is((select count(*) from public.conversations
+           where id = 'aaaaaaaa-0000-0000-0000-000000000001'), 1::bigint,
+  'non-owner: cannot DELETE user A conversation');
+select pg_temp.as_user('22222222-2222-2222-2222-222222222222');
 
-select is(
-  (with d as (delete from public.messages
-              where user_id = '11111111-1111-1111-1111-111111111111' returning 1)
-   select count(*) from d),
-  0::bigint, 'non-owner: cannot DELETE user A messages');
+delete from public.messages where user_id = '11111111-1111-1111-1111-111111111111';
+select pg_temp.as_admin();
+select is((select count(*) from public.messages
+           where user_id = '11111111-1111-1111-1111-111111111111'), 1::bigint,
+  'non-owner: cannot DELETE user A messages');
+select pg_temp.as_user('22222222-2222-2222-2222-222222222222');
 
 select throws_ok(
   $$ insert into public.messages (conversation_id, user_id, role, content)
@@ -216,8 +283,42 @@ select throws_ok(
              'attachments/11111111-1111-1111-1111-111111111111/forged2/y.txt', 'y.txt') $$,
   '42501', null, 'path isolation: storage_path must start with the caller id');
 
+select is((select count(*) from storage.objects
+           where name like '11111111-1111-1111-1111-111111111111/%'), 0::bigint,
+  'non-owner: cannot see any of user A stored objects');
+select throws_ok(
+  $$ insert into storage.objects (bucket_id, name)
+     values ('attachments', '11111111-1111-1111-1111-111111111111/x/steal.txt') $$,
+  '42501', null, 'non-owner: cannot write into user A folder');
+delete from storage.objects where name like '11111111-1111-1111-1111-111111111111/%';
+select pg_temp.as_admin();
+select is((select count(*) from storage.objects
+           where id = 'aaaaaaaa-0000-0000-0000-0000000000f1'), 1::bigint,
+  'non-owner: cannot delete user A stored object');
+select pg_temp.as_user('22222222-2222-2222-2222-222222222222');
+
 select is((select count(*) from public.conversations), 1::bigint,
   'non-owner: sees exactly their own one conversation');
+select is((select count(*) from storage.buckets), 3::bigint,
+  'exactly the three expected private buckets exist');
+
+-- ── account deletion cascades ──────────────────────────────────────────
+-- (run last: it destroys user A's rows on purpose, inside this transaction.
+-- Account deletion is a server-side operation, so it runs as the connecting
+-- role — the gateway does it with the service role, never with a user token.)
+select pg_temp.as_admin();
+select lives_ok(
+  $$ delete from auth.users where id = '11111111-1111-1111-1111-111111111111' $$,
+  'deleting an auth user is allowed');
+select is((select count(*) from public.profiles
+           where id = '11111111-1111-1111-1111-111111111111'), 0::bigint,
+  'deletion: the profile is gone');
+select is((select count(*) from public.conversations
+           where user_id = '11111111-1111-1111-1111-111111111111'), 0::bigint,
+  'deletion: conversations cascade away');
+select is((select count(*) from public.user_provider_credentials
+           where user_id = '11111111-1111-1111-1111-111111111111'), 0::bigint,
+  'deletion: stored provider credentials cascade away');
 
 select * from finish();
 rollback;

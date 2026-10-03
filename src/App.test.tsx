@@ -6,6 +6,7 @@ import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import { render, screen, waitFor, cleanup, fireEvent } from '@testing-library/react';
 import App from './App';
 import { StoreProviders } from './store';
+import { AuthProvider } from './lib/auth';
 
 const health = {
   ok: true, server: true, ai: true, voice: false, vision: true, realtime: true, database: false,
@@ -39,11 +40,15 @@ function stubNetwork(chatEvents: unknown[] = [
   }));
 }
 
+// Mirrors main.tsx: the real app always has the auth provider above the
+// stores, so the tests mount the same tree.
 function mount() {
   return render(
-    <StoreProviders>
-      <App />
-    </StoreProviders>
+    <AuthProvider>
+      <StoreProviders>
+        <App />
+      </StoreProviders>
+    </AuthProvider>
   );
 }
 

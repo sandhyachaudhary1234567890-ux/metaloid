@@ -45,6 +45,11 @@ interface ChatValue {
   ) => { promise: Promise<string>; abort: () => void };
   stopSpeculative: () => void;
   commitSpeculativeTurn: (transcript: string, full: string) => void;
+  /** Merge conversations fetched from the account API (deduped by id). */
+  importConversations: (rows: {
+    id: string; title: string; createdAt: number; updatedAt: number;
+    messages: { id: string; role: 'user' | 'assistant'; content: string; createdAt: number }[];
+  }[]) => void;
 }
 
 const Ctx = createContext<ChatValue | null>(null);
@@ -523,6 +528,41 @@ export function ChatProvider({ children }: { children: React.ReactNode }) {
     }
   }, [activeId, addMemory, connection, conversations, isGenerating, memories, settings, setMissionsOpen, setMissionDraft, setOsintOpen, setOsintTarget, setStatus, setToolsOpen, setView, toast]);
 
+  /**
+   * Account sync entry point. Additive: it only inserts conversations whose
+   * ids are not already present, so it can never duplicate or reorder what
+   * the user already has locally.
+   */
+  const importConversations = useCallback((rows: {
+    id: string; title: string; createdAt: number; updatedAt: number;
+    messages: { id: string; role: 'user' | 'assistant'; content: string; createdAt: number }[];
+  }[]) => {
+    if (!rows.length) return;
+    setConversations((prev) => {
+      const existing = new Set(prev.map((c) => c.id));
+      const incoming = rows
+        .filter((r) => !existing.has(r.id))
+        .map((r) => ({
+          id: r.id,
+          title: r.title,
+          createdAt: r.createdAt,
+          updatedAt: r.updatedAt,
+          pinned: false,
+          model: settings.model,
+          language: settings.defaultLanguage,
+          preview: r.messages[r.messages.length - 1]?.content.slice(0, 120),
+          messages: r.messages
+            .slice()
+            .sort((a, b) => a.createdAt - b.createdAt)
+            .map((m) => ({
+              id: m.id, role: m.role, content: m.content, createdAt: m.createdAt,
+            })),
+        }));
+      if (!incoming.length) return prev;
+      return [...incoming, ...prev].sort((a, b) => (b.updatedAt ?? b.createdAt) - (a.updatedAt ?? a.createdAt));
+    });
+  }, []);
+
   const regenerate = useCallback(async (msgId?: string) => {
     const conv = conversations.find((c) => c.id === activeId);
     if (!conv || isGenerating) return;
@@ -644,6 +684,7 @@ export function ChatProvider({ children }: { children: React.ReactNode }) {
       renameConversation, sendMessage, regenerate, speakMessage, stopGenerating,
       runVoiceTurn, stopVoiceTurn, speculativeTurn, stopSpeculative, commitSpeculativeTurn,
       setFeedback, setVersionIndex, editAndResend, retryFailed,
+      importConversations,
     }}>
       {children}
     </Ctx.Provider>

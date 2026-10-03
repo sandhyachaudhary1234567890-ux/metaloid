@@ -24,6 +24,12 @@ on conflict (id) do update
       file_size_limit = excluded.file_size_limit,
       allowed_mime_types = excluded.allowed_mime_types;
 
+-- RLS on storage.objects is on by default in a hosted project, but the
+-- migration states it explicitly: a policy set that is only enforced because
+-- of platform defaults is one dashboard toggle away from not being enforced.
+alter table storage.objects enable row level security;
+alter table storage.objects force row level security;
+
 -- ── object policies ────────────────────────────────────────────────────
 -- (storage.foldername(name))[1] is the first path segment = the owner's uuid.
 -- A user can therefore never read, overwrite or delete another user's object,

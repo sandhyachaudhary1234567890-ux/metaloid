@@ -3,18 +3,19 @@
   "private": true,
   "version": "0.1.0",
   "type": "module",
-  "description": "metaloid — private personal AI operating system (frontend prototype)",
+  "description": "metaloid \u2014 private personal AI operating system (frontend prototype)",
   "scripts": {
     "dev": "vite",
     "build": "tsc -b && vite build && node scripts/build-landing.mjs",
     "preview": "vite preview",
     "check": "tsc --noEmit",
-    "test": "npm run check && vitest run && npm --prefix server test",
+    "test": "npm run check && vitest run && npm --prefix server test && npm run test:rls",
     "test:app": "vitest run",
     "test:server": "npm --prefix server test",
     "gateway": "npm --prefix server start",
     "gateway:dev": "npm --prefix server run dev",
-    "showcase": "node scripts/showcase.mjs"
+    "showcase": "node scripts/showcase.mjs",
+    "test:rls": "node supabase/tests/rls.pglite.mjs && node supabase/tests/rls_pgtap.pglite.mjs"
   },
   "dependencies": {
     "@supabase/supabase-js": "^2.117.2",
@@ -27,6 +28,7 @@
     "three": "^0.163.0"
   },
   "devDependencies": {
+    "@electric-sql/pglite": "^0.5.8",
     "@testing-library/dom": "^10.4.2",
     "@testing-library/react": "^16.3.3",
     "@types/node": "^26.6.2",

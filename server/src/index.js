@@ -16,6 +16,7 @@ import {
   catalogueStatus, PROVIDER_LABEL,
 } from './openrouter.js';
 import { streamNvidia, NVIDIA_SMART } from './nvidia.js';
+import { rateLimit, userRateLimit } from './limits.js';
 // NVIDIA fallback is OFF unless explicitly enabled: this account's key has
 // no function entitlements (every model 404s "not found for account").
 // Set NVIDIA_ENABLED=true only with an entitled key — otherwise failures
@@ -123,20 +124,6 @@ app.use((req, res, next) => {
   res.setHeader('X-Metaloid-Gateway', '1');
   next();
 });
-
-// ---- tiny in-memory rate limiter ----
-const hits = new Map();
-function rateLimit(max, windowMs) {
-  return (req, res, next) => {
-    const ip = req.ip || 'local';
-    const now = Date.now();
-    const arr = (hits.get(ip) || []).filter((t) => now - t < windowMs);
-    arr.push(now);
-    hits.set(ip, arr);
-    if (arr.length > max) return res.status(429).json({ error: 'Rate limited. Slow down.' });
-    next();
-  };
-}
 
 // ---- observability wiring (user UI stays clean; debug surface here) ----
 onEvent('*', (e) => track(e.type, e));

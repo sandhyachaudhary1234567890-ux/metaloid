@@ -24,6 +24,9 @@ import { SettingsScreen } from './screens/SettingsScreen';
 import { WifiOff, Smartphone } from 'lucide-react';
 
 import { MetaIoidLockup, MetaIoidFavicon } from './components/brand';
+import { AuthScreen } from './screens/AuthScreen';
+import { useAuth } from './lib/auth';
+import { useAccountSync } from './lib/sync';
 
 function MobileTopBar({ onDeviceMorph }: { onDeviceMorph: () => void }) {
   return (
@@ -45,7 +48,15 @@ function MobileTopBar({ onDeviceMorph }: { onDeviceMorph: () => void }) {
 }
 
 export default function App() {
-  useKeyboardShortcuts();
+  const auth = useAuth();
+  // Keeps the account copy in step with the local stores. A no-op when
+  // signed out — the sandbox demo never needs an account.
+  useAccountSync();
+
+  // Gate on the session only when an auth service is actually configured:
+  // an unconfigured build must remain fully usable offline.
+  const gate = auth.configured && auth.status !== 'signed-in';
+  useKeyboardShortcuts(gate);
   const {
     view, newConversation, setView, status, setStatus, voiceOpen,
     settings, connection, missionsOpen, setMissionsOpen, missionDraft,
@@ -78,6 +89,20 @@ export default function App() {
     history: { title: 'History', sub: 'Past conversations' },
     settings: { title: 'Settings', sub: 'Configuration' },
   };
+
+  if (gate) {
+    if (auth.status === 'loading') {
+      return (
+        <div className="h-full flex items-center justify-center bg-[var(--bg)] text-[var(--fg-muted)]">
+          <div className="flex flex-col items-center gap-3">
+            <div className="h-8 w-8 rounded-full border-2 border-[var(--border)] border-t-[var(--accent)] animate-spin" />
+            <span className="text-[12.5px] tracking-wide">Restoring your session…</span>
+          </div>
+        </div>
+      );
+    }
+    return <AuthScreen />;
+  }
 
   return (
     <div className="h-full flex bg-[var(--bg)] text-[var(--fg)] overflow-hidden transition-colors duration-150">

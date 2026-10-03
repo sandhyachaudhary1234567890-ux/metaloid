@@ -25,8 +25,25 @@ import {
   usage, tasks, toolEvents, attachments, profiles, deleteUserData, driverName,
 } from '../data/index.js';
 import { encryptionConfigured } from '../crypto.js';
+import { userRateLimit } from '../limits.js';
 
 const router = express.Router();
+
+// ── user-aware rate limits ──────────────────────────────────────────────
+// Keyed on the authenticated account, not the IP: a shared office NAT must
+// not turn one user's burst into another user's outage, and a leaked token
+// must not be able to burn an unlimited budget. The baseline applies to the
+// whole router; spending real money or CPU gets a tighter bucket on top.
+const LIMITS = {
+  baseline: userRateLimit(600, 60_000),      // any authenticated route
+  chat: userRateLimit(120, 60_000),          // appending messages
+  upload: userRateLimit(30, 60_000),         // attachment records
+  providerWrite: userRateLimit(20, 60_000),  // storing/testing provider keys
+  task: userRateLimit(60, 60_000),           // agent tasks + tool events
+  usage: userRateLimit(300, 60_000),         // usage telemetry
+  danger: userRateLimit(5, 60 * 60_000),     // account deletion
+};
+router.use(LIMITS.baseline);
 
 // ── tiny helpers ────────────────────────────────────────────────────────
 const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
@@ -68,7 +85,7 @@ router.patch('/me', h(async (req, res) => {
  * Account deletion: identity from the session only. A caller can only ever
  * delete themselves — there is no id parameter to abuse.
  */
-router.delete('/me', h(async (req, res) => {
+router.delete('/me', LIMITS.danger, h(async (req, res) => {
   if (req.body?.confirm !== 'DELETE') {
     return bad(res, 'invalid_input', 'Send { "confirm": "DELETE" } to delete this account.');
   }
@@ -122,7 +139,7 @@ router.get('/conversations/:id/messages', h(async (req, res) => {
   res.json(out);
 }));
 
-router.post('/conversations/:id/messages', h(async (req, res) => {
+router.post('/conversations/:id/messages', LIMITS.chat, h(async (req, res) => {
   if (!isUuid(req.params.id)) return bad(res, 'invalid_input', 'Malformed conversation id.');
   const b = req.body || {};
   const role = ['user', 'assistant', 'tool', 'system'].includes(b.role) ? b.role : 'user';
@@ -221,7 +238,7 @@ router.get('/provider/credentials', h(async (req, res) => {
   });
 }));
 
-router.put('/provider/credentials/:provider', h(async (req, res) => {
+router.put('/provider/credentials/:provider', LIMITS.providerWrite, h(async (req, res) => {
   const provider = String(req.params.provider || '').slice(0, 40);
   if (!/^[a-z0-9_-]+$/i.test(provider)) return bad(res, 'invalid_input', 'Malformed provider id.');
   const secret = req.body?.api_key;
@@ -247,7 +264,7 @@ router.put('/provider/credentials/:provider', h(async (req, res) => {
  * Connection test. The secret is decrypted in memory for the outbound call
  * and never echoed — the response says only whether the provider accepted it.
  */
-router.post('/provider/credentials/:provider/test', h(async (req, res) => {
+router.post('/provider/credentials/:provider/test', LIMITS.providerWrite, h(async (req, res) => {
   const provider = String(req.params.provider || '').slice(0, 40);
   if (!/^[a-z0-9_-]+$/i.test(provider)) return bad(res, 'invalid_input', 'Malformed provider id.');
   const label = typeof req.body?.label === 'string' ? req.body.label.slice(0, 40) : 'default';
@@ -323,7 +340,7 @@ router.get('/usage', h(async (req, res) => {
   res.json(await usage.list(ctx(req), limitQ(req.query)));
 }));
 
-router.post('/usage', h(async (req, res) => {
+router.post('/usage', LIMITS.usage, h(async (req, res) => {
   const b = req.body || {};
   const row = await usage.record(ctx(req), {
     provider: typeof b.provider === 'string' ? b.provider.slice(0, 40) : null,
@@ -343,7 +360,7 @@ router.get('/tasks', h(async (req, res) => {
   res.json(await tasks.list(ctx(req), { ...limitQ(req.query), status: req.query.status }));
 }));
 
-router.post('/tasks', h(async (req, res) => {
+router.post('/tasks', LIMITS.task, h(async (req, res) => {
   const b = req.body || {};
   if (typeof b.type !== 'string' || !b.type.trim()) return bad(res, 'invalid_input', 'Task type is required.');
   const task = await tasks.create(ctx(req), {
@@ -368,7 +385,7 @@ router.patch('/tasks/:id', h(async (req, res) => {
   res.json({ task });
 }));
 
-router.post('/tool-events', h(async (req, res) => {
+router.post('/tool-events', LIMITS.task, h(async (req, res) => {
   const b = req.body || {};
   if (typeof b.tool !== 'string' || !b.tool.trim()) return bad(res, 'invalid_input', 'Tool name is required.');
   const event = await toolEvents.record(ctx(req), {
@@ -388,7 +405,7 @@ router.get('/attachments', h(async (req, res) => {
   }));
 }));
 
-router.post('/attachments', h(async (req, res) => {
+router.post('/attachments', LIMITS.upload, h(async (req, res) => {
   const b = req.body || {};
   if (typeof b.filename !== 'string' || !b.filename.trim()) {
     return bad(res, 'invalid_input', 'filename is required.');
@@ -402,9 +419,18 @@ router.post('/attachments', h(async (req, res) => {
     size_bytes: size,
   });
   if (!row) return bad(res, 'not_found', 'Conversation not found.', 404);
-  // The client uploads to this exact path; the DB row and the object key are
-  // the same string, so a mismatch is impossible rather than merely unlikely.
-  res.status(201).json({ attachment: row, upload: { bucket: row.bucket, path: row.storage_path } });
+  // The object key INSIDE the bucket is `{user_id}/{file_id}/{filename}` —
+  // that is what the storage SDK takes, and what the storage RLS policy reads
+  // when it compares the first folder to auth.uid(). The row keeps the fully
+  // qualified `{bucket}/{user_id}/{file_id}/{filename}` path so the database
+  // record and the object can never drift apart. Both are returned.
+  const key = row.storage_path.startsWith(`${row.bucket}/`)
+    ? row.storage_path.slice(row.bucket.length + 1)
+    : row.storage_path;
+  res.status(201).json({
+    attachment: row,
+    upload: { bucket: row.bucket, path: key, storage_path: row.storage_path },
+  });
 }));
 
 router.patch('/attachments/:id', h(async (req, res) => {

@@ -297,6 +297,16 @@ test('attachments: paths are namespaced and signing requires ownership', async (
     assert.match(att.json.attachment.storage_path, new RegExp(`^attachments/${USER_A}/`),
       'the object path must be namespaced under the owning user');
 
+    // The upload target is the key INSIDE the bucket (what the storage SDK
+    // wants, and what the storage RLS policy checks), while the row keeps the
+    // fully-qualified path. Handing the client the fully-qualified string
+    // would make every upload land under a folder RLS forbids.
+    assert.equal(att.json.upload.bucket, 'attachments');
+    assert.match(att.json.upload.path, new RegExp(`^${USER_A}/`), 'upload key must start with the owner id');
+    assert.ok(!att.json.upload.path.startsWith('attachments/'), 'upload key must not repeat the bucket name');
+    assert.equal(att.json.upload.storage_path, att.json.attachment.storage_path);
+    assert.equal(`attachments/${att.json.upload.path}`, att.json.attachment.storage_path);
+
     // B cannot ask for a signed URL for A's object — ownership is decided
     // before anything else happens
     const signB = await g.api('GET', `/api/v1/attachments/${att.json.attachment.id}/url`, { token: tokenB });
@@ -468,5 +478,36 @@ test('health never reports ONLINE when the identity provider is unconfigured', a
     const res = await g.api('GET', '/api/v1/me', { token: tokenA });
     assert.equal(res.status, 503);
     assert.equal(res.json.code, 'auth_unconfigured');
+  } finally { g.stop(); }
+});
+
+// ═══════════════════════ rate limits are per account ═══════════════════
+
+test('a burst from one account is throttled without touching another account', async () => {
+  const g = await boot();
+  try {
+    let throttled = null;
+    // the provider-write bucket is 20/min; the limiter runs before the
+    // handler, so a rejected payload still spends the budget
+    for (let i = 0; i < 25 && !throttled; i += 1) {
+      const r = await g.api('PUT', '/api/v1/provider/credentials/openrouter', {
+        token: tokenA, body: { api_key: 'short' },
+      });
+      if (r.status === 429) throttled = r;
+    }
+    assert.ok(throttled, 'user A should eventually be throttled');
+    assert.equal(throttled.json.code, 'rate_limited');
+    assert.ok(Number(throttled.json.retry_after) > 0);
+
+    // the same burst must not have spent user B's budget
+    const other = await g.api('PUT', '/api/v1/provider/credentials/openrouter', {
+      token: tokenB, body: { api_key: 'short' },
+    });
+    assert.notEqual(other.status, 429, "user B inherits user A's throttling");
+    assert.equal(other.status, 400);
+
+    // and an unauthenticated caller gets no bucket at all — just a 401
+    const anon = await g.api('PUT', '/api/v1/provider/credentials/openrouter', { body: { api_key: 'short' } });
+    assert.equal(anon.status, 401);
   } finally { g.stop(); }
 });
