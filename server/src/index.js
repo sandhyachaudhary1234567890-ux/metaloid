@@ -1670,6 +1670,16 @@ const serve = tlsOn
   // that cannot drain on SIGTERM is killed mid-stream on every deploy.
   : http.createServer(app);
 
+/**
+ * Serverless hosts (Vercel) import this module and own the lifecycle: they
+ * call the exported `app` per request and must never have a listening socket
+ * created for them. A long-running process (local, Render, a container) is
+ * the case that needs `listen`.
+ */
+export const SERVERLESS = Boolean(process.env.VERCEL) || process.env.METALOID_HEADLESS === '1';
+export { app };
+export { serve };
+
 // Graceful shutdown: finish in-flight streams before dying, so a deploy never
 // cuts a user mid-sentence.
 let shuttingDown = false;
@@ -1684,7 +1694,7 @@ for (const sig of ['SIGTERM', 'SIGINT']) {
   });
 }
 
-serve.listen(PORT, BIND_HOST, () => {
+if (!SERVERLESS) serve.listen(PORT, BIND_HOST, () => {
   console.log(`metaloid-gateway ${tlsOn ? 'https' : 'http'}://${
     BIND_HOST === '0.0.0.0' ? '<lan-ip>' : BIND_HOST
   }:${PORT} (openrouter:${OR_KEY ? 'set' : 'missing'} nvidia:${NV_ON && NV_KEY ? 'enabled' : 'off'})`);

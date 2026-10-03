@@ -1,4 +1,9 @@
 node_modules/
 .env
 *.log
-data/
+
+# The runtime account-data store written by the local driver. Anchored to the
+# server root on purpose: a bare `data/` also matched src/data/, which silently
+# kept the entire account-data layer (the module this store is written by) out
+# of git — the gateway could not boot from a fresh clone because of it.
+/data/
