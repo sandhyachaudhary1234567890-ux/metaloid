@@ -115,7 +115,7 @@ export function Toggle({
         layout
         className="block w-5 h-5 rounded-full bg-white shadow-sm"
         animate={{ x: on ? 18 : 0 }}
-        transition={{ type: 'spring', stiffness: 500, damping: 32 }}
+        transition={{ duration: 0.15, ease: 'easeOut' }}
       />
     </button>
   );

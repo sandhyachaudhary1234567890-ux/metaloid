@@ -49,8 +49,6 @@ interface SessionValue {
   setMissionsOpen: (b: boolean) => void;
   missionDraft: string;
   setMissionDraft: (t: string) => void;
-  deviceMorphOpen: boolean;
-  setDeviceMorphOpen: (b: boolean) => void;
   skillForgeOpen: boolean;
   setSkillForgeOpen: (b: boolean) => void;
   clearAllData: () => void;
@@ -71,7 +69,7 @@ export function statusLabel(s: AgentStatus): string {
 }
 
 export function SessionProvider({ children }: { children: React.ReactNode }) {
-  const [view, setViewState] = useState<ViewId>('home');
+  const [view, setViewState] = useState<ViewId>('chat');
   const [status, setStatus] = useState<AgentStatus>('idle');
   const [settings, setSettings] = useState<AppSettings>(() => storage.loadSettings());
   const [connection, setConnection] = useState<ConnectionState>('checking');
@@ -86,7 +84,6 @@ export function SessionProvider({ children }: { children: React.ReactNode }) {
   const [osintTarget, setOsintTarget] = useState('');
   const [missionsOpen, setMissionsOpen] = useState(false);
   const [missionDraft, setMissionDraft] = useState('');
-  const [deviceMorphOpen, setDeviceMorphOpen] = useState(false);
   const [skillForgeOpen, setSkillForgeOpen] = useState(false);
 
   useEffect(() => storage.saveSettings(settings), [settings]);
@@ -171,7 +168,6 @@ export function SessionProvider({ children }: { children: React.ReactNode }) {
     toolsOpen, setToolsOpen,
     osintOpen, setOsintOpen, osintTarget, setOsintTarget,
     missionsOpen, setMissionsOpen, missionDraft, setMissionDraft,
-    deviceMorphOpen, setDeviceMorphOpen,
     skillForgeOpen, setSkillForgeOpen,
     clearAllData,
   };

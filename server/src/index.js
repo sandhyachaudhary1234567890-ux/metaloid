@@ -6,6 +6,7 @@
 import fs from 'node:fs';
 import path from 'node:path';
 import os from 'node:os';
+import http from 'node:http';
 import https from 'node:https';
 import { fileURLToPath } from 'node:url';
 import express from 'express';
@@ -544,12 +545,14 @@ const v1 = mountV1(app);
 const certDir = path.join(__dirname, '..', '..', 'certs');
 const tlsOn =
   fs.existsSync(path.join(certDir, 'key.pem')) && fs.existsSync(path.join(certDir, 'cert.pem'));
+// Always a real http.Server — even without TLS — so graceful shutdown has
+// something to close and keep-alive connections are tracked properly.
 const serve = tlsOn
   ? https.createServer(
       { key: fs.readFileSync(path.join(certDir, 'key.pem')), cert: fs.readFileSync(path.join(certDir, 'cert.pem')) },
       app
     )
-  : app;
+  : http.createServer(app);
 
 // Graceful shutdown: finish in-flight streams before dying, so a deploy
 // never cuts a user mid-sentence.
@@ -559,7 +562,10 @@ for (const sig of ['SIGTERM', 'SIGINT']) {
     if (shuttingDown) return;
     shuttingDown = true;
     console.log(`[gateway] ${sig} — draining connections`);
+    // Existing streams get to finish; idle keep-alive sockets are dropped so
+    // the process can actually exit.
     serve.close(() => process.exit(0));
+    serve.closeIdleConnections?.();
     setTimeout(() => process.exit(0), 5000).unref();
   });
 }

@@ -172,7 +172,7 @@ database holds metadata only.
 ### Testing your own setup
 
 ```bash
-npm test                    # typecheck + 85 tests + 205 RLS assertions
+npm test                    # typecheck + 86 tests + 205 RLS assertions
 supabase test db            # the same RLS matrix, against your project
 npm run showcase            # landing at /, app at /app/, gateway on 8787
 ```
@@ -181,7 +181,7 @@ npm run showcase            # landing at /, app at /app/, gateway on 8787
 
 | Layer | Where | What it does |
 |---|---|---|
-| Experience | `src/screens`, `src/components` | Home · Chat · Live · Memory · History · Settings |
+| Experience | `src/screens`, `src/components` | Chat · History · Research · Settings (camera, tools and voice open contextually) |
 | Local agent runtime | `src/lib/agent`, `src/lib/voice`, `src/lib/skills` | planning, checkpoints, quality metrics, barge-in voice loop, skill forge |
 | Transport | `src/lib/transport.ts` | the only file that touches the network; relative URLs + scheme rescue |
 | Gateway | `server/src/index.js` | CORS lock, rate limits, SSE, hardening, graceful drain |
@@ -221,7 +221,7 @@ Now:
 ## Tests
 
 ```bash
-npm test          # typecheck + 85 tests + 205 security assertions
+npm test          # typecheck + 86 tests + 205 security assertions
 ```
 
 - **49 app tests** (vitest + jsdom): transport contract, the account layer
@@ -233,11 +233,12 @@ npm test          # typecheck + 85 tests + 205 security assertions
   camera), a full chat round-trip with stubbed SSE, and the voice segmenter —
   including the Devanagari danda regression that once stopped Hindi from being
   spoken.
-- **36 gateway tests** (node:test): 12 against `server/tests/fake-provider.mjs`
+- **37 gateway tests** (node:test): 13 against `server/tests/fake-provider.mjs`
   (a controllable provider that fails the first N models, returns 401/429,
-  emits an empty stream or drops the socket — so failover, quarantine and
-  error honesty are proven, not asserted), 15 API/authz tests over the
-  `/api/v1` surface (including per-account rate-limit isolation), and 9
+  emits an empty stream or drops the socket — so failover, quarantine, error
+  honesty and a clean SIGTERM drain are proven, not asserted), 15 API/authz
+  tests over the `/api/v1` surface (including per-account rate-limit
+  isolation), and 9
   credential-encryption tests that run in separate child processes so a
   rotation or a missing key genuinely proves something.
 
@@ -383,10 +384,19 @@ scripts/showcase.mjs   one-command demo
 ## Status
 
 Working today: streaming chat with failover · voice loop with barge-in ·
-vision path · missions with approvals and checkpoints · OSINT investigations
-with reports · memory vault with redaction · model router and picker · landing
-page · real accounts with verified email, sync, per-user provider keys,
-usage and agent-task state · 85 tests + 205 security assertions · deploy-ready build.
+vision path · missions with approvals and checkpoints · research workspace with
+reports · memory vault with redaction · model router and picker · landing page ·
+real accounts with verified email, sync, per-user provider keys, usage and
+agent-task state · 86 tests + 205 security assertions · deploy-ready build.
+
+The interface is deliberately small: **Chat · History · Research · Settings**,
+with camera, tools and voice opening only when they are relevant. Chat is the
+product — a small identity line, the conversation, and a composer whose whole
+surface is `+ Message MetaIoid… 🎙 ↑` with everything optional behind that `+`.
+Boot fades into the workspace in under a second; navigation is instant with no
+blocking transition; light mode is designed rather than inverted; and
+`prefers-reduced-motion` turns off every non-essential animation, in CSS and in
+framer-motion.
 
 Local-first by default and account-backed when you want it: point the app at a
 Supabase project and conversations, memories, preferences and tasks follow the

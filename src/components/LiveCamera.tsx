@@ -96,13 +96,13 @@ export function LiveCamera({ embedded = false }: { embedded?: boolean }) {
           {camState === 'live' ? (
             <div className="absolute inset-0 pointer-events-none">
               <div className="absolute inset-x-8 h-[2px] bg-[var(--accent)] blur-[0.5px] scan-line opacity-75" />
-              <div className="absolute inset-4 rounded-xl border border-white/10" />
+              <div className="absolute inset-4 rounded-xl border border-[var(--border)]" />
               <div className="absolute top-4 left-4 flex gap-2">
                 <span className="chip !bg-black/60 backdrop-blur !text-[10.5px] !font-semibold !tracking-[0.14em] !text-white/80">YOU · CAMERA</span>
                 <span className="chip !bg-black/60 backdrop-blur !text-[11px] !text-white/80"><Scan size={12} /> {visionPhase}</span>
               </div>
               <div className="absolute bottom-4 left-4 right-4 flex justify-center">
-                <div className="rounded-full bg-black/60 backdrop-blur px-3.5 py-1.5 text-[12px] text-white/90 border border-white/10">
+                <div className="rounded-full bg-black/60 backdrop-blur px-3.5 py-1.5 text-[12px] text-white/90 border border-[var(--border)]">
                   “I’m looking at what you’re showing me.”
                 </div>
               </div>

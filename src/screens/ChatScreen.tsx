@@ -1,52 +1,65 @@
-import { useRef, useState } from 'react';
+import { useMemo, useState } from 'react';
 import { AnimatePresence, motion } from 'framer-motion';
-import { Square, MoreHorizontal, Pencil, Trash2, Plus, ArrowRight, Unplug } from 'lucide-react';
+import { Square, MoreHorizontal, Pencil, Trash2, Plus, Telescope, Hammer, ChartNoAxesColumn, Sparkles } from 'lucide-react';
 import { useApp } from '../lib/store';
+import { useAuth } from '../lib/auth';
 import { ChatWindow } from '../components/ChatWindow';
-import { CommandBar } from '../components/CommandBar';
-import { MetaloidCore } from '../components/MetaloidCore';
-import { ModelSelector } from '../components/ModelSelector';
-import { LanguageSelector } from '../components/LanguageSelector';
-import { greetingFor } from '../lib/i18n';
+import { CommandBar, COMPOSER_MODES, type ComposerMode } from '../components/CommandBar';
 
-// CHAT — long-form conversation workspace.
-// Editorial typography, calm surface treatments, sticky autoscroll,
-// and zero bubble fatigue.
+// CHAT — the product.
+//
+// Three bands and nothing else: a small identity line, the conversation, the
+// composer. When the conversation is empty the middle band holds one question
+// and four ways to start; as soon as you speak, they are gone for good.
+
+const STARTERS: { mode: ComposerMode; sample: string; icon: typeof Sparkles }[] = [
+  { mode: COMPOSER_MODES.ask, sample: 'Explain something clearly', icon: Sparkles },
+  { mode: COMPOSER_MODES.research, sample: 'Follow a topic to its sources', icon: Telescope },
+  { mode: COMPOSER_MODES.build, sample: 'Turn an idea into something working', icon: Hammer },
+  { mode: COMPOSER_MODES.analyze, sample: 'Break down what you are looking at', icon: ChartNoAxesColumn },
+];
 
 export function ChatScreen() {
   const {
-    activeConv, status, isGenerating, stopGenerating, detectedLang,
-    newConversation, setView, openModal, renameConversation, language,
-    connection,
+    activeConv, isGenerating, stopGenerating, newConversation, openModal,
+    renameConversation, setView, connection, status,
   } = useApp();
+  const auth = useAuth();
   const messages = activeConv?.messages ?? [];
+
   const [moreOpen, setMoreOpen] = useState(false);
-  const [draft, setDraft] = useState<{ text: string; n: number } | null>(null);
-  const draftN = useRef(0);
-  const greet = greetingFor(new Date(), language);
+  const [mode, setMode] = useState<ComposerMode>(COMPOSER_MODES.ask);
+
+  const firstName = useMemo(() => {
+    const meta = (auth.user?.user_metadata ?? {}) as Record<string, unknown>;
+    const raw = (meta.display_name as string | undefined) || auth.user?.email?.split('@')[0];
+    if (!raw) return null;
+    const first = raw.trim().split(/[\s._-]+/)[0];
+    return first ? first.charAt(0).toUpperCase() + first.slice(1) : null;
+  }, [auth.user]);
+
   const offline = connection !== 'online';
+  const working = isGenerating || status === 'thinking' || status === 'executing';
 
   return (
     <div className="flex flex-col h-full min-h-0 bg-[var(--bg)]">
-      {/* top: title · model · language · more */}
-      <div className="max-w-[760px] w-full mx-auto px-4 sm:px-8 pt-4 pb-2 flex items-center gap-3 border-b border-[var(--border-subtle)]">
-        {messages.length <= 2 && (
-          <div className="hidden sm:block shrink-0">
-            <MetaloidCore status={status} size={40} glyph={false} minimal />
-          </div>
+      {/* identity line — quiet, 52px, never a dashboard */}
+      <div className="mx-auto w-full max-w-[760px] px-4 sm:px-6 h-[52px] flex items-center gap-2 shrink-0">
+        <h1 className="text-[13.5px] font-medium text-[var(--fg-muted)] truncate min-w-0">
+          {activeConv?.title || 'New chat'}
+        </h1>
+        {working && (
+          <span className="flex items-center gap-1.5 text-[12px] text-[var(--accent)] shrink-0">
+            <span className="h-1.5 w-1.5 rounded-full bg-[var(--accent)] animate-pulse" />
+            {status === 'executing' ? 'Working' : 'Thinking'}
+          </span>
         )}
-        <div className="min-w-0 flex-1">
-          <h2 className="text-[15px] font-semibold text-[var(--fg)] truncate">{activeConv?.title ?? 'New conversation'}</h2>
-          <p className="text-[12px] text-[var(--fg-muted)] truncate">
-            {offline ? 'Local demo' : activeConv ? `${activeConv.model} · live` : 'live'}
-            {activeConv ? ` · ${activeConv.language}` : ''}
-            {detectedLang ? ` · Detected: ${detectedLang}` : ''} &middot; {messages.length} messages
-          </p>
-        </div>
-        <div className="hidden sm:flex items-center gap-2 shrink-0">
-          <ModelSelector compact />
-          <LanguageSelector compact />
-        </div>
+        <span className="flex-1" />
+        {isGenerating && (
+          <button onClick={stopGenerating} className="btn-ghost h-8 px-3 text-[12.5px] shrink-0" aria-label="Stop">
+            <Square size={11} fill="currentColor" /> Stop
+          </button>
+        )}
         <div className="relative shrink-0">
           <button
             onClick={() => setMoreOpen((o) => !o)}
@@ -62,10 +75,8 @@ export function ChatScreen() {
               <>
                 <div className="fixed inset-0 z-40" onClick={() => setMoreOpen(false)} />
                 <motion.div
-                  initial={{ opacity: 0, y: -4, scale: 0.98 }}
-                  animate={{ opacity: 1, y: 0, scale: 1 }}
-                  exit={{ opacity: 0 }}
-                  transition={{ duration: 0.15 }}
+                  initial={{ opacity: 0, y: -4 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0 }}
+                  transition={{ duration: 0.14 }}
                   className="absolute right-0 top-10 z-50 w-48 rounded-xl border border-[var(--border)] bg-[var(--surface-elevated)] shadow-pop p-1.5"
                   role="menu"
                 >
@@ -83,65 +94,28 @@ export function ChatScreen() {
             )}
           </AnimatePresence>
         </div>
-        {isGenerating && (
-          <button onClick={stopGenerating} className="btn-ghost h-8 px-3 text-[12.5px] shrink-0" aria-label="Stop generating">
-            <Square size={12} fill="currentColor" /> Stop
-          </button>
-        )}
       </div>
 
-      {/* honesty banner */}
-      {offline && (
-        <div className="max-w-[760px] w-full mx-auto px-4 sm:px-8 pt-3">
-          <button
-            onClick={() => setView('settings')}
-            className="w-full flex items-center gap-2.5 rounded-xl border border-amber-500/25 bg-amber-500/[0.06] px-4 py-2 text-left hover:border-amber-500/40 transition-colors"
-          >
-            <Unplug size={14} className="text-amber-400 shrink-0" />
-            <span className="text-[12px] text-[var(--fg-secondary)]">
-              <span className="font-semibold text-amber-300">Local demo</span> &mdash; backend gateway not connected. Answers are local mocks.
-              <span className="text-[var(--fg-muted)]"> Tap to connect &rarr;</span>
-            </span>
-          </button>
-        </div>
-      )}
-
+      {/* conversation, or the single question that starts one */}
       {messages.length === 0 ? (
-        /* Clean welcome state */
-        <div className="flex-1 overflow-y-auto">
-          <div className="min-h-full flex flex-col justify-center max-w-[640px] w-full mx-auto px-6 py-10">
-            <motion.div initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }} transition={{ duration: 0.35 }}>
-              <h1 className="font-bold tracking-tight text-[28px] sm:text-[34px] text-[var(--fg)]">
-                {greet}, Aryan.
-                <br />
-                <span className="text-[var(--fg-muted)] font-normal text-[22px] sm:text-[26px]">What are we working on?</span>
-              </h1>
-              <p className="mt-3 text-[14px] text-[var(--fg-muted)]">
-                Select a prompt below or type your inquiry to begin.
-              </p>
-              <div className="mt-6 grid sm:grid-cols-3 gap-2.5">
-                {[
-                  'Explain AI agents in simple language',
-                  'Bhai, mujhe ye simple language mein samjha',
-                  'Compare system architectures for fast latency',
-                ].map((prompt, i) => (
-                  <motion.button
-                    key={prompt}
-                    initial={{ opacity: 0, y: 8 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.1 + i * 0.06 }}
-                    onClick={() => {
-                      draftN.current += 1;
-                      setDraft({ text: prompt, n: draftN.current });
-                    }}
-                    className="group relative rounded-xl border border-[var(--border)] bg-[var(--surface)] p-3.5 pr-8 text-left text-[13px] leading-snug text-[var(--fg)] transition-all hover:bg-[var(--surface-hover)] hover:border-[var(--border-strong)] min-h-[80px]"
+        <div className="flex-1 min-h-0 overflow-y-auto">
+          <div className="min-h-full flex flex-col justify-center max-w-[680px] w-full mx-auto px-6 py-8">
+            <motion.div initial={{ opacity: 0, y: 6 }} animate={{ opacity: 1, y: 0 }} transition={{ duration: 0.28, ease: 'easeOut' }}>
+              {firstName && <p className="text-[13px] text-[var(--fg-muted)] mb-1.5">{firstName}</p>}
+              <h2 className="text-[26px] sm:text-[32px] font-semibold tracking-tight text-[var(--fg)] leading-tight">
+                What are we working on?
+              </h2>
+              <div className="mt-6 grid grid-cols-2 gap-2">
+                {STARTERS.map(({ mode: m, sample, icon: Icon }) => (
+                  <button
+                    key={m.id}
+                    onClick={() => setMode(m)}
+                    className="group flex flex-col items-start gap-2 rounded-2xl border border-[var(--border)] bg-[var(--surface)] px-4 py-3.5 text-left transition-colors hover:bg-[var(--surface-hover)] hover:border-[var(--border-strong)] min-h-[84px]"
                   >
-                    {prompt}
-                    <ArrowRight
-                      size={14}
-                      aria-hidden
-                      className="absolute right-3 bottom-3 text-[var(--accent)] opacity-0 -translate-x-1.5 transition-all group-hover:opacity-100 group-hover:translate-x-0"
-                    />
-                    <span className="sr-only">Fill composer with suggestion</span>
-                  </motion.button>
+                    <Icon size={16} className="text-[var(--accent)]" />
+                    <span className="text-[13.5px] font-medium text-[var(--fg)]">{m.label}</span>
+                    <span className="text-[12px] text-[var(--fg-muted)] leading-snug">{sample}</span>
+                  </button>
                 ))}
               </div>
             </motion.div>
@@ -151,10 +125,18 @@ export function ChatScreen() {
         <ChatWindow messages={messages} />
       )}
 
-      {/* bottom composer */}
-      <div className="border-t border-[var(--border)] bg-[var(--bg)]/90 backdrop-blur-md pb-[76px] md:pb-0">
-        <div className="max-w-[760px] mx-auto px-4 sm:px-8 py-3.5">
-          <CommandBar onCamera={() => setView('live')} injected={draft} />
+      {/* composer, grounded near the bottom */}
+      <div className="shrink-0 bg-[var(--bg)] pb-[74px] md:pb-3">
+        <div className="mx-auto max-w-[760px] px-4 sm:px-6 pt-2">
+          {offline && (
+            <button
+              onClick={() => setView('settings')}
+              className="mb-2 text-[11.5px] text-[var(--fg-muted)] hover:text-[var(--fg)] transition-colors"
+            >
+              Local demo — answers come from a small offline model. <span className="underline">Connect AI</span>
+            </button>
+          )}
+          <CommandBar mode={mode} onModeChange={setMode} onCamera={() => setView('live')} />
         </div>
       </div>
     </div>
@@ -167,9 +149,7 @@ function MenuBtn({ icon: Icon, label, danger, onClick }: { icon: typeof Plus; la
       onClick={onClick}
       role="menuitem"
       className={`w-full flex items-center gap-2.5 px-3 py-2 rounded-lg text-[13px] font-medium transition-colors ${
-        danger
-          ? 'text-red-400 hover:bg-red-500/10'
-          : 'text-[var(--fg)] hover:bg-[var(--surface-hover)]'
+        danger ? 'text-red-400 hover:bg-red-500/10' : 'text-[var(--fg)] hover:bg-[var(--surface-hover)]'
       }`}
     >
       <Icon size={14} /> {label}

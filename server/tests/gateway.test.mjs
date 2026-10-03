@@ -83,6 +83,8 @@ async function boot({ scenario = 'ok', failFirst = 1, key = 'test-key-0123456789
     gatewayPort,
     providerPort,
     logs,
+    gateway,
+    provider,
     stop() {
       try { gateway.kill('SIGKILL'); } catch { /* gone */ }
       try { provider.kill('SIGKILL'); } catch { /* gone */ }
@@ -269,4 +271,23 @@ test('CORS: only allow-listed origins are echoed back', async () => {
     });
     assert.equal(denied.headers.get('access-control-allow-origin'), null, 'unknown origins must not be echoed');
   } finally { g.stop(); }
+});
+
+test('SIGTERM: the gateway drains and exits cleanly (no uncaughtException)', async () => {
+  const g = await boot({ scenario: 'ok' });
+  try {
+    const exited = new Promise((resolve) => g.gateway.once('exit', (code, signal) => resolve({ code, signal })));
+    g.gateway.kill('SIGTERM');
+    const result = await Promise.race([
+      exited,
+      new Promise((resolve) => setTimeout(() => resolve({ code: 'timeout', signal: null }), 6000)),
+    ]);
+    assert.deepEqual(result, { code: 0, signal: null }, 'SIGTERM must exit 0 promptly');
+    const output = g.logs.join('');
+    assert.ok(output.includes('draining connections'), 'shutdown should announce itself');
+    assert.ok(!output.includes('uncaughtException'), `shutdown must not throw: ${output.slice(-400)}`);
+  } finally {
+    g.stop();
+    try { g.provider.kill('SIGKILL'); } catch { /* gone */ }
+  }
 });

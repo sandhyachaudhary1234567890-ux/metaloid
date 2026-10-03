@@ -91,6 +91,23 @@ export function ChatProvider({ children }: { children: React.ReactNode }) {
   const pinConversation = useCallback((id: string) => {
     setConversations((prev) => prev.map((c) => (c.id === id ? { ...c, pinned: !c.pinned } : c)));
   }, []);
+
+/**
+ * A conversation title that reads like a heading rather than a truncated
+ * string: mode prefixes dropped, cut on a word boundary, sentence-cased.
+ */
+function titleFrom(text: string): string {
+  const cleaned = text
+    .replace(/^(research deeply|research|build|analyze|analyse|search the web for|calculate)\s*:\s*/i, '')
+    .replace(/\s+/g, ' ')
+    .trim();
+  const base = cleaned || text.trim();
+  if (base.length <= 42) return base.charAt(0).toUpperCase() + base.slice(1);
+  const cut = base.slice(0, 42);
+  const at = cut.lastIndexOf(' ');
+  return (at > 24 ? cut.slice(0, at) : cut).replace(/[,;:.!?\-–—]+$/, '') + '…';
+}
+
   const renameConversation = useCallback((id: string, title: string) => {
     setConversations((prev) => prev.map((c) => (c.id === id ? { ...c, title } : c)));
   }, []);
@@ -161,7 +178,7 @@ export function ChatProvider({ children }: { children: React.ReactNode }) {
     if (!convId) {
       convId = uid('conv');
       const c: Conversation = {
-        id: convId, title: clean.slice(0, 42) || 'Voice conversation',
+        id: convId, title: titleFrom(clean) || 'Voice conversation',
         preview: clean.slice(0, 90),
         createdAt: Date.now(), updatedAt: Date.now(),
         messages: [], model: settings.model, language: settings.defaultLanguage,
@@ -184,7 +201,7 @@ export function ChatProvider({ children }: { children: React.ReactNode }) {
     };
     setConversations((prev) => prev.map((c) => {
       if (c.id !== convId) return c;
-      const title = c.messages.length === 0 ? clean.slice(0, 42) : c.title;
+      const title = c.messages.length === 0 ? titleFrom(clean) : c.title;
       return { ...c, title, updatedAt: Date.now(), messages: [...c.messages, userMsg, asst] };
     }));
   }, [activeId, addMemory, settings, setToolsOpen, setView]);
@@ -204,7 +221,7 @@ export function ChatProvider({ children }: { children: React.ReactNode }) {
     if (!convId) {
       convId = uid('conv');
       const c: Conversation = {
-        id: convId, title: clean.slice(0, 42) || 'Voice conversation',
+        id: convId, title: titleFrom(clean) || 'Voice conversation',
         preview: clean.slice(0, 90),
         createdAt: Date.now(), updatedAt: Date.now(),
         messages: [], model: settings.model, language: settings.defaultLanguage,
@@ -215,7 +232,7 @@ export function ChatProvider({ children }: { children: React.ReactNode }) {
     const userMsg: ChatMessage = { id: uid('msg'), role: 'user', content: clean, createdAt: Date.now() };
     setConversations((prev) => prev.map((c) => {
       if (c.id !== convId) return c;
-      const title = c.messages.length === 0 ? clean.slice(0, 42) : c.title;
+      const title = c.messages.length === 0 ? titleFrom(clean) : c.title;
       return { ...c, title, updatedAt: Date.now(), messages: [...c.messages, userMsg] };
     }));
 
@@ -309,7 +326,7 @@ export function ChatProvider({ children }: { children: React.ReactNode }) {
     if (!convId) {
       convId = uid('conv');
       const c: Conversation = {
-        id: convId, title: clean.slice(0, 42) || 'New conversation',
+        id: convId, title: titleFrom(clean) || 'New conversation',
         preview: clean.slice(0, 90),
         createdAt: Date.now(), updatedAt: Date.now(),
         messages: [], model: settings.model, language: settings.defaultLanguage,
@@ -323,7 +340,7 @@ export function ChatProvider({ children }: { children: React.ReactNode }) {
     };
     setConversations((prev) => prev.map((c) => {
       if (c.id !== convId) return c;
-      const title = c.messages.length === 0 ? clean.slice(0, 42) : c.title;
+      const title = c.messages.length === 0 ? titleFrom(clean) : c.title;
       const preview = c.messages.length === 0 ? clean.slice(0, 90) : c.preview;
       return { ...c, title, preview, updatedAt: Date.now(), messages: [...c.messages, userMsg] };
     }));

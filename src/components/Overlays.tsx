@@ -63,11 +63,11 @@ export function ModalRoot() {
     if (modal.kind === 'clear-data') {
       clearAllData();
       toast({ title: 'Local data cleared' });
-      setView('home');
+      setView('chat');
     }
     if (modal.kind === 'end-live') {
       toast({ title: 'Live session ended' });
-      setView('home');
+      setView('chat');
     }
     closeModal();
   };

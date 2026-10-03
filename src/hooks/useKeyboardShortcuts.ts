@@ -30,8 +30,8 @@ export function useKeyboardShortcuts(disabled = false) {
       const tag = (e.target as HTMLElement)?.tagName;
       const typing = tag === 'INPUT' || tag === 'TEXTAREA';
       if (!typing && !mod) {
-        if (e.key === '1') setView('home');
-        if (e.key === '2') setView('chat');
+        if (e.key === '1') setView('chat');
+        if (e.key === '2') setView('history');
         if (e.key === '3') setView('live');
       }
       void newConversation;

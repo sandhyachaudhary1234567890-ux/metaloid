@@ -65,13 +65,15 @@ afterEach(() => {
 });
 
 describe('app shell', () => {
-  it('renders the home screen with the brand and primary navigation', async () => {
+  it('lands on chat with the brand visible and four destinations', async () => {
     mount();
-    await waitFor(() => expect(screen.getAllByText(/metaloid|MetaIoid/i).length).toBeGreaterThan(0));
-    // primary sections exist
-    for (const label of ['Home', 'Chat', 'Memory', 'Settings']) {
+    await waitFor(() => expect(screen.getAllByRole('img', { name: /MetaIoid/i }).length).toBeGreaterThan(0));
+    for (const label of ['Chat', 'History', 'Research', 'Settings']) {
       expect(screen.getAllByText(label).length).toBeGreaterThan(0);
     }
+    // the one-second test: the place to type and the way to speak are both here
+    expect(await screen.findByLabelText('Message MetaIoid')).toBeTruthy();
+    expect(screen.getAllByLabelText('Talk to MetaIoid').length).toBeGreaterThan(0);
   });
 
   it('reflects connection state in the sidebar without inventing ONLINE', async () => {
@@ -116,6 +118,8 @@ describe('chat loop', () => {
     fireEvent.keyDown(composer, { key: 'Enter', code: 'Enter', shiftKey: false });
 
     await waitFor(() => expect(screen.getByText(/Hello from the gateway\./)).toBeTruthy(), { timeout: 5000 });
+    // the conversation names itself from the first thing you said
+    expect(screen.getAllByText('Hello there').length).toBeGreaterThan(0);
   });
 });
 
@@ -131,8 +135,10 @@ describe('every screen renders without crashing', () => {
     fireEvent.click(btn);
   };
 
-  it('Memory vault', async () => {
-    await open('Memory');
+  it('Memory vault is reachable from Settings', async () => {
+    await open('Settings');
+    const vault = await waitFor(() => screen.getByText('Open Memory Vault'), { timeout: 4000 });
+    fireEvent.click(vault);
     await waitFor(() => expect(document.body.textContent).toMatch(/memory/i), { timeout: 4000 });
   });
 
@@ -147,7 +153,10 @@ describe('every screen renders without crashing', () => {
   });
 
   it('Live degrades gracefully with no camera available (jsdom has none)', async () => {
-    await open('Live');
+    mount();
+    // Live is contextual now: it lives behind the composer's + sheet
+    fireEvent.click(await waitFor(() => screen.getAllByLabelText('More ways to send')[0], { timeout: 4000 }));
+    fireEvent.click(await waitFor(() => screen.getByText('Show the camera'), { timeout: 4000 }));
     // the screen must survive a missing getUserMedia instead of throwing
     await waitFor(() => expect(document.body.textContent).toMatch(/live|camera|vision/i), { timeout: 4000 });
   });

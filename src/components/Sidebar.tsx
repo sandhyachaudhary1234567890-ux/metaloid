@@ -1,109 +1,137 @@
 import { motion } from 'framer-motion';
-import { Home, MessageSquare, Radio, Brain, History, Settings, ChevronLeft, ChevronRight, Plus, ArrowRight } from 'lucide-react';
+import { MessageSquare, History, Telescope, Settings, ChevronLeft, ChevronRight, Plus } from 'lucide-react';
 import { useApp } from '../lib/store';
-import type { ViewId } from '../lib/types';
+import { useAuth } from '../lib/auth';
 import { cn } from '../lib/cn';
 import { MetaIoidMark, MetaIoidLockup } from './brand';
 
-// Linear-grade sidebar navigation:
-// Clear hierarchy, quiet connection indicator, high contrast, clean typography.
+// Primary navigation: four destinations, nothing else.
+//
+// Chat is the product, so it leads; History and Research are the two things you
+// reach for around a conversation; Settings holds everything configuration
+// shaped (voice, memory, providers, account). Live camera lives in the
+// composer, memory lives in Settings and in context — neither needs a
+// permanent slot competing with the conversation.
 
-const NAV: { id: ViewId; label: string; icon: typeof Home }[] = [
-  { id: 'home', label: 'Home', icon: Home },
+type NavId = 'chat' | 'history' | 'research' | 'settings';
+
+const NAV: { id: NavId; label: string; icon: typeof MessageSquare }[] = [
   { id: 'chat', label: 'Chat', icon: MessageSquare },
-  { id: 'live', label: 'Live Camera', icon: Radio },
-  { id: 'memory', label: 'Memory Vault', icon: Brain },
   { id: 'history', label: 'History', icon: History },
+  { id: 'research', label: 'Research', icon: Telescope },
 ];
 
+/** Quiet, honest connection state. Never says ONLINE because a variable is set. */
 export function ConnectionPill({ compact = false }: { compact?: boolean }) {
   const { connection, recheckConnection, health } = useApp();
+  const base = cn(
+    'inline-flex items-center gap-1.5 rounded-full border font-medium transition-colors',
+    compact ? 'px-2 py-[3px] text-[10px]' : 'px-2.5 py-1 text-[11px]',
+  );
+
   if (connection === 'online') {
     return (
       <span
         title={`Live provider: ${health?.provider || 'openrouter'}${health?.models?.free ? ` · ${health.models.free} free models` : ''}`}
-        className={cn('inline-flex items-center gap-1.5 rounded-full border border-emerald-500/25 bg-emerald-500/10 text-emerald-400', compact ? 'px-2 py-0.5 text-[10px]' : 'px-2.5 py-1 text-[11px]', 'font-semibold tracking-wider')}
+        className={cn(base, 'border-emerald-500/20 text-emerald-400/90')}
       >
-        <span className="h-1.5 w-1.5 rounded-full bg-emerald-400 animate-pulse" /> ONLINE
+        <span className="h-1.5 w-1.5 rounded-full bg-emerald-400" /> ONLINE
       </span>
     );
   }
-  // Answers arrive, but from a local mock provider — say MOCK, never ONLINE.
   if (connection === 'mock') {
     return (
       <button
         onClick={() => recheckConnection()}
-        title="Sandbox provider — real streaming, canned model. Everything works end to end with no API key. Set OPENROUTER_API_KEY for live models."
-        className={cn('inline-flex items-center gap-1.5 rounded-full border border-violet-500/30 bg-violet-500/10 text-violet-300 hover:border-violet-400/60 transition-colors', compact ? 'px-2 py-0.5 text-[10px]' : 'px-2.5 py-1 text-[11px]', 'font-semibold tracking-wider')}
+        title="Sandbox provider — real streaming, canned model. Everything works end to end with no API key. Add a key for live models."
+        className={cn(base, 'border-violet-500/25 text-violet-300/90 hover:border-violet-400/50')}
       >
         <span className="h-1.5 w-1.5 rounded-full bg-violet-400" /> SANDBOX
       </button>
     );
   }
-  // A key exists but the provider is unreachable — degraded, not offline.
   if (connection === 'degraded') {
     return (
       <button
         onClick={() => recheckConnection()}
-        title="A provider key is set but the gateway cannot reach it (network or provider outage). Replies will fail until this clears."
-        className={cn('inline-flex items-center gap-1.5 rounded-full border border-amber-500/30 bg-amber-500/10 text-amber-300 hover:border-amber-400/60 transition-colors', compact ? 'px-2 py-0.5 text-[10px]' : 'px-2.5 py-1 text-[11px]', 'font-semibold tracking-wider')}
+        title="A provider key is set but the gateway cannot reach it. Replies will fail until this clears."
+        className={cn(base, 'border-amber-500/25 text-amber-300/90 hover:border-amber-400/50')}
       >
-        <span className="h-1.5 w-1.5 rounded-full bg-amber-300 animate-pulse" /> DEGRADED
+        <span className="h-1.5 w-1.5 rounded-full bg-amber-300" /> DEGRADED
       </button>
     );
   }
   if (connection === 'checking') {
     return (
-      <span className={cn('inline-flex items-center gap-1.5 rounded-full border border-amber-500/25 bg-amber-500/10 text-amber-300', compact ? 'px-2 py-0.5 text-[10px]' : 'px-2.5 py-1 text-[11px]', 'font-semibold tracking-wider')}>
-        <span className="h-1.5 w-1.5 rounded-full bg-amber-300 animate-pulse" /> CHECKING
+      <span className={cn(base, 'border-[var(--border)] text-[var(--fg-muted)]')}>
+        <span className="h-1.5 w-1.5 rounded-full bg-[var(--fg-muted)] animate-pulse" /> CHECKING
       </span>
     );
   }
   return (
     <button
       onClick={() => recheckConnection()}
-      title="Backend not configured — running local demo. Click to retry."
-      className={cn('inline-flex items-center gap-1.5 rounded-full border border-[var(--border)] bg-[var(--surface-elevated)] text-[var(--fg-muted)] hover:text-[var(--fg)] hover:border-[var(--border-strong)] transition-colors', compact ? 'px-2 py-0.5 text-[10px]' : 'px-2.5 py-1 text-[11px]', 'font-semibold tracking-wider')}
+      title="No gateway connected — running the local demo. Click to retry."
+      className={cn(base, 'border-[var(--border)] text-[var(--fg-muted)] hover:text-[var(--fg)] hover:border-[var(--border-strong)]')}
     >
       <span className="h-1.5 w-1.5 rounded-full bg-[var(--fg-muted)]" /> LOCAL DEMO
     </button>
   );
 }
 
+/** One honest line about where the user's data lives. No invented "Synced". */
+function StorageLine() {
+  const auth = useAuth();
+  const signedIn = auth.status === 'signed-in';
+  const text = !auth.configured
+    ? 'Local demo · stays on this device'
+    : signedIn
+      ? `Syncing · ${auth.user?.email ?? 'signed in'}`
+      : 'On this device · sign in to sync';
+  return (
+    <p className="px-3 text-[11px] leading-relaxed text-[var(--fg-subtle)]">{text}</p>
+  );
+}
+
 export function Sidebar() {
-  const { view, setView, settings, status, sidebarCollapsed, setSidebarCollapsed, newConversation, setToolsOpen } = useApp();
+  const { view, setView, sidebarCollapsed, setSidebarCollapsed, newConversation, osintOpen, setOsintOpen } = useApp();
+
+  const go = (id: NavId) => {
+    if (id === 'research') { setOsintOpen(true); return; }
+    setView(id);
+  };
+  const active = (id: NavId) => (id === 'research' ? osintOpen : view === id);
 
   if (sidebarCollapsed) {
     return (
-      <aside className="hidden md:flex w-[68px] shrink-0 flex-col items-center py-4 border-r border-[var(--border)] bg-[var(--surface)] text-[var(--fg)]" aria-label="Primary">
-        <button onClick={() => setView('home')} aria-label="MetaIoid home" title="Home" className="hover:scale-105 transition-transform my-1">
-          <MetaIoidMark size={28} />
+      <aside className="hidden md:flex w-[64px] shrink-0 flex-col items-center py-4 border-r border-[var(--border)] bg-[var(--surface)] text-[var(--fg)]" aria-label="Primary">
+        <button onClick={() => setView('chat')} aria-label="MetaIoid" title="Chat" className="my-1">
+          <MetaIoidMark size={26} />
         </button>
-        <div className="mt-3 mb-4"><ConnectionPill compact /></div>
-        <nav className="flex flex-col gap-1.5" aria-label="Collapsed navigation">
+        <nav className="flex flex-col gap-1 mt-4" aria-label="Collapsed navigation">
           {NAV.map((n) => (
             <button
-              key={n.id} title={n.label} aria-label={n.label} onClick={() => setView(n.id)}
-              className={cn('w-10 h-10 rounded-xl flex items-center justify-center transition-all',
-                view === n.id ? 'bg-[var(--accent-subtle)] text-[var(--accent)] border border-[var(--accent)]' : 'text-[var(--fg-muted)] hover:text-[var(--fg)] hover:bg-[var(--surface-hover)]')}
+              key={n.id} title={n.label} aria-label={n.label} onClick={() => go(n.id)}
+              className={cn('w-10 h-10 rounded-xl flex items-center justify-center transition-colors',
+                active(n.id) ? 'bg-[var(--accent-subtle)] text-[var(--accent)]' : 'text-[var(--fg-muted)] hover:text-[var(--fg)] hover:bg-[var(--surface-hover)]')}
             >
               <n.icon size={18} strokeWidth={1.8} />
             </button>
           ))}
-          <button title="Agents & tools" aria-label="Agents and tools" onClick={() => setToolsOpen(true)}
-            className="w-10 h-10 rounded-xl flex items-center justify-center text-[var(--fg-muted)] hover:text-[var(--fg)] hover:bg-[var(--surface-hover)]">
-            <Plus size={18} />
-          </button>
         </nav>
-        <div className="mt-auto flex flex-col gap-1.5 items-center">
-          <button title="Expand sidebar" aria-label="Expand sidebar" onClick={() => setSidebarCollapsed(false)} className="w-10 h-10 rounded-xl flex items-center justify-center text-[var(--fg-muted)] hover:text-[var(--fg)] hover:bg-[var(--surface-hover)]">
-            <ChevronRight size={17} />
+        <div className="mt-auto flex flex-col gap-1 items-center">
+          <button title="New chat" aria-label="New chat" onClick={() => { newConversation(); setView('chat'); }}
+            className="w-10 h-10 rounded-xl flex items-center justify-center text-[var(--fg-muted)] hover:text-[var(--accent)] hover:bg-[var(--surface-hover)]">
+            <Plus size={18} />
           </button>
           <button title="Settings" aria-label="Settings" onClick={() => setView('settings')}
             className={cn('w-10 h-10 rounded-xl flex items-center justify-center transition-colors',
-              view === 'settings' ? 'bg-[var(--accent-subtle)] text-[var(--accent)] border border-[var(--accent)]' : 'text-[var(--fg-muted)] hover:text-[var(--fg)] hover:bg-[var(--surface-hover)]')}
-          >
+              view === 'settings' ? 'bg-[var(--accent-subtle)] text-[var(--accent)]' : 'text-[var(--fg-muted)] hover:text-[var(--fg)] hover:bg-[var(--surface-hover)]')}>
             <Settings size={18} strokeWidth={1.8} />
+          </button>
+          <button title="Expand sidebar" aria-label="Expand sidebar" onClick={() => setSidebarCollapsed(false)}
+            className="w-10 h-10 rounded-xl flex items-center justify-center text-[var(--fg-muted)] hover:text-[var(--fg)] hover:bg-[var(--surface-hover)]">
+            <ChevronRight size={17} />
           </button>
         </div>
       </aside>
@@ -111,56 +139,50 @@ export function Sidebar() {
   }
 
   return (
-    <aside className="hidden md:flex w-[256px] shrink-0 flex-col border-r border-[var(--border)] bg-[var(--surface)] text-[var(--fg)] select-none" aria-label="Primary">
-      <div className="px-5 pt-5 pb-4">
+    <aside className="hidden md:flex w-[248px] shrink-0 flex-col border-r border-[var(--border)] bg-[var(--surface)] text-[var(--fg)] select-none" aria-label="Primary">
+      <div className="px-4 pt-5 pb-3">
         <div className="flex items-center justify-between">
-          <MetaIoidLockup variant="full" size="md" />
+          <button onClick={() => setView('chat')} className="min-w-0" aria-label="MetaIoid home">
+            <MetaIoidLockup variant="full" size="md" />
+          </button>
           <button onClick={() => setSidebarCollapsed(true)} className="icon-btn w-7 h-7" aria-label="Collapse sidebar" title="Collapse">
             <ChevronLeft size={15} />
           </button>
         </div>
-        <div className="mt-2.5"><ConnectionPill compact /></div>
+        <div className="mt-3"><ConnectionPill compact /></div>
         <button onClick={() => { newConversation(); setView('chat'); }} className="btn-primary w-full mt-4 h-9 text-[13px]">
           <Plus size={15} /> New chat
         </button>
       </div>
 
-      <nav className="px-3 space-y-1" aria-label="Main navigation">
+      <nav className="px-3 space-y-0.5" aria-label="Main navigation">
         {NAV.map((n) => {
-          const active = view === n.id;
+          const on = active(n.id);
           return (
             <button
-              key={n.id} onClick={() => setView(n.id)}
-              className={cn('w-full flex items-center gap-3 px-3 h-9 rounded-xl text-[13.5px] font-medium transition-all relative',
-                active ? 'bg-[var(--surface-elevated)] text-[var(--fg)] border border-[var(--border)] shadow-sm' : 'text-[var(--fg-muted)] hover:text-[var(--fg)] hover:bg-[var(--surface-hover)]')}
+              key={n.id} onClick={() => go(n.id)}
+              aria-current={on ? 'page' : undefined}
+              className={cn('w-full flex items-center gap-3 px-3 h-10 rounded-xl text-[13.5px] font-medium transition-colors relative',
+                on ? 'bg-[var(--surface-elevated)] text-[var(--fg)]' : 'text-[var(--fg-muted)] hover:text-[var(--fg)] hover:bg-[var(--surface-hover)]')}
             >
-              {active && <motion.span layoutId="nav-pill" className="absolute left-0 top-2 bottom-2 w-[2.5px] rounded-full bg-[var(--accent)]" />}
-              <n.icon size={16} strokeWidth={active ? 2 : 1.8} />
+              {on && <motion.span layoutId="nav-pill" className="absolute left-0 top-2 bottom-2 w-[2px] rounded-full bg-[var(--accent)]" />}
+              <n.icon size={16} strokeWidth={on ? 2 : 1.8} />
               {n.label}
-              {n.id === 'live' && (
-                <span className="ml-auto text-[9.5px] font-bold tracking-wider text-[var(--fg-muted)] border border-[var(--border)] rounded px-1.5 py-0.2">CAM</span>
-              )}
             </button>
           );
         })}
-        <button onClick={() => setToolsOpen(true)} className="w-full flex items-center gap-3 px-3 h-9 rounded-xl text-[13.5px] text-[var(--fg-muted)] hover:text-[var(--fg)] hover:bg-[var(--surface-hover)] transition-colors">
-          <Plus size={16} /> Agents & tools
-        </button>
       </nav>
 
       <div className="mt-auto px-3 pb-4 space-y-2">
-        <button onClick={() => setView('settings')} className={cn('w-full flex items-center gap-3 px-3 h-9 rounded-xl text-[13.5px] transition-colors', view === 'settings' ? 'bg-[var(--surface-elevated)] text-[var(--fg)]' : 'text-[var(--fg-muted)] hover:text-[var(--fg)] hover:bg-[var(--surface-hover)]')}>
+        <button
+          onClick={() => setView('settings')}
+          aria-current={view === 'settings' ? 'page' : undefined}
+          className={cn('w-full flex items-center gap-3 px-3 h-10 rounded-xl text-[13.5px] transition-colors',
+            view === 'settings' ? 'bg-[var(--surface-elevated)] text-[var(--fg)]' : 'text-[var(--fg-muted)] hover:text-[var(--fg)] hover:bg-[var(--surface-hover)]')}
+        >
           <Settings size={16} /> Settings
         </button>
-
-        {/* Local device status pill */}
-        <div className="rounded-xl border border-[var(--border)] bg-[var(--surface-sunken)] p-3 text-left">
-          <div className="flex items-center justify-between text-[11.5px] text-[var(--fg-muted)]">
-            <span>Local Device Storage</span>
-            <span className="font-mono text-[10.5px] text-[var(--accent)]">Synced</span>
-          </div>
-          <p className="mt-1 text-[11px] text-[var(--fg-subtle)]">Conversations & memories are local</p>
-        </div>
+        <StorageLine />
       </div>
     </aside>
   );

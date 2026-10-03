@@ -18,7 +18,7 @@ export type LanguageId =
 export type ModelId = 'auto' | 'fast' | 'balanced' | 'smart' | 'vision';
 
 export type ViewId =
-  | 'home' | 'chat' | 'live' | 'memory' | 'history' | 'settings';
+  | 'chat' | 'live' | 'memory' | 'history' | 'settings';
 
 export type ConnectionState = 'checking' | 'online' | 'offline' | 'mock' | 'degraded';
 

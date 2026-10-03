@@ -1,4 +1,5 @@
-import { Palette, Mic2, Globe2, Cpu, Brain, ShieldCheck, Plug, Server, Keyboard, Trash2, Check, Flame } from 'lucide-react';
+import { useState } from 'react';
+import { Palette, Mic2, Globe2, Cpu, Brain, ShieldCheck, Plug, Server, Keyboard, Trash2, Check, Flame, SlidersHorizontal } from 'lucide-react';
 import { useApp } from '../lib/store';
 import { SettingsSection, SettingsRow, Seg, Toggle } from '../components/SettingsGroup';
 import { SystemStatus } from '../components/SystemStatus';
@@ -16,6 +17,9 @@ import { cn } from '../lib/cn';
 export function SettingsScreen() {
   const { settings, updateSettings, toast, openModal, setView, connection, setSkillForgeOpen } = useApp();
   const saved = (msg: string) => toast({ title: msg });
+  // Advanced stays folded away until asked for — no jargon on the first read.
+  const [advanced, setAdvanced] = useState(false);
+  const [appearanceMore, setAppearanceMore] = useState(false);
 
   const presetsList = Object.values(THEME_PRESETS);
 
@@ -24,7 +28,7 @@ export function SettingsScreen() {
       <div>
         <h2 className="text-[22px] font-bold tracking-tight text-[var(--fg)]">Settings</h2>
         <p className="text-[13.5px] text-[var(--fg-muted)] mt-0.5">
-          Configure {settings.agentName} &middot; All preferences are preserved locally on this device.
+          Your AI, your voice, your data — kept on this device unless you sign in.
         </p>
       </div>
 
@@ -32,7 +36,7 @@ export function SettingsScreen() {
       <AccountSection />
 
       {/* ============ APPEARANCE ============ */}
-      <SettingsSection icon={Palette} title="Appearance & Visual System" desc="Curated theme presets, signature accents, and border geometry">
+      <SettingsSection icon={Palette} title="Appearance" desc="How MetaIoid looks on this device">
         {/* Curated Theme Preset Grid */}
         <div className="space-y-2">
           <div className="text-[13px] font-medium text-[var(--fg)]">Theme Preset</div>
@@ -109,10 +113,21 @@ export function SettingsScreen() {
           </div>
         </div>
 
+        <SettingsRow
+          label="More appearance options"
+          hint="Accent colour, corner radius, density and motion"
+          control={
+            <button onClick={() => setAppearanceMore((v) => !v)} className="btn-ghost h-9 px-3 text-[12.5px]" aria-expanded={appearanceMore}>
+              {appearanceMore ? 'Hide' : 'Show'}
+            </button>
+          }
+        />
+
+        {appearanceMore && (<>
         {/* Accent Color Palette */}
         <SettingsRow
-          label="Signature Accent"
-          hint="Restrained focal point across buttons, active states, and indicators"
+          label="Accent colour"
+          hint="Used for focus, selection and the send button — nothing else"
           control={
             <div className="flex flex-wrap gap-2">
               {ACCENT_PALETTES.map((acc) => {
@@ -143,8 +158,7 @@ export function SettingsScreen() {
 
         {/* Radius Scale */}
         <SettingsRow
-          label="Corner Radius"
-          hint="Controls the physical curvature scale across the interface"
+          label="Corner softness"
           control={
             <Seg
               options={['sharp', 'refined', 'soft'] as const}
@@ -160,7 +174,7 @@ export function SettingsScreen() {
 
         {/* Density */}
         <SettingsRow
-          label="Information Density"
+          label="Density"
           control={
             <Seg
               options={['comfortable', 'compact'] as const}
@@ -173,8 +187,8 @@ export function SettingsScreen() {
 
         {/* Animations */}
         <SettingsRow
-          label="Motion & Transitions"
-          hint="Reduced eliminates animated transitions"
+          label="Motion"
+          hint="Reduced turns off non-essential animation"
           control={
             <Seg
               options={['full', 'reduced'] as const}
@@ -187,8 +201,8 @@ export function SettingsScreen() {
 
         {/* Startup animation */}
         <SettingsRow
-          label="Startup sequence"
-          hint="Cinematic telemetry boot into workspace"
+          label="Startup fade"
+          hint="A short brand beat before the workspace appears"
           control={
             <Toggle
               on={settings.showStartup}
@@ -197,10 +211,11 @@ export function SettingsScreen() {
             />
           }
         />
+        </>)}
       </SettingsSection>
 
       {/* ============ VOICE ============ */}
-      <SettingsSection icon={Mic2} title="Voice Engine" desc="Streaming speech synthesis and dynamic endpoint sensitivity">
+      <SettingsSection icon={Mic2} title="Voice" desc="How MetaIoid listens and speaks">
         <SettingsRow
           label="Voice interaction enabled"
           control={
@@ -286,7 +301,7 @@ export function SettingsScreen() {
       </SettingsSection>
 
       {/* ============ LANGUAGE ============ */}
-      <SettingsSection icon={Globe2} title="Language" desc="Automatic detection with first-class Hindi, Hinglish, and English">
+      <SettingsSection icon={Globe2} title="Language" desc="Hindi, English, and automatic detection">
         <div className="grid grid-cols-2 sm:grid-cols-3 gap-2">
           {LANGUAGES.map((l) => {
             const active = settings.defaultLanguage === l.id;
@@ -314,7 +329,7 @@ export function SettingsScreen() {
       </SettingsSection>
 
       {/* ============ AGENT ============ */}
-      <SettingsSection icon={Cpu} title="Agent Personality" desc="Name, model intelligence tier, and response profile">
+      <SettingsSection icon={Cpu} title="Personality" desc="What MetaIoid calls itself and how it answers">
         <SettingsRow
           label="Agent name"
           control={
@@ -368,10 +383,10 @@ export function SettingsScreen() {
       </SettingsSection>
 
       {/* ============ MEMORY & PRIVACY ============ */}
-      <SettingsSection icon={Brain} title="Memory & Privacy" desc="Local durable memory and zero telemetry leak guarantees">
+      <SettingsSection icon={Brain} title="Memory & Privacy" desc="What MetaIoid remembers, and what never leaves your device">
         <SettingsRow
-          label="Durable memory enabled"
-          hint="Allows agent to retain key user preferences and project facts locally"
+          label="Remember things"
+          hint="Keeps preferences and project facts so you do not repeat yourself"
           control={
             <Toggle
               on={settings.memoryEnabled}
@@ -397,10 +412,10 @@ export function SettingsScreen() {
       </SettingsSection>
 
       {/* ============ CONNECTIONS & SYSTEM ============ */}
-      <SettingsSection icon={Plug} title="Gateway & System Status" desc="Backend service status and keyboard accelerators">
+      <SettingsSection icon={Plug} title="Connection" desc="Where answers come from, and how to connect your own AI">
         <SettingsRow
-          label="Backend Gateway URL"
-          hint="Empty uses on-device mock transport"
+          label="Gateway address"
+          hint="Leave blank to use the built-in demo gateway"
           control={
             <input
               value={settings.backendUrl}
@@ -414,25 +429,27 @@ export function SettingsScreen() {
         <SystemStatus />
       </SettingsSection>
 
-      {/* ============ DEVELOPER / OWNER & SKILL FORGE ============ */}
-      <SettingsSection icon={Flame} title="Developer / Owner &middot; Skill Forge" desc="Autonomous continuous self-improvement engine, sandboxed workers, benchmarks, and canary rollback">
+      {/* ============ ADVANCED (folded by default) ============ */}
+      <SettingsSection icon={SlidersHorizontal} title="Advanced" desc="Developer surfaces and diagnostics. Nothing here is needed for everyday use.">
         <SettingsRow
-          label="Continuous Skill Engine"
-          hint="Self-improvement loop with zero-credential sandboxed worker isolation"
+          label="Advanced tools"
+          hint="Skill Forge: the sandboxed self-improvement engine"
           control={
-            <span className="text-[11px] font-mono uppercase px-2 py-0.5 rounded border border-emerald-500/30 bg-emerald-500/10 text-emerald-400">
-              Active &middot; Sandboxed
-            </span>
+            <button onClick={() => setAdvanced((v) => !v)} className="btn-ghost h-9 px-3 text-[12.5px]" aria-expanded={advanced}>
+              {advanced ? 'Hide' : 'Show'}
+            </button>
           }
         />
-        <div className="pt-2">
-          <button
-            onClick={() => setSkillForgeOpen(true)}
-            className="w-full h-11 rounded-xl text-[13px] font-semibold border border-[var(--accent)] bg-[var(--accent-subtle)] text-[var(--accent)] hover:opacity-90 flex items-center justify-center gap-2 transition-all"
-          >
-            <Flame size={16} /> Open Skill Forge & Continuous Engine
-          </button>
-        </div>
+        {advanced && (
+          <div className="pt-2">
+            <button
+              onClick={() => setSkillForgeOpen(true)}
+              className="w-full h-11 rounded-xl text-[13px] font-medium border border-[var(--border)] bg-[var(--surface-elevated)] text-[var(--fg)] hover:bg-[var(--surface-hover)] flex items-center justify-center gap-2 transition-colors"
+            >
+              <Flame size={16} className="text-[var(--accent)]" /> Open Skill Forge
+            </button>
+          </div>
+        )}
       </SettingsSection>
     </div>
   );

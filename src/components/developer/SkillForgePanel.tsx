@@ -309,12 +309,12 @@ export function SkillForgePanel({ open, onClose }: SkillForgePanelProps) {
 
                       {/* Sandbox test output preview */}
                       {testingSkillId === skill.skillId && testOutput && (
-                        <div className="mt-3 p-3 rounded-lg bg-[var(--surface-sunken)] border border-[var(--border)] font-mono text-[11px] text-zinc-300 overflow-x-auto max-h-36">
-                          <div className="flex items-center justify-between text-zinc-500 mb-1">
+                        <div className="mt-3 p-3 rounded-lg bg-[var(--surface-sunken)] border border-[var(--border)] font-mono text-[11px] text-[var(--fg-secondary)] overflow-x-auto max-h-36">
+                          <div className="flex items-center justify-between text-[var(--fg-muted)] mb-1">
                             <span className="inline-flex items-center gap-1">
                               <Terminal size={11} /> Sandbox Output
                             </span>
-                            <button onClick={() => setTestOutput(null)} className="hover:text-zinc-300">
+                            <button onClick={() => setTestOutput(null)} className="hover:text-[var(--fg-secondary)]">
                               Clear
                             </button>
                           </div>
@@ -405,7 +405,7 @@ export function SkillForgePanel({ open, onClose }: SkillForgePanelProps) {
             {activeTab === 'maintenance' && (
               <div className="p-4 rounded-xl border border-[var(--border)] bg-[var(--surface)] text-[13px] leading-relaxed space-y-3 font-mono">
                 {maintenanceReport ? (
-                  <pre className="whitespace-pre-wrap text-[12px] text-zinc-300">
+                  <pre className="whitespace-pre-wrap text-[12px] text-[var(--fg-secondary)]">
                     {IdleMaintenanceEngine.formatImprovementSummary(maintenanceReport)}
                   </pre>
                 ) : (

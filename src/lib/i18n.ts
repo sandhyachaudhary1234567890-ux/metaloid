@@ -13,11 +13,11 @@ export const LANGUAGES = [
 ] as const;
 
 export const MODELS = [
-  { id: 'auto', label: 'Auto', desc: 'Picks the best demo mode', icon: '✦' },
-  { id: 'fast', label: 'Fast', desc: 'Lowest latency', icon: '⚡' },
-  { id: 'balanced', label: 'Balanced', desc: 'Everyday conversations', icon: '◐' },
-  { id: 'smart', label: 'Smart', desc: 'Complex reasoning', icon: '⬢' },
-  { id: 'vision', label: 'Vision', desc: 'Image understanding', icon: '◉' },
+  { id: 'auto', label: 'Auto', desc: 'Best available right now' },
+  { id: 'fast', label: 'Fast', desc: 'Quickest replies' },
+  { id: 'balanced', label: 'Balanced', desc: 'Everyday conversations' },
+  { id: 'smart', label: 'Smart', desc: 'Harder problems, more thought' },
+  { id: 'vision', label: 'Vision', desc: 'Understands images and screenshots' },
 ] as const;
 
 export type Strings = Record<string, string>;

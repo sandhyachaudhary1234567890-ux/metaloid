@@ -1,26 +1,24 @@
-// Copies the marketing page into the build output so `dist/` is a complete
-// deployable artifact: dist/index.html (landing) + dist/app/ (the product).
-//
-// Vercel and any static host can then serve the repo root as-is.
-
-import fs from 'node:fs';
-import path from 'node:path';
+import { copyFileSync, mkdirSync, readdirSync, statSync } from 'node:fs';
+import { join, dirname } from 'node:path';
 import { fileURLToPath } from 'node:url';
 
-const ROOT = path.join(path.dirname(fileURLToPath(import.meta.url)), '..');
-const SRC = path.join(ROOT, 'landing');
-const OUT = path.join(ROOT, 'dist');
+// Copies the hand-written marketing page into the build output, so `dist/`
+// serves the site at `/` and the product at `/app/` from one deployment.
+// The app itself is built by Vite with `base: '/app/'`.
 
-if (!fs.existsSync(path.join(OUT, 'app', 'index.html'))) {
-  console.error('[landing] dist/app/index.html is missing — run `vite build` first.');
-  process.exit(1);
+const root = join(dirname(fileURLToPath(import.meta.url)), '..');
+const from = join(root, 'landing');
+const to = join(root, 'dist');
+
+function copy(src, dest) {
+  mkdirSync(dest, { recursive: true });
+  for (const entry of readdirSync(src)) {
+    const s = join(src, entry);
+    const d = join(dest, entry);
+    if (statSync(s).isDirectory()) copy(s, d);
+    else copyFileSync(s, d);
+  }
 }
 
-fs.mkdirSync(OUT, { recursive: true });
-for (const entry of fs.readdirSync(SRC)) {
-  const from = path.join(SRC, entry);
-  const to = path.join(OUT, entry);
-  fs.cpSync(from, to, { recursive: true });
-}
-
+copy(from, to);
 console.log('[landing] copied landing/ → dist/  (site at /, app at /app/)');

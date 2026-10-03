@@ -252,7 +252,7 @@ export function VoiceMode() {
         <div className="flex-1 flex flex-col items-center justify-center px-8 text-center">
           <MetaloidCore status="error" size={140} />
           <h2 className="mt-6 text-[18px] font-bold">Voice unavailable here</h2>
-          <p className="mt-2 text-[14px] text-zinc-400 max-w-[420px]">{fatal}</p>
+          <p className="mt-2 text-[14px] text-[var(--fg-muted)] max-w-[420px]">{fatal}</p>
           <button onClick={() => { exit(); setView('chat'); }} className="btn-primary h-11 px-6 text-[14px] mt-6">
             Continue in chat
           </button>

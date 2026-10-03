@@ -1,9 +1,9 @@
 import { useState, useEffect, useRef } from 'react';
-import { AnimatePresence, motion } from 'framer-motion';
+import { AnimatePresence, MotionConfig, motion } from 'framer-motion';
 import { useApp } from './lib/store';
 import { useKeyboardShortcuts } from './hooks/useKeyboardShortcuts';
 import { Sidebar, ConnectionPill } from './components/Sidebar';
-import { BottomNav, MobileMoreSheet } from './components/BottomNav';
+import { BottomNav } from './components/BottomNav';
 import { Header } from './components/Header';
 import { VoiceMode } from './components/VoiceMode';
 import { CommandPalette } from './components/CommandPalette';
@@ -13,35 +13,26 @@ import { MissionsPanel } from './components/MissionsPanel';
 import { SkillForgePanel } from './components/developer/SkillForgePanel';
 import { Toasts, ModalRoot } from './components/Overlays';
 import { StartupSequence } from './components/StartupSequence';
-import { BlockSwitchingTransition } from './components/animations/BlockSwitchingTransition';
-import { DeviceMorphPreview } from './components/animations/DeviceMorphPreview';
-import { HomeScreen } from './screens/HomeScreen';
 import { ChatScreen } from './screens/ChatScreen';
 import { LiveScreen } from './screens/LiveScreen';
 import { MemoryScreen } from './screens/MemoryScreen';
 import { HistoryScreen } from './screens/HistoryScreen';
 import { SettingsScreen } from './screens/SettingsScreen';
-import { WifiOff, Smartphone } from 'lucide-react';
+import { WifiOff } from 'lucide-react';
 
 import { MetaIoidLockup, MetaIoidFavicon } from './components/brand';
 import { AuthScreen } from './screens/AuthScreen';
 import { useAuth } from './lib/auth';
 import { SyncProvider } from './lib/sync';
 
-function MobileTopBar({ onDeviceMorph }: { onDeviceMorph: () => void }) {
+function MobileTopBar() {
   return (
     <div className="md:hidden sticky top-0 z-30 border-b border-[var(--border)] bg-[var(--surface)]/90 backdrop-blur-md">
-      <div className="px-4 h-[56px] flex items-center gap-2.5">
-        <MetaIoidLockup variant="compact" size="sm" />
-        <button
-          onClick={onDeviceMorph}
-          className="icon-btn w-8 h-8 rounded-lg ml-auto hover:text-[var(--accent)]"
-          title="Showcase 360° Morphing Device (4s)"
-          aria-label="360 Device Showcase"
-        >
-          <Smartphone size={15} />
+      <div className="px-4 h-[52px] flex items-center gap-2.5">
+        <button onClick={() => document.getElementById('main')?.scrollTo({ top: 0 })} aria-label="MetaIoid">
+          <MetaIoidLockup variant="compact" size="sm" />
         </button>
-        <span><ConnectionPill compact /></span>
+        <span className="ml-auto"><ConnectionPill compact /></span>
       </div>
     </div>
   );
@@ -57,12 +48,9 @@ function AppShell() {
   const {
     view, newConversation, setView, status, setStatus, voiceOpen,
     settings, connection, missionsOpen, setMissionsOpen, missionDraft,
-    deviceMorphOpen, setDeviceMorphOpen,
     skillForgeOpen, setSkillForgeOpen,
   } = useApp();
 
-  const [moreOpen, setMoreOpen] = useState(false);
-  const [switchingView, setSwitchingView] = useState(false);
   const prevViewRef = useRef(view);
   const [intro, setIntro] = useState(
     () =>
@@ -71,12 +59,12 @@ function AppShell() {
       !new URLSearchParams(window.location.search).has('no-intro')
   );
 
-  // Block Switching Transition on page/view changes (min 1.25s, max 5s)
+  // Keep the document title honest without holding the UI back: navigation is
+  // instant, and the only motion is a 160ms cross-fade inside <main>.
   useEffect(() => {
     if (prevViewRef.current !== view) {
       prevViewRef.current = view;
-      setSwitchingView(true);
-      MetaIoidFavicon.setDocumentTitle(view === 'home' ? undefined : view.charAt(0).toUpperCase() + view.slice(1));
+      MetaIoidFavicon.setDocumentTitle(view === 'chat' ? undefined : view.charAt(0).toUpperCase() + view.slice(1));
     }
   }, [view]);
 
@@ -106,17 +94,13 @@ function AppShell() {
       <Sidebar />
 
       <div className="flex-1 flex flex-col min-w-0 min-h-0">
-        <MobileTopBar onDeviceMorph={() => setDeviceMorphOpen(true)} />
-        {view !== 'home' && view !== 'chat' && (
+        <MobileTopBar />
+        {view !== 'chat' && (
           <div className="hidden md:block">
-            <Header
-              title={meta[view].title}
-              subtitle={meta[view].sub}
-              onDeviceMorph={() => setDeviceMorphOpen(true)}
-            />
+            <Header title={meta[view].title} subtitle={meta[view].sub} />
           </div>
         )}
-        {view !== 'home' && view !== 'chat' && (
+        {view !== 'chat' && (
           <div className="md:hidden px-4 pt-4">
             <h1 className="text-[20px] font-bold tracking-tight text-[var(--fg)]">{meta[view].title}</h1>
             <p className="text-[12.5px] text-[var(--fg-muted)]">{meta[view].sub}</p>
@@ -124,12 +108,14 @@ function AppShell() {
         )}
 
         {status === 'error' && (
-          <div className="mx-4 sm:mx-8 mt-4 rounded-xl border border-red-500/25 bg-red-500/[0.06] p-4 flex flex-col sm:flex-row sm:items-center gap-3">
-            <span className="flex items-center gap-2 text-[13.5px] font-semibold text-red-400"><WifiOff size={16} /> Connection issue encountered.</span>
-            <span className="text-[12.5px] text-[var(--fg-muted)] flex-1">{connection === 'online' ? 'The request failed.' : 'Backend not connected — running local demo.'}</span>
+          <div className="mx-4 sm:mx-8 mt-3 rounded-xl border border-amber-500/20 bg-amber-500/[0.05] px-4 py-3 flex flex-col sm:flex-row sm:items-center gap-2.5">
+            <span className="flex items-center gap-2 text-[13px] font-medium text-amber-300"><WifiOff size={15} /> That request didn't go through.</span>
+            <span className="text-[12.5px] text-[var(--fg-muted)] flex-1">
+              {connection === 'online' ? 'The provider or network dropped it. Your message is still here.' : 'No gateway is connected, so answers come from the local demo.'}
+            </span>
             <span className="flex gap-2">
-              <button onClick={() => setStatus('idle')} className="h-9 px-3.5 rounded-lg bg-[var(--surface-elevated)] border border-[var(--border)] text-[12.5px]">Dismiss</button>
-              <button onClick={() => setView('settings')} className="h-9 px-3.5 rounded-lg bg-red-500 text-white text-[12.5px]">Check system</button>
+              <button onClick={() => setStatus('idle')} className="btn-ghost h-8 px-3 text-[12.5px]">Dismiss</button>
+              <button onClick={() => setView('settings')} className="btn-primary h-8 px-3 text-[12.5px]">Open settings</button>
             </span>
           </div>
         )}
@@ -138,13 +124,12 @@ function AppShell() {
           <AnimatePresence mode="wait">
             <motion.div
               key={view}
-              initial={{ opacity: 0, y: 8 }}
-              animate={{ opacity: 1, y: 0 }}
-              exit={{ opacity: 0, y: -6 }}
-              transition={{ duration: 0.25, ease: [0.22, 1, 0.36, 1] }}
+              initial={{ opacity: 0 }}
+              animate={{ opacity: 1 }}
+              exit={{ opacity: 0 }}
+              transition={{ duration: 0.16, ease: 'easeOut' }}
               className={view === 'chat' ? 'h-full flex flex-col' : ''}
             >
-              {view === 'home' && <HomeScreen />}
               {view === 'chat' && <ChatScreen />}
               {view === 'live' && <LiveScreen />}
               {view === 'memory' && <MemoryScreen />}
@@ -154,8 +139,7 @@ function AppShell() {
           </AnimatePresence>
         </main>
 
-        <BottomNav onMore={() => setMoreOpen(true)} />
-        <MobileMoreSheet open={moreOpen} onClose={() => setMoreOpen(false)} />
+        <BottomNav />
       </div>
 
       <AnimatePresence>{voiceOpen && <VoiceMode key="voice" />}</AnimatePresence>
@@ -170,22 +154,6 @@ function AppShell() {
       {/* Type 1: 3D Reflection Metal Cube Startup Animation (4s) */}
       {intro && <StartupSequence onDone={() => setIntro(false)} />}
 
-      {/* Type 3: 360 Rotating Morphing Device Animation (4s on trigger) */}
-      <DeviceMorphPreview
-        isOpen={deviceMorphOpen}
-        onClose={() => setDeviceMorphOpen(false)}
-        featureName="360° Responsive Morph Showcase"
-      />
-
-      {/* Block Switching Animation: Page transition & process loader (min 1.25s, max 5s) */}
-      <BlockSwitchingTransition
-        active={switchingView}
-        minDuration={1250}
-        maxDuration={5000}
-        label={view.toUpperCase()}
-        hint="Switching workspace…"
-        onComplete={() => setSwitchingView(false)}
-      />
     </div>
   );
 }
@@ -197,8 +165,12 @@ function AppShell() {
  */
 export default function App() {
   return (
-    <SyncProvider>
-      <AppShell />
-    </SyncProvider>
+    // reducedMotion="user" makes every framer-motion animation honour the OS
+    // setting, matching the CSS rule in index.css.
+    <MotionConfig reducedMotion="user">
+      <SyncProvider>
+        <AppShell />
+      </SyncProvider>
+    </MotionConfig>
   );
 }

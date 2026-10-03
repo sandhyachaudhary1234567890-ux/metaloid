@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react';
 import { AnimatePresence, motion } from 'framer-motion';
-import { ChevronDown, Check, Cpu, RefreshCw } from 'lucide-react';
+import { ChevronDown, Check, RefreshCw } from 'lucide-react';
 import { MODELS, modelLabel } from '../lib/i18n';
 import { getModels, type LiveModel } from '../lib/transport';
 import { useApp } from '../lib/store';
@@ -32,18 +32,14 @@ export function ModelSelector({ compact = false }: { compact?: boolean }) {
       <button
         onClick={() => setOpen((o) => !o)}
         className={cn(
-          'flex items-center gap-2 rounded-xl border border-[var(--border)] bg-[var(--surface-sunken)] hover:bg-[var(--surface-hover)] text-[var(--fg)] transition-all',
-          compact ? 'h-8 px-2.5 text-[12px]' : 'h-9 px-3 text-[13px]'
+          'flex items-center gap-1.5 rounded-full text-[var(--fg-secondary)] hover:text-[var(--fg)] hover:bg-[var(--surface-hover)] transition-colors',
+          compact ? 'h-7 px-2 text-[11.5px]' : 'h-8 px-2.5 text-[12.5px]'
         )}
         aria-haspopup="listbox" aria-expanded={open} aria-label="Select model"
       >
-        <Cpu size={14} className="text-[var(--fg-muted)]" />
-        <span className="text-left leading-none">
-          <span className="block text-[8.5px] font-bold tracking-wider uppercase text-[var(--fg-muted)]">MODEL</span>
-          <span className="block font-medium text-[var(--fg)] mt-0.5">{modelLabel(model)}</span>
-        </span>
-        <span className={cn('w-1.5 h-1.5 rounded-full', online ? 'bg-emerald-400' : 'bg-[var(--fg-muted)]')} title={online ? 'Live models' : 'Local demo'} />
-        <ChevronDown size={13} className={cn('text-[var(--fg-muted)] transition-transform', open && 'rotate-180')} />
+        <span className={cn('w-1.5 h-1.5 rounded-full shrink-0', online ? 'bg-emerald-400' : 'bg-[var(--fg-subtle)]')} title={online ? 'Connected' : 'Local demo'} />
+        <span className="font-medium whitespace-nowrap">MetaIoid · {modelLabel(model)}</span>
+        <ChevronDown size={12} className={cn('text-[var(--fg-muted)] transition-transform', open && 'rotate-180')} />
       </button>
       <AnimatePresence>
         {open && (
@@ -52,10 +48,16 @@ export function ModelSelector({ compact = false }: { compact?: boolean }) {
             <motion.div
               initial={{ opacity: 0, y: -6, scale: 0.98 }} animate={{ opacity: 1, y: 0, scale: 1 }} exit={{ opacity: 0, y: -6, scale: 0.98 }}
               transition={{ duration: 0.15 }}
-              className="absolute right-0 top-11 z-50 w-[280px] rounded-2xl border border-[var(--border)] bg-[var(--surface-elevated)] text-[var(--fg)] shadow-pop p-1.5 max-h-[380px] overflow-y-auto"
+              className="absolute right-0 top-11 z-50 w-[300px] rounded-2xl border border-[var(--border)] bg-[var(--surface-elevated)] text-[var(--fg)] shadow-pop p-1.5 max-h-[400px] overflow-y-auto"
               role="listbox" aria-label="Models"
             >
-              <div className="px-3 pt-2 pb-1 text-[11px] font-semibold uppercase tracking-wider text-[var(--fg-muted)]">Routing preference</div>
+              <div className="px-3 pt-2 pb-1.5">
+                <div className="text-[12.5px] font-medium text-[var(--fg)]">MetaIoid · {modelLabel(model)}</div>
+                <div className="text-[11.5px] text-[var(--fg-muted)] mt-0.5">
+                  {online ? `Answers come from ${settings.backendUrl ? 'your gateway' : 'the connected gateway'}` : 'No AI connected — local demo replies'}
+                </div>
+              </div>
+              <div className="px-3 pt-1 pb-1 text-[11px] font-semibold uppercase tracking-wider text-[var(--fg-muted)]">How MetaIoid should think</div>
               {MODELS.map((m) => {
                 const active = model === m.id;
                 return (
@@ -64,7 +66,6 @@ export function ModelSelector({ compact = false }: { compact?: boolean }) {
                     onClick={() => { setModel(m.id as ModelId); setOpen(false); toast({ title: `Model set to ${m.label}` }); }}
                     className={cn('w-full flex items-center gap-3 px-3 py-2 rounded-xl text-left transition-colors', active ? 'bg-[var(--surface-hover)] border border-[var(--border)]' : 'hover:bg-[var(--surface-hover)]')}
                   >
-                    <span className="w-7 h-7 rounded-lg bg-[var(--surface)] border border-[var(--border)] flex items-center justify-center text-[13px]">{m.icon}</span>
                     <span className="flex-1 min-w-0">
                       <span className="block text-[13px] font-medium text-[var(--fg)] truncate">{m.label}</span>
                       <span className="block text-[11.5px] text-[var(--fg-muted)] truncate">{m.desc}</span>
