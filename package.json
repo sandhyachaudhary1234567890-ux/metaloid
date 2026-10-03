@@ -3,7 +3,7 @@
   "private": true,
   "version": "0.1.0",
   "type": "module",
-  "description": "metaloid \u2014 private personal AI operating system (frontend prototype)",
+  "description": "metaloid — private personal AI operating system (frontend prototype)",
   "scripts": {
     "dev": "vite",
     "build": "tsc -b && vite build && node scripts/build-landing.mjs",
@@ -17,6 +17,7 @@
     "showcase": "node scripts/showcase.mjs"
   },
   "dependencies": {
+    "@supabase/supabase-js": "^2.117.2",
     "framer-motion": "^11.11.17",
     "lucide-react": "^0.454.0",
     "react": "^18.3.1",

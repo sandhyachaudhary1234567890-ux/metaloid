@@ -26,6 +26,10 @@ import {
   runInvestigation, reportMarkdown, reportCSV,
 } from './osint.js';
 import { renderSystemPrompt, TOOLS_MANIFEST } from './systemPrompt.js';
+// Supabase-backed product API (auth, user data, storage). The model gateway
+// above is untouched by it; this adds identity + persistence alongside.
+import { mountV1 } from './api/v1.js';
+import { driverInfo, ping as dbPing, storagePing } from './data/index.js';
 // Agent runtime wiring (side-effect imports register skills + tools)
 import './tools/catalog.js';
 import './skills/osintSkill.js';
@@ -167,6 +171,11 @@ app.get('/api/health', async (req, res) => {
   // answered our catalogue call. Key-with-no-network is reported as degraded,
   // never as online (the app shows an honest state instead of a fake one).
   const ai = keySet && cat.ok && live > 0;
+  const info = driverInfo();
+  // Database + storage reachability are probed for real (cached briefly so a
+  // health poll cannot hammer Postgres). "Configured" is never reported as
+  // "healthy" — that is the same honesty rule as the provider layer.
+  const infra = await infraPing();
   res.json({
     ok: true,
     server: true,
@@ -176,10 +185,28 @@ app.get('/api/health', async (req, res) => {
     voice: false, // STT/TTS run in the browser (src/providers), not the gateway
     vision: ai, // vision-capable free models route through the same chat path
     realtime: true, // SSE streaming live
-    database: false, // V1: browser localStorage; server DB lands in V1.5
+    // database/auth/storage: honest, probed, never assumed
+    database: infra.database.ok,
+    auth: { configured: info.auth_configured, mode: info.auth_mode, reachable: infra.database.ok || !info.auth_configured },
+    storage: { driver: info.storage, ok: infra.storage.ok, buckets: infra.storage.buckets || null },
+    data: { driver: info.driver, supabase_configured: info.supabase_configured, url_set: info.supabase_url_set },
+    encryption: { configured: info.encryption.configured, active_key: info.encryption.activeKeyId },
     models: { free: live, total: models.length, catalogue: cat.ok, at: cat.at },
   });
 });
+
+// Infrastructure probe with a short cache: health is polled by the app every
+// 20s and by uptime checkers, which must not become a database load.
+let infraCache = { at: 0, value: null };
+async function infraPing() {
+  if (infraCache.value && Date.now() - infraCache.at < 10000) return infraCache.value;
+  const [db, storage] = await Promise.all([
+    dbPing().catch((e) => ({ ok: false, error: String((e && e.message) || e) })),
+    storagePing().catch((e) => ({ ok: false, error: String((e && e.message) || e) })),
+  ]);
+  infraCache = { at: Date.now(), value: { database: db, storage } };
+  return infraCache.value;
+}
 
 app.get('/api/models', async (req, res) => {
   const all = await listFreeModels().catch(() => []);
@@ -521,6 +548,9 @@ app.get('/api/debug/summary', (req, res) => {
   });
 });
 
+// ---- authenticated product API (Supabase identity + user data) ----
+const v1 = mountV1(app);
+
 // TLS when LAN certs exist (server/../certs from certs-gen.mjs) — required
 // because an https page may not call an http gateway (mixed content), and
 // the phone needs https for mic access at all.
@@ -550,7 +580,7 @@ for (const sig of ['SIGTERM', 'SIGINT']) {
 serve.listen(PORT, BIND_HOST, () => {
   console.log(`metaloid-gateway ${tlsOn ? 'https' : 'http'}://${
     BIND_HOST === '0.0.0.0' ? '<lan-ip>' : BIND_HOST
-  }:${PORT} (openrouter:${OR_KEY ? 'set' : 'missing'} nvidia:${NV_ON && NV_KEY ? 'enabled' : 'off'})`);
+  }:${PORT} (openrouter:${OR_KEY ? 'set' : 'missing'} nvidia:${NV_ON && NV_KEY ? 'enabled' : 'off'} data:${v1.driver} auth:${driverInfo().auth_mode})`);
   if (BIND_HOST === '0.0.0.0') {
     console.log('WARNING: gateway is reachable on your LAN. Same-WiFi only; never expose this port to the internet (it fronts paid API keys).');
   }

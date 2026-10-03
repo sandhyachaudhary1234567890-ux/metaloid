@@ -12,8 +12,10 @@
     "fake:provider": "node tests/fake-provider.mjs --port 9911 --scenario ok"
   },
   "dependencies": {
+    "@supabase/supabase-js": "^2.117.2",
     "cors": "^2.8.5",
     "express": "^4.21.2",
+    "jose": "^6.2.12",
     "selfsigned": "^5.5.0"
   }
 }
