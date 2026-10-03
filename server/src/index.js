@@ -108,6 +108,18 @@ app.use(cors({
 }));
 app.use(express.json({ limit: '256kb' }));
 
+// Baseline hardening. This gateway fronts provider keys, so it says what it
+// is, refuses to be framed, and never caches an API answer.
+app.use((req, res, next) => {
+  res.setHeader('X-Content-Type-Options', 'nosniff');
+  res.setHeader('Referrer-Policy', 'strict-origin-when-cross-origin');
+  res.setHeader('X-Frame-Options', 'DENY');
+  res.setHeader('Permissions-Policy', 'geolocation=(), microphone=(), camera=()');
+  if (req.path.startsWith('/api/')) res.setHeader('Cache-Control', 'no-store');
+  res.setHeader('X-Metaloid-Gateway', '1');
+  next();
+});
+
 // ---- tiny in-memory rate limiter ----
 const hits = new Map();
 function rateLimit(max, windowMs) {
@@ -521,6 +533,19 @@ const serve = tlsOn
       app
     )
   : app;
+
+// Graceful shutdown: finish in-flight streams before dying, so a deploy
+// never cuts a user mid-sentence.
+let shuttingDown = false;
+for (const sig of ['SIGTERM', 'SIGINT']) {
+  process.on(sig, () => {
+    if (shuttingDown) return;
+    shuttingDown = true;
+    console.log(`[gateway] ${sig} — draining connections`);
+    serve.close(() => process.exit(0));
+    setTimeout(() => process.exit(0), 5000).unref();
+  });
+}
 
 serve.listen(PORT, BIND_HOST, () => {
   console.log(`metaloid-gateway ${tlsOn ? 'https' : 'http'}://${

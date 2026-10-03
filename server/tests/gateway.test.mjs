@@ -12,14 +12,28 @@
 import { test, before, after } from 'node:test';
 import assert from 'node:assert/strict';
 import { spawn } from 'node:child_process';
+import net from 'node:net';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 
 const HERE = path.dirname(fileURLToPath(import.meta.url));
 const ROOT = path.join(HERE, '..');
 
-let nextPort = 9911;
-const port = () => nextPort++;
+/**
+ * Ask the OS for a free port instead of guessing one. A fixed range collides
+ * with whatever else is running (the showcase, another agent, a second test
+ * run) and makes failures look like product bugs.
+ */
+function port() {
+  return new Promise((resolve, reject) => {
+    const srv = net.createServer();
+    srv.on('error', reject);
+    srv.listen(0, '127.0.0.1', () => {
+      const { port: p } = srv.address();
+      srv.close(() => resolve(p));
+    });
+  });
+}
 
 function waitFor(url, timeoutMs = 15000) {
   const start = Date.now();
@@ -38,8 +52,8 @@ function waitFor(url, timeoutMs = 15000) {
 
 /** Boot a fake provider + a gateway wired to it. */
 async function boot({ scenario = 'ok', failFirst = 1, key = 'test-key-0123456789', extraEnv = {} }) {
-  const providerPort = port();
-  const gatewayPort = port();
+  const providerPort = await port();
+  const gatewayPort = await port();
 
   const provider = spawn(process.execPath, [
     path.join(HERE, 'fake-provider.mjs'),

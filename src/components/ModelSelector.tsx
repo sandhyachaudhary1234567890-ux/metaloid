@@ -12,7 +12,10 @@ export function ModelSelector({ compact = false }: { compact?: boolean }) {
   const { model, setModel, toast, connection, settings } = useApp();
   const [open, setOpen] = useState(false);
   const [live, setLive] = useState<LiveModel[] | null>(null);
-  const online = connection === 'online';
+  // Any reachable gateway can list models — sandbox and degraded included.
+  // Only a genuinely unreachable backend has nothing to show.
+  const reachable = connection === 'online' || connection === 'mock' || connection === 'degraded';
+  const online = reachable;
 
   const refresh = async () => {
     const m = await getModels(settings.backendUrl);
@@ -79,9 +82,16 @@ export function ModelSelector({ compact = false }: { compact?: boolean }) {
               {online ? (
                 live?.length ? (
                   live.slice(0, 8).map((m) => (
-                    <div key={m.id} className="px-3 py-1.5 rounded-lg text-left">
-                      <div className="text-[12px] font-mono text-[var(--fg)] truncate">{m.id}</div>
-                      <div className="text-[11px] text-[var(--fg-muted)]">{m.tier} · routed automatically</div>
+                    <div key={m.id} className={cn('px-3 py-1.5 rounded-lg text-left', m.unavailable && 'opacity-45')}>
+                      <div className="text-[12px] font-mono text-[var(--fg)] truncate flex items-center gap-2">
+                        <span className="truncate">{m.id}</span>
+                        {m.unavailable && (
+                          <span className="shrink-0 text-[9.5px] font-bold uppercase tracking-wider text-amber-400 border border-amber-500/30 bg-amber-500/10 rounded px-1.5 py-0.5">unavailable</span>
+                        )}
+                      </div>
+                      <div className="text-[11px] text-[var(--fg-muted)]">
+                        {m.unavailable ? 'rejected by provider — skipped automatically' : `${m.tier} · routed automatically`}
+                      </div>
                     </div>
                   ))
                 ) : (

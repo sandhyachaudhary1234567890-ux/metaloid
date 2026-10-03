@@ -71,5 +71,20 @@ export default defineConfig({
   },
   // dist/ is the whole deployable site: landing at the root, product in
   // /app/ (assets + public/ follow the base automatically).
-  build: { outDir: 'dist/app', emptyOutDir: true },
+  build: {
+    outDir: 'dist/app',
+    emptyOutDir: true,
+    // Split the heavy, rarely-changing libraries out of the app chunk so the
+    // shell paints fast and a UI edit doesn't invalidate 800 kB of vendor code.
+    rollupOptions: {
+      output: {
+        manualChunks: {
+          'vendor-react': ['react', 'react-dom'],
+          'vendor-motion': ['framer-motion'],
+          'vendor-markdown': ['react-markdown', 'remark-gfm'],
+        },
+      },
+    },
+    chunkSizeWarningLimit: 900,
+  },
 })

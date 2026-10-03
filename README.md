@@ -1,174 +1,205 @@
-# metaloid — private personal AI operating system (frontend + demo transport)
+# METALOID
 
-Premium, minimal, **product-level** personal AI assistant. One loop:
-open → ask → think → answer → speak / show / tool → memory / history.
+**A private personal AI operating system.** One loop, end to end:
 
-## Run
+> open → ask → think → answer → speak / show / tool → memory / history
 
-```bash
-npm run dev      # http://localhost:5173
-npm run build
+Voice, vision, agent missions, a memory vault and a model router behind one
+calm surface. The gateway holds the keys; the browser never sees them.
+
+```
+┌ site ────────────────┐   ┌ product ─────────────┐   ┌ gateway ─────────────┐
+│ /  landing page      │ → │ /app/  the assistant │ → │ :8787  /api + SSE    │
+└──────────────────────┘   └──────────────────────┘   └──────────┬───────────┘
+                                                                 │
+                                                    OpenRouter / NVIDIA /
+                                                    sandbox provider
 ```
 
-## Deploy — frontend on Vercel (`metaloid`), gateway on Render
+---
 
-The gateway is a persistent Node process (missions, OSINT jobs, SSE
-streams), so it canNOT live on Vercel serverless. Split deploy:
-
-**A. Push the repo to GitHub** (already committed locally — keys, certs,
-and logs were verified absent from the commit):
+## Quickstart — the whole product in two minutes
 
 ```bash
-cd C:\metaloid
-gh repo create metaloid --private --source=. --push
+npm install
+cd server && npm install && cd ..
+
+npm run showcase      # → http://localhost:5173
 ```
 
-(or create an empty private repo on github.com, then
-`git remote add origin <url>`, `git push -u origin master`)
+`showcase` starts three things: a **sandbox provider** (streams real SSE tokens
+locally, no key, no network), the **gateway**, and the **app**. The full loop —
+streaming replies, missions, memory, voice mode — works immediately.
 
-**B. Gateway → Render** (free tier works):
+The sidebar shows **SANDBOX**, not ONLINE. That is the point: the app never
+pretends. Set a real key and it flips to **ONLINE** with live models.
 
-1. Render dashboard → New → Web Service → select the `metaloid` repo
-2. Root directory: `server` · Build: `npm install` · Start: `npm start`
-   (or use the `render.yaml` blueprint at repo root)
-3. Environment variables:
-   - `BIND_HOST` = `0.0.0.0`
-   - `ALLOW_ORIGINS` = `https://metaloid.vercel.app`
-     (use the real frontend URL once Vercel assigns it)
-   - `OPENROUTER_API_KEY` = fresh key (**rotate first** — the key once
-     pasted in chat is burned: dashboard → revoke → new key)
-   - `NVIDIA_API_KEY` = leave unset unless NVIDIA access is enabled
-     afterwards (current key has no model entitlements)
-   - `NVIDIA_ENABLED` = `false`
-4. Deploy → copy the service URL, e.g. `https://metaloid-gateway.onrender.com`
-   (health: `GET /api/health` → `ai:true`)
+### Live models
 
-**C. Frontend → Vercel** (project name: `metaloid`):
+Create `server/.env`:
 
-1. Vercel dashboard → Add New → Project → Import the `metaloid` repo
-2. Framework preset: **Vite** (auto-detected; `vercel.json` pins
-   build `npm run build`, output `dist`, SPA rewrites)
-3. Environment variable (set BEFORE first build — Vite bakes it in):
-   - `VITE_API_URL` = `https://metaloid-gateway.onrender.com`
-4. Deploy → `https://metaloid.vercel.app`
-   (If the gateway URL came later: set `VITE_API_URL`, redeploy — or set
-   Backend URL once inside the app: Settings → Connections.)
+```ini
+OPENROUTER_API_KEY=sk-or-...
+ALLOW_ORIGINS=http://localhost:5173
+BIND_HOST=127.0.0.1
+```
 
-**Notes that bite:**
+```bash
+npm run gateway       # :8787
+npm run dev           # :5173  (landing at /, product at /app/)
+```
 
-- Free Render services sleep when idle → first request wakes in ~30–60s;
-  the app shows honest offline/demo states meanwhile, then ONLINE.
-- `server/data/*.json` resets on Render redeploys — browser history and
-  memories (localStorage) are unaffected.
-- Real `https://` on both ends: mic + transcription work with no cert
-  tricks (unlike LAN testing). CORS stays locked to the frontend origin.
-- Keys live only in Render env vars; the browser never sees them.
+Optional: `OPENROUTER_MODEL` pins a preferred model, `OPENROUTER_BASE` points
+at a compatible proxy or a local fake.
 
-## Same-WiFi phone testing (host local)
+---
 
-Both servers bind the LAN **over HTTPS** (`certs/` from `server/certs-gen.mjs`;
-gateway reads the same certs automatically):
+## Four real states, never a fake green dot
 
-- App: `https://192.168.29.25:5173` · Gateway: `https://192.168.29.25:8787`
-  (your laptop IP — re-check with `Get-NetIPAddress` if Wi-Fi changes;
-  regenerate certs if the IP changes).
-- For the cleanest phone test use the **production build** (no dev
-  double-mount, no hot-reload): `npm run build` →
-  `npx vite preview --port 4173 --host 0.0.0.0` → phone opens
-  `https://192.168.29.25:4173` (same cert warning bypass once).
-  Dev (`:5173`) is for coding; prod (`:4173`) is for judging.
+Most assistants show a green light whatever is happening. METALOID has four
+distinct, truthful states, and the UI switches between them automatically:
 
-1. Phone on the **same Wi-Fi** → open `https://192.168.29.25:5173` →
-   **Advanced → Proceed** past the self-signed warning (one time).
-   After the bypass the origin counts as **secure → mic + transcription work**.
-2. On the phone: Settings → Connections → Backend URL →
-   `https://192.168.29.25:8787` (phone's `127.0.0.1` is itself, not the laptop;
-   `https` is required — an `https` page cannot call an `http` gateway).
-   Sidebar should show **ONLINE**.
-3. If the phone can't reach it: allow inbound TCP 5173 + 8787 in
-   Windows Defender Firewall (admin), same band on both devices.
-4. No-flag fallback: plain `http://` LAN works for everything EXCEPT mic
-   (Chrome blocks capture on insecure origins) — or set
-   `chrome://flags/#unsafely-treat-insecure-origins-as-secure`.
-5. Never expose 8787 to the internet — it fronts paid API keys.
-   (`server/.env` → `BIND_HOST=127.0.0.1` returns to local-only.)
+| State | Meaning | What the user sees |
+|---|---|---|
+| **ONLINE** | a live provider answered | real model output |
+| **SANDBOX** | a local/sandbox provider is serving | working demo, clearly labelled |
+| **DEGRADED** | a key is set but unreachable | told the truth instead of silence |
+| **LOCAL DEMO** | no gateway at all | in-browser engine, every message marked demo |
 
-## Information architecture (only these)
+`GET /api/health` reports the same thing, from facts:
 
-- **Home** — command center: mode tabs, greeting, M-core hero, glass
-  composer, mode pills, right rail (user · recents · honest status · quote)
-- **Chat** — long conversations, editorial messages, contextual actions
-- **Live** — camera + voice + vision, one purpose: show + ask
-- **Memory** — intentional saves (Personal · Preferences · Projects · Important · Instructions)
-- **History** — conversations by Today / Yesterday / Previous 7 days
-- **Settings** — Appearance · Voice · Language · Agent · Memory · Privacy · Connections · System
+```json
+{ "ai": true, "provider": "openrouter", "models": { "free": 41, "catalogue": true } }
+```
 
-Tools are **contextual** (drawer + inline activity cards), never a route.
-Connections + system health live in **Settings → Connections/System**.
+`ai` is only true when a key is present **and** the provider actually answered
+the catalogue call — never because a variable is set.
 
-## State ownership (`src/store/`)
+---
 
-- `session.tsx` — view, agent status, settings, **real connection**, toasts, modal, overlays
-- `library.tsx` — memories only
-- `chat.tsx` — conversations, streaming generation, TTS
-- `index.tsx` — composition + `useApp()` compat; new code uses focused hooks
+## What is inside
 
-## Backend wiring (`src/lib/transport.ts`)
+| Layer | Where | What it does |
+|---|---|---|
+| Experience | `src/screens`, `src/components` | Home · Chat · Live · Memory · History · Settings |
+| Local agent runtime | `src/lib/agent`, `src/lib/voice`, `src/lib/skills` | planning, checkpoints, quality metrics, barge-in voice loop, skill forge |
+| Transport | `src/lib/transport.ts` | the only file that touches the network; relative URLs + scheme rescue |
+| Gateway | `server/src/index.js` | CORS lock, rate limits, SSE, hardening, graceful drain |
+| Agent kernel | `server/src/core` | missions, permissions, verification, memory, world model, audit |
+| Model router | `server/src/openrouter.js` | task routing, failover, dead-slug quarantine, honest errors |
+| Skills & tools | `server/src/skills`, `server/src/tools` | OSINT collectors, research helpers, tool catalogue |
 
-All backend traffic goes through `transport.ts`:
+Deeper documents: [`ARCHITECTURE.md`](ARCHITECTURE.md) ·
+[`VOICE_ARCHITECTURE.md`](VOICE_ARCHITECTURE.md) ·
+[`voicetest/RESULTS.md`](voicetest/RESULTS.md)
 
-- `checkBackend(url)` — real `/health` probe (4s timeout). Empty URL or
-  failure ⇒ `offline`, and the UI says **LOCAL DEMO**, never Online.
-- `streamChat()` — SSE path ready behind the `online` flag; demo engine otherwise.
-- Set the gateway in **Settings → Connections → Backend URL** (keys stay server-side).
+---
 
-Health re-checks on boot, every 20s, and on window focus. When offline the
-app still opens; AI controls degrade honestly with retry actions.
+## Reliability, because free models churn
 
-## Voice loop (realtime, local)
+The bug that shaped this layer: a free model slug that the provider no longer
+serves does **not** return 404. It returns **HTTP 400 — "The request contains
+invalid parameters"** — and that raw sentence used to land in the user's face.
 
-Mic → client VAD → interim STT → turn → streamed LLM (`task:'voice'`,
-short spoken style) → adaptive segmenter → chunked TTS → gapless queue →
-barge-in (energy + transcript paths, generation-guarded). Turns persist to
-history. Needs Chrome/Edge for live transcription; TTS/profiles follow
-Settings → Voice. Per-turn TTFT/TTFA/barge-in measured in-UI.
-Spec: `VOICE_ARCHITECTURE.md`.
+Now:
 
-## Acoustic intelligence (`src/lib/voice/acoustics.ts`)
+- **every** model rejection (`400 / 403 / 404 / 429 / 5xx`) fails over to the
+  next candidate inside the same stream;
+- a rejected slug is **quarantined for an hour** and never retried — the second
+  question does not pay for the first one's dead model;
+- `401 / 402` fail **fast** — a bad key or an empty balance is not fixed by
+  trying another model;
+- SSE-level errors and silent empty streams count as failures, not successes;
+- the user gets one calm sentence plus a stable code
+  (`no_provider · bad_key · no_credit · rate_limited · no_model · offline ·
+  timeout · server`); provider JSON stays in the server log;
+- `/api/models` **flags** quarantined slugs instead of hiding them, so the
+  model picker can explain itself.
 
-The mic is treated as an environment, not a wire: real constraint
-readback, rolling noise floor + SNR, heuristic sound classes
-(silence/speech/fan/music/hum/impact/unknown — never forced), adaptive
-VAD floor, fused duck-then-confirm barge-in, ephemeral event log, no raw
-audio retained. Proven 14/14 on synthesized signals; telemetry lives in
-the Pipeline panel. Torture + acoustic results: `voicetest/RESULTS.md`.
+## Tests
 
-## Home hero — black hole (`src/components/BlackHoleCanvas.tsx`)
+```bash
+npm test          # typecheck + 30 tests (app + gateway)
+```
 
-Three.js WebGL stage (bundled `three@0.163`, lazy chunk ~125KB gzip):
-event-horizon glow, noise-textured accretion disk, 22–60k twinkling
-stars, screen-space lensing + chromatic aberration, bloom. Guards:
-reduced-motion renders one still frame; touch never traps scroll
-(orbit drag desktop-only, gentle auto-drift everywhere); DPR capped;
-ResizeObserver sizing; full GPU dispose on unmount. Startup handoff
-anchor (`#home-orb-anchor`) is the stage frame.
+- **18 app tests** (vitest + jsdom): transport contract, the four connection
+  states, app renders, and a full chat round-trip with stubbed SSE.
+- **12 gateway tests** (node:test) against `server/tests/fake-provider.mjs`, a
+  controllable provider that can fail the first N models, return 401/429, emit
+  an empty stream or drop the socket — so failover, quarantine and error
+  honesty are proven, not asserted.
 
-## Startup film (`src/components/StartupSequence.tsx`)
+```bash
+npm run test:app        # frontend only
+npm run test:server     # gateway only
+npm run test:server -- --watch
+```
 
-10s cinematic boot mixed with the reference frames:
-arena ignition → crystal/orbital build → pearl activation
-(CORE ONLINE · VOICE/VISION/MEMORY/LANGUAGE READY) →
-`metaloid / PERSONAL INTELLIGENCE SYSTEM` → morph into the live Home
-underneath (`#home-orb-anchor` tracked, layers dissolve 8.6–9.85s).
+---
 
-- Toggle: Settings → Appearance → Startup animation · `?no-intro` bypass
-- Real frames: drop chronological stills + manifest at
-  `public/intro/frames.json` (JSON array of URLs); the film crossfades
-  them under the procedural layers. Absent manifest ⇒ procedural only.
+## Deploy
 
-## Honesty rules (enforced in UI)
+**Site + app → Vercel** (root `/` is the landing page, `/app/` the product —
+`vercel.json` handles the rewrites and asset caching):
 
-- Connection pill: ONLINE only when the probe succeeds, else LOCAL DEMO.
-- Status equalizer animates only while actually speaking.
-- Tool cards carry a DEMO tag until a real tool executes.
-- Camera stops on Live unmount; audio stops on interrupt; listeners clean up.
+```
+VITE_API_URL = https://<your-gateway-host>   # set before the first build
+```
+
+**Gateway → Render / Railway / Fly** (it must be a persistent process:
+in-memory missions, OSINT jobs, long SSE streams — it cannot be serverless):
+
+| Variable | Value |
+|---|---|
+| `BIND_HOST` | `0.0.0.0` |
+| `ALLOW_ORIGINS` | `https://<your-site>` |
+| `OPENROUTER_API_KEY` | your key (**rotate anything ever pasted in chat**) |
+| `NVIDIA_ENABLED` | `false` unless the account is entitled |
+
+Health check: `GET /api/health` → `ai: true`. `render.yaml` is a blueprint.
+
+### Same-Wi-Fi phone testing
+
+Both servers can serve TLS from `certs/` (generate with
+`cd server && node certs-gen.mjs`), which is what unlocks mic capture on a
+phone. Details and firewall notes: [`server/README.md`](server/README.md).
+
+---
+
+## Security posture
+
+- provider keys live only in the gateway's environment, never in the bundle;
+- the gateway binds `127.0.0.1` by default and the showcase keeps it loopback —
+  an auth-less API fronting paid keys must not sit on the open internet;
+- CORS is an explicit allow-list (the machine's own LAN origins are added
+  automatically for phone testing, never `*`);
+- the gateway sets `nosniff`, `X-Frame-Options: DENY`, `Referrer-Policy`,
+  a `Permissions-Policy`, and `no-store` on every `/api/` response;
+- input caps on every route (message length, body size), per-IP rate limits,
+  unhandled-rejection armour, and a graceful drain on SIGTERM;
+- nothing secret is ever logged, and `server/src/core/memory.js` redacts
+  key-shaped strings before they can be stored as memories.
+
+## Layout
+
+```
+landing/               marketing page (served at /)
+src/                   the product (served at /app/)
+  lib/transport.ts     the only network layer
+  lib/voice/           streaming voice loop
+server/                gateway (Express + SSE)
+  src/openrouter.js    model router, failover, quarantine
+  tests/               gateway tests + fake provider
+scripts/showcase.mjs   one-command demo
+```
+
+## Status
+
+Working today: streaming chat with failover · voice loop with barge-in ·
+vision path · missions with approvals and checkpoints · OSINT investigations
+with reports · memory vault with redaction · model router and picker · landing
+page · 30 tests · deploy-ready build.
+
+Deliberately still local-first: history and memories are browser storage until
+you point the app at a server database. Provider keys are yours; nothing is
+proxied through anyone else.

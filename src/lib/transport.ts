@@ -141,6 +141,8 @@ export interface LiveModel {
   id: string;
   name: string;
   tier: string;
+  /** Set by the gateway when a slug was rejected and is temporarily skipped. */
+  unavailable?: boolean;
 }
 
 let modelCache: { at: number; base: string; models: LiveModel[] } | null = null;
