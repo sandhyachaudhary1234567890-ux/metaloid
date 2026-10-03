@@ -20,8 +20,39 @@ const apiProxy = {
   '/api': { target: 'http://127.0.0.1:8787', changeOrigin: false },
 }
 
+// The app lives under /app/ so the repo root can serve the marketing page.
+// Dev + preview get a tiny middleware that serves landing/index.html at "/"
+// — one URL shows the site, one shows the product, same as production.
+const landing = {
+  name: 'metaloid-landing',
+  configureServer(server: import('vite').ViteDevServer) {
+    server.middlewares.use((req, res, next) => {
+      const url = (req.url || '/').split('?')[0];
+      if (url === '/' || url === '/index.html' || url === '/landing') {
+        res.setHeader('Content-Type', 'text/html; charset=utf-8');
+        res.end(fs.readFileSync(path.resolve(__dirname, 'landing/index.html')));
+        return;
+      }
+      next();
+    });
+  },
+  configurePreviewServer(server: import('vite').PreviewServer) {
+    server.middlewares.use((req, res, next) => {
+      const url = (req.url || '/').split('?')[0];
+      if (url === '/' || url === '/index.html' || url === '/landing') {
+        res.setHeader('Content-Type', 'text/html; charset=utf-8');
+        res.end(fs.readFileSync(path.resolve(__dirname, 'landing/index.html')));
+        return;
+      }
+      next();
+    });
+  },
+};
+
 export default defineConfig({
-  plugins: [react()],
+  plugins: [react(), landing],
+  // product UI is served from /app/; the landing page owns /
+  base: '/app/',
   server: {
     port: 5173,
     host: '0.0.0.0',
@@ -38,5 +69,7 @@ export default defineConfig({
     proxy: apiProxy,
     https: tls ? { key: fs.readFileSync(keyPath), cert: fs.readFileSync(certPath) } : undefined,
   },
-  build: { outDir: 'dist' },
+  // dist/ is the whole deployable site: landing at the root, product in
+  // /app/ (assets + public/ follow the base automatically).
+  build: { outDir: 'dist/app', emptyOutDir: true },
 })

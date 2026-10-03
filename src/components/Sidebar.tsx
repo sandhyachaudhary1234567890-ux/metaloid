@@ -17,12 +17,39 @@ const NAV: { id: ViewId; label: string; icon: typeof Home }[] = [
 ];
 
 export function ConnectionPill({ compact = false }: { compact?: boolean }) {
-  const { connection, recheckConnection } = useApp();
+  const { connection, recheckConnection, health } = useApp();
   if (connection === 'online') {
     return (
-      <span className={cn('inline-flex items-center gap-1.5 rounded-full border border-emerald-500/25 bg-emerald-500/10 text-emerald-400', compact ? 'px-2 py-0.5 text-[10px]' : 'px-2.5 py-1 text-[11px]', 'font-semibold tracking-wider')}>
+      <span
+        title={`Live provider: ${health?.provider || 'openrouter'}${health?.models?.free ? ` · ${health.models.free} free models` : ''}`}
+        className={cn('inline-flex items-center gap-1.5 rounded-full border border-emerald-500/25 bg-emerald-500/10 text-emerald-400', compact ? 'px-2 py-0.5 text-[10px]' : 'px-2.5 py-1 text-[11px]', 'font-semibold tracking-wider')}
+      >
         <span className="h-1.5 w-1.5 rounded-full bg-emerald-400 animate-pulse" /> ONLINE
       </span>
+    );
+  }
+  // Answers arrive, but from a local mock provider — say MOCK, never ONLINE.
+  if (connection === 'mock') {
+    return (
+      <button
+        onClick={() => recheckConnection()}
+        title="Sandbox provider — real streaming, canned model. Everything works end to end with no API key. Set OPENROUTER_API_KEY for live models."
+        className={cn('inline-flex items-center gap-1.5 rounded-full border border-violet-500/30 bg-violet-500/10 text-violet-300 hover:border-violet-400/60 transition-colors', compact ? 'px-2 py-0.5 text-[10px]' : 'px-2.5 py-1 text-[11px]', 'font-semibold tracking-wider')}
+      >
+        <span className="h-1.5 w-1.5 rounded-full bg-violet-400" /> SANDBOX
+      </button>
+    );
+  }
+  // A key exists but the provider is unreachable — degraded, not offline.
+  if (connection === 'degraded') {
+    return (
+      <button
+        onClick={() => recheckConnection()}
+        title="A provider key is set but the gateway cannot reach it (network or provider outage). Replies will fail until this clears."
+        className={cn('inline-flex items-center gap-1.5 rounded-full border border-amber-500/30 bg-amber-500/10 text-amber-300 hover:border-amber-400/60 transition-colors', compact ? 'px-2 py-0.5 text-[10px]' : 'px-2.5 py-1 text-[11px]', 'font-semibold tracking-wider')}
+      >
+        <span className="h-1.5 w-1.5 rounded-full bg-amber-300 animate-pulse" /> DEGRADED
+      </button>
     );
   }
   if (connection === 'checking') {

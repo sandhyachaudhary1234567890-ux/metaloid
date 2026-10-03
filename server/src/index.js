@@ -10,7 +10,11 @@ import https from 'node:https';
 import { fileURLToPath } from 'node:url';
 import express from 'express';
 import cors from 'cors';
-import { listFreeModels, pickModel, pickCandidates, retryableProviderError, classifyTask, streamChat } from './openrouter.js';
+import {
+  listFreeModels, pickModel, pickCandidates, retryableProviderError, classifyTask,
+  streamChat, markModelDead, modelSpecificFailure, humanizeProviderError, modelHealth,
+  catalogueStatus, PROVIDER_LABEL,
+} from './openrouter.js';
 import { streamNvidia, NVIDIA_SMART } from './nvidia.js';
 // NVIDIA fallback is OFF unless explicitly enabled: this account's key has
 // no function entitlements (every model 404s "not found for account").
@@ -144,23 +148,55 @@ app.get('/', (req, res) => {
 // ---- health: REAL backend state (frontend shows this, never fakes it) ----
 app.get('/api/health', async (req, res) => {
   const models = await listFreeModels().catch(() => []);
-  const ai = OR_KEY.length > 10 && models.length > 0;
+  const keySet = OR_KEY.length > 10;
+  const cat = catalogueStatus();
+  const live = models.filter((m) => !modelHealth().quarantined.some((q) => q.id === m.id)).length;
+  // ai = "a reply can plausibly be produced": key present AND the provider
+  // answered our catalogue call. Key-with-no-network is reported as degraded,
+  // never as online (the app shows an honest state instead of a fake one).
+  const ai = keySet && cat.ok && live > 0;
   res.json({
     ok: true,
     server: true,
     ai,
-    voice: false, // STT/TTS providers plug in here (demo on frontend until then)
+    degraded: keySet && !ai,
+    provider: keySet ? PROVIDER_LABEL : null,
+    voice: false, // STT/TTS run in the browser (src/providers), not the gateway
     vision: ai, // vision-capable free models route through the same chat path
     realtime: true, // SSE streaming live
     database: false, // V1: browser localStorage; server DB lands in V1.5
-    models: { free: models.length },
+    models: { free: live, total: models.length, catalogue: cat.ok, at: cat.at },
   });
 });
 
 app.get('/api/models', async (req, res) => {
-  const models = await listFreeModels().catch(() => []);
-  res.json({ models, provider: 'openrouter', free_only: true });
+  const all = await listFreeModels().catch(() => []);
+  const dead = new Set(modelHealth().quarantined.map((q) => q.id));
+  // live first, quarantined flagged (not hidden) so the UI can be honest
+  // about why a model is unavailable instead of silently dropping it
+  const models = all.map((m) => ({ ...m, unavailable: dead.has(m.id) }));
+  res.json({ models, provider: PROVIDER_LABEL, free_only: true, mock: PROVIDER_LABEL !== 'openrouter' });
 });
+
+/**
+ * Stable, non-leaky error codes for the UI. The frontend switches on these
+ * (and only these) so provider churn never changes what a user sees.
+ *   no_provider · bad_key · no_credit · rate_limited · no_model · offline · timeout · server
+ */
+function providerCodeOf(e) {
+  const s = e && e.status;
+  if (e && e.code === 'NO_PROVIDER') return 'no_provider';
+  if (e && e.code === 'CLIENT_GONE') return 'cancelled';
+  if (s === 401) return 'bad_key';
+  if (s === 402) return 'no_credit';
+  if (s === 429) return 'rate_limited';
+  if (s === 400 || s === 404) return 'no_model';
+  if (s >= 500) return 'server';
+  const msg = String((e && e.message) || '');
+  if (/fetch failed|ENOTFOUND|EAI_AGAIN|ECONNREFUSED/i.test(msg)) return 'offline';
+  if (/aborted|timeout/i.test(msg)) return 'timeout';
+  return 'server';
+}
 
 // ---- chat: model router + streaming (SSE) ----
 app.post('/api/chat', rateLimit(30, 60000), async (req, res) => {
@@ -214,18 +250,24 @@ app.post('/api/chat', rateLimit(30, 60000), async (req, res) => {
 
   try {
     const models = await listFreeModels();
-    const candidates = pickCandidates(models, tier, 3);
+    const candidates = pickCandidates(models, tier, 4);
     const model = candidates[0] || pickModel(models, tier);
     usedModel = model.id;
     usedProvider = 'openrouter';
-    if (!OR_KEY) throw new Error('openrouter unconfigured');
-    // try-next failover across free slugs (404 dead slug / 429 rate limit)
+    if (!OR_KEY) {
+      const e = new Error('openrouter unconfigured');
+      e.code = 'NO_PROVIDER';
+      throw e;
+    }
+    // try-next failover across free slugs. A dead slug surfaces as HTTP 400
+    // ("invalid parameters") just as often as 404, so anything model-specific
+    // is quarantined and the next candidate is tried.
     let lastErr = null;
     let streamed = false;
     for (const cand of candidates) {
       try {
         usedModel = cand.id;
-        send({ meta: { model: cand.id, tier, provider: 'openrouter', demo: false } });
+        send({ meta: { model: cand.id, tier, provider: PROVIDER_LABEL, demo: PROVIDER_LABEL !== 'openrouter' } });
         await streamChat({
           apiKey: OR_KEY, model: cand, messages, system,
           signal: controller.signal,
@@ -235,7 +277,9 @@ app.post('/api/chat', rateLimit(30, 60000), async (req, res) => {
         break;
       } catch (e) {
         lastErr = e;
+        if (modelSpecificFailure(e)) markModelDead(cand.id, (e && e.providerBody) || (e && e.message));
         if (!retryableProviderError(e)) throw e;
+        console.warn(`[gateway] model ${cand.id} rejected (${e && e.status || 'net'}) → next candidate`);
         send({ retry: cand.id });
       }
     }
@@ -258,11 +302,16 @@ app.post('/api/chat', rateLimit(30, 60000), async (req, res) => {
         send({ done: true });
       } catch (e2) {
         trackModel({ provider: usedProvider || 'openrouter', model: usedModel, tier, ms: Date.now() - t0, ok: false });
-        send({ error: 'Both providers failed. Retry.' });
+        // raw detail stays in the server log; the client gets one clean line
+        console.error('[gateway] all providers failed:', (e && e.message) || e, '|', (e2 && e2.message) || e2);
+        send({ error: humanizeProviderError(e2.code === 'CLIENT_GONE' ? e2 : (e || e2)), code: providerCodeOf(e || e2) });
       }
     } else {
       trackModel({ provider: 'openrouter', model: usedModel, tier, ms: Date.now() - t0, ok: false });
-      send({ error: 'Model provider failed. Retry.' });
+      if (!controller.signal.aborted && !(e && e.code === 'CLIENT_GONE')) {
+        console.error('[gateway] chat failed:', (e && e.message) || e);
+      }
+      send({ error: humanizeProviderError(e), code: providerCodeOf(e) });
     }
   } finally {
     clearTimeout(timer);
@@ -453,7 +502,11 @@ app.post('/api/osint/investigations/:id/ingest', rateLimit(10, 60000), (req, res
 
 // Observability (debug surface — not user UI)
 app.get('/api/debug/summary', (req, res) => {
-  res.json({ ...observeSummary(), world: worldStats(), memory: memoryStats(), audit: recentAudit(30) });
+  res.json({
+    ...observeSummary(),
+    providers: { openrouter_key: OR_KEY.length > 10, catalogue: catalogueStatus(), models: modelHealth() },
+    world: worldStats(), memory: memoryStats(), audit: recentAudit(30),
+  });
 });
 
 // TLS when LAN certs exist (server/../certs from certs-gen.mjs) — required

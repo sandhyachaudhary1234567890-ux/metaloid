@@ -31,3 +31,7 @@ voicetest/*.wav
 *.swp
 .DS_Store
 Thumbs.db
+
+# generated test/build scratch
+coverage/
+.vitest/

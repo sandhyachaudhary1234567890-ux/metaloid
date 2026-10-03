@@ -6,7 +6,10 @@
   "description": "METALOID edge/API gateway — model router, agent skills, OSINT orchestration. Keys stay here, never in the frontend.",
   "scripts": {
     "start": "node src/index.js",
-    "dev": "node --watch src/index.js"
+    "dev": "node --watch src/index.js",
+    "test": "node --test --test-concurrency=1 \"tests/*.test.mjs\"",
+    "test:watch": "node --test --watch \"tests/*.test.mjs\"",
+    "fake:provider": "node tests/fake-provider.mjs --port 9911 --scenario ok"
   },
   "dependencies": {
     "cors": "^2.8.5",

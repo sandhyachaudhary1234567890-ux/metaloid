@@ -26,10 +26,16 @@ export interface ServiceHealth {
   vision: boolean;
   realtime: boolean;
   database: boolean;
+  /** 'openrouter' (real) | 'local-mock' (dev/demo provider) | null (none). */
+  provider?: string | null;
+  /** True when a key exists but the provider is unreachable — never show ONLINE. */
+  degraded?: boolean;
+  models?: { free?: number; total?: number; catalogue?: boolean; at?: string | null };
 }
 
 export const allDown: ServiceHealth = {
   server: false, ai: false, voice: false, vision: false, realtime: false, database: false,
+  provider: null, degraded: false,
 };
 
 // On a remote host a stored *loopback* URL (the default) can never work —
@@ -70,6 +76,19 @@ function altOf(base: string): string | null {
   return null;
 }
 
+/**
+ * Three distinct truths, never blurred:
+ *   mock      — answers, but the provider self-identifies as a local mock
+ *   degraded  — a key is configured, the provider is unreachable
+ *   online    — real provider, reachable
+ */
+function stateOf(h: ServiceHealth): ConnectionState {
+  if (!h.ai) return 'offline';
+  if (h.provider === 'local-mock') return 'mock';
+  if (h.degraded) return 'degraded';
+  return 'online';
+}
+
 async function probeHealth(base: string): Promise<ServiceHealth | null> {
   try {
     const res = await fetchTimeout(`${base}/api/health`, 5000);
@@ -78,6 +97,9 @@ async function probeHealth(base: string): Promise<ServiceHealth | null> {
     return {
       server: !!h.server, ai: !!h.ai, voice: !!h.voice,
       vision: !!h.vision, realtime: !!h.realtime, database: !!h.database,
+      provider: h.provider ?? null,
+      degraded: !!h.degraded,
+      models: h.models,
     };
   } catch {
     return null;
@@ -102,14 +124,14 @@ export async function checkBackend(configuredUrl: string): Promise<{ state: Conn
   const h1 = await probeHealth(primary);
   if (h1) {
     resolved = primary;
-    return { state: h1.ai ? 'online' : 'offline', health: h1 };
+    return { state: stateOf(h1), health: h1 };
   }
   const alt = altOf(primary);
   if (alt) {
     const h2 = await probeHealth(alt);
     if (h2) {
       resolved = alt;
-      return { state: h2.ai ? 'online' : 'offline', health: h2 };
+      return { state: stateOf(h2), health: h2 };
     }
   }
   return { state: 'offline', health: allDown };
@@ -143,6 +165,7 @@ export interface StreamResult {
   demo: boolean;
   model?: string;
   tier?: string;
+  provider?: string;
 }
 
 /**
@@ -210,7 +233,7 @@ export async function streamChat(
   const decoder = new TextDecoder();
   let buf = '';
   let full = '';
-  let meta: { model?: string; tier?: string } = {};
+  let meta: { model?: string; tier?: string; provider?: string; demo?: boolean } = {};
   for (;;) {
     const { done, value } = await reader.read();
     if (done) break;
@@ -220,13 +243,20 @@ export async function streamChat(
     for (const line of lines) {
       const s = line.trim();
       if (!s.startsWith('data:')) continue;
-      let ev: { meta?: { model: string; tier: string }; token?: string; done?: boolean; error?: string };
+      let ev: {
+        meta?: { model: string; tier: string; provider?: string; demo?: boolean };
+        token?: string; done?: boolean; error?: string; code?: string;
+      };
       try {
         ev = JSON.parse(s.slice(5).trim());
       } catch {
         continue; // partial chunk — wait for more
       }
-      if (ev.error) throw new Error(ev.error);
+      if (ev.error) {
+        const err = new Error(ev.error) as Error & { code?: string };
+        if (ev.code) err.code = ev.code;
+        throw err;
+      }
       if (ev.meta) meta = ev.meta;
       if (typeof ev.token === 'string') {
         full = ev.token;
@@ -234,12 +264,20 @@ export async function streamChat(
       }
       if (ev.done) {
         reader.cancel().catch(() => {});
-        return { text: full, detectedLang: plan.detectedLang, demo: false, model: meta.model, tier: meta.tier };
+        return {
+          text: full, detectedLang: plan.detectedLang,
+          demo: !!meta.demo || meta.provider === 'local-mock',
+          model: meta.model, tier: meta.tier, provider: meta.provider,
+        };
       }
     }
   }
   if (!full) throw new Error('Empty response from gateway.');
-  return { text: full, detectedLang: plan.detectedLang, demo: false, model: meta.model, tier: meta.tier };
+  return {
+    text: full, detectedLang: plan.detectedLang,
+    demo: !!meta.demo || meta.provider === 'local-mock',
+    model: meta.model, tier: meta.tier, provider: meta.provider,
+  };
 }
 
 // ---------------- OSINT client ----------------

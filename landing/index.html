@@ -1,0 +1,464 @@
+<!doctype html>
+<html lang="en" class="dark">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover" />
+<title>METALOID — The private AI operating system</title>
+<meta name="description" content="METALOID is a private personal AI operating system: one loop for voice, vision, agents, memory and verified execution. Runs on your gateway, keys never touch the browser." />
+<meta name="theme-color" content="#08090b" />
+<meta property="og:title" content="METALOID — The private AI operating system" />
+<meta property="og:description" content="One loop: open → ask → think → answer → speak / show / tool → memory. Voice, vision, agent missions and a memory vault, on infrastructure you own." />
+<meta property="og:type" content="website" />
+<link rel="icon" type="image/png" href="/app/brand/metaloid-mark.png" />
+<link rel="apple-touch-icon" href="/app/brand/metaloid-mark.png" />
+<link rel="preconnect" href="https://fonts.googleapis.com" />
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet" />
+<style>
+  :root {
+    --bg: #08090b;
+    --bg-2: #0c0d10;
+    --surface: #111318;
+    --surface-2: #16181e;
+    --border: rgba(255,255,255,.08);
+    --border-2: rgba(255,255,255,.14);
+    --fg: #f4f4f5;
+    --fg-2: #a1a1aa;
+    --fg-3: #71717a;
+    --accent: #22d3ee;
+    --accent-2: #818cf8;
+    --violet: #a78bfa;
+    --emerald: #34d399;
+    --amber: #fbbf24;
+    --radius: 14px;
+    --radius-lg: 20px;
+    color-scheme: dark;
+  }
+  * { box-sizing: border-box; }
+  html { scroll-behavior: smooth; }
+  body {
+    margin: 0;
+    background: var(--bg);
+    color: var(--fg);
+    font-family: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+    -webkit-font-smoothing: antialiased;
+    -moz-osx-font-smoothing: grayscale;
+    overflow-x: hidden;
+    line-height: 1.5;
+  }
+  a { color: inherit; text-decoration: none; }
+  ::selection { background: var(--accent); color: #04121a; }
+  .wrap { width: 100%; max-width: 1160px; margin: 0 auto; padding: 0 24px; }
+  .mono { font-family: 'JetBrains Mono', ui-monospace, monospace; }
+
+  /* ---------- nav ---------- */
+  header.nav {
+    position: sticky; top: 0; z-index: 50;
+    backdrop-filter: saturate(160%) blur(14px);
+    background: rgba(8,9,11,.72);
+    border-bottom: 1px solid var(--border);
+  }
+  .nav-inner { height: 62px; display: flex; align-items: center; gap: 28px; }
+  .brand { display: flex; align-items: center; gap: 10px; font-weight: 800; letter-spacing: .16em; font-size: 13px; }
+  .brand img { width: 24px; height: 24px; }
+  .nav-links { display: flex; gap: 24px; margin-left: auto; font-size: 13.5px; color: var(--fg-2); }
+  .nav-links a:hover { color: var(--fg); }
+  .btn {
+    display: inline-flex; align-items: center; justify-content: center; gap: 8px;
+    height: 40px; padding: 0 18px; border-radius: 11px;
+    font-size: 13.5px; font-weight: 600; border: 1px solid var(--border-2);
+    background: var(--surface-2); color: var(--fg); cursor: pointer;
+    transition: transform .16s ease, background .16s ease, border-color .16s ease, box-shadow .16s ease;
+    white-space: nowrap;
+  }
+  .btn:hover { background: #1d2027; border-color: rgba(255,255,255,.24); transform: translateY(-1px); }
+  .btn:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+  .btn-primary {
+    background: linear-gradient(135deg, var(--accent), var(--accent-2));
+    color: #05121a; border: none;
+    box-shadow: 0 10px 30px -12px rgba(34,211,238,.55);
+  }
+  .btn-primary:hover { box-shadow: 0 16px 40px -12px rgba(34,211,238,.7); background: linear-gradient(135deg, #4ae0f5, #9aa7ff); }
+  .btn-lg { height: 48px; padding: 0 24px; font-size: 14.5px; border-radius: 13px; }
+  .btn-ghost { background: transparent; }
+
+  /* ---------- hero ---------- */
+  .hero { position: relative; padding: 92px 0 68px; overflow: hidden; }
+  .hero::before {
+    content: ''; position: absolute; inset: -30% -10% auto -10%; height: 720px;
+    background:
+      radial-gradient(520px 320px at 22% 34%, rgba(34,211,238,.16), transparent 62%),
+      radial-gradient(520px 340px at 78% 20%, rgba(129,140,248,.16), transparent 64%);
+    filter: blur(8px); pointer-events: none;
+  }
+  .hero-grid { position: relative; display: grid; grid-template-columns: 1.05fr .95fr; gap: 56px; align-items: center; }
+  .eyebrow {
+    display: inline-flex; align-items: center; gap: 9px;
+    font-size: 11.5px; font-weight: 700; letter-spacing: .14em; text-transform: uppercase;
+    color: var(--fg-2); border: 1px solid var(--border); border-radius: 999px;
+    padding: 6px 13px; background: rgba(255,255,255,.02); margin-bottom: 22px;
+  }
+  .dot { width: 6px; height: 6px; border-radius: 50%; background: var(--emerald); box-shadow: 0 0 0 3px rgba(52,211,153,.16); }
+  h1 {
+    margin: 0 0 18px; font-size: clamp(38px, 5.4vw, 60px); line-height: 1.03;
+    letter-spacing: -.032em; font-weight: 800;
+  }
+  h1 .grad {
+    background: linear-gradient(115deg, #e8faff 8%, var(--accent) 42%, var(--accent-2) 88%);
+    -webkit-background-clip: text; background-clip: text; color: transparent;
+  }
+  .lede { font-size: 17px; color: var(--fg-2); max-width: 560px; margin: 0 0 30px; }
+  .cta-row { display: flex; gap: 12px; flex-wrap: wrap; align-items: center; }
+  .cta-note { font-size: 12.5px; color: var(--fg-3); margin-top: 16px; }
+
+  /* app preview */
+  .preview {
+    border: 1px solid var(--border); border-radius: var(--radius-lg);
+    background: linear-gradient(180deg, var(--surface-2), var(--bg-2));
+    box-shadow: 0 40px 80px -40px rgba(0,0,0,.9), 0 0 0 1px rgba(255,255,255,.02) inset;
+    overflow: hidden;
+  }
+  .preview-bar { display: flex; align-items: center; gap: 8px; padding: 11px 14px; border-bottom: 1px solid var(--border); background: rgba(255,255,255,.015); }
+  .tl { width: 10px; height: 10px; border-radius: 50%; background: #2e333e; }
+  .preview-title { margin-left: 8px; font-size: 11.5px; color: var(--fg-3); letter-spacing: .1em; font-weight: 600; }
+  .preview-body { display: grid; grid-template-columns: 138px 1fr; min-height: 344px; }
+  .preview-side { border-right: 1px solid var(--border); padding: 12px; display: flex; flex-direction: column; gap: 6px; }
+  .side-item { display: flex; align-items: center; gap: 8px; font-size: 12px; color: var(--fg-3); padding: 7px 9px; border-radius: 9px; }
+  .side-item.active { background: rgba(34,211,238,.09); color: var(--accent); border: 1px solid rgba(34,211,238,.22); }
+  .preview-main { padding: 16px; display: flex; flex-direction: column; gap: 12px; }
+  .msg { max-width: 92%; border-radius: 13px; padding: 11px 13px; font-size: 12.8px; line-height: 1.55; }
+  .msg.user { align-self: flex-end; background: rgba(34,211,238,.1); border: 1px solid rgba(34,211,238,.2); }
+  .msg.ai { background: var(--surface); border: 1px solid var(--border); }
+  .typing { display: inline-flex; gap: 3px; align-items: center; }
+  .typing i { width: 5px; height: 5px; border-radius: 50%; background: var(--accent); animation: blink 1.1s ease-in-out infinite; }
+  .typing i:nth-child(2) { animation-delay: .16s; } .typing i:nth-child(3) { animation-delay: .32s; }
+  @keyframes blink { 0%,80%,100% { opacity: .25; transform: translateY(0); } 40% { opacity: 1; transform: translateY(-2px); } }
+  .chips { display: flex; gap: 6px; flex-wrap: wrap; }
+  .chip { font-size: 10.5px; font-weight: 600; letter-spacing: .04em; padding: 4px 9px; border-radius: 999px; border: 1px solid var(--border-2); color: var(--fg-2); }
+  .chip.online { color: var(--emerald); border-color: rgba(52,211,153,.3); background: rgba(52,211,153,.08); }
+
+  /* ---------- sections ---------- */
+  section { padding: 76px 0; border-top: 1px solid var(--border); }
+  .sec-head { max-width: 660px; margin-bottom: 42px; }
+  .kicker { font-size: 11.5px; font-weight: 700; letter-spacing: .16em; text-transform: uppercase; color: var(--accent); margin-bottom: 12px; }
+  h2 { margin: 0 0 14px; font-size: clamp(26px, 3.1vw, 36px); letter-spacing: -.024em; line-height: 1.14; font-weight: 800; }
+  .sec-head p { margin: 0; color: var(--fg-2); font-size: 15.5px; }
+  .grid { display: grid; gap: 16px; }
+  .g3 { grid-template-columns: repeat(3, 1fr); }
+  .g2 { grid-template-columns: repeat(2, 1fr); }
+  .card {
+    border: 1px solid var(--border); border-radius: var(--radius);
+    background: linear-gradient(180deg, rgba(255,255,255,.026), rgba(255,255,255,.008));
+    padding: 22px; transition: border-color .18s ease, transform .18s ease;
+  }
+  .card:hover { border-color: var(--border-2); transform: translateY(-2px); }
+  .card h3 { margin: 0 0 8px; font-size: 15.5px; letter-spacing: -.01em; }
+  .card p { margin: 0; font-size: 13.8px; color: var(--fg-2); }
+  .ico {
+    width: 34px; height: 34px; border-radius: 10px; display: grid; place-items: center;
+    margin-bottom: 14px; border: 1px solid var(--border-2);
+    background: linear-gradient(135deg, rgba(34,211,238,.14), rgba(129,140,248,.12));
+  }
+  .ico svg { width: 17px; height: 17px; stroke: var(--accent); fill: none; stroke-width: 1.7; stroke-linecap: round; stroke-linejoin: round; }
+
+  /* honest states */
+  .states { display: grid; grid-template-columns: repeat(4, 1fr); gap: 12px; }
+  .state { border: 1px solid var(--border); border-radius: 12px; padding: 16px; background: var(--surface); }
+  .state .pill { display: inline-flex; align-items: center; gap: 7px; font-size: 10.5px; font-weight: 700; letter-spacing: .1em; padding: 4px 10px; border-radius: 999px; margin-bottom: 12px; }
+  .state .pill i { width: 6px; height: 6px; border-radius: 50%; }
+  .p-online { color: var(--emerald); background: rgba(52,211,153,.1); border: 1px solid rgba(52,211,153,.28); } .p-online i { background: var(--emerald); }
+  .p-sandbox { color: var(--violet); background: rgba(167,139,250,.1); border: 1px solid rgba(167,139,250,.3); } .p-sandbox i { background: var(--violet); }
+  .p-degraded { color: var(--amber); background: rgba(251,191,36,.1); border: 1px solid rgba(251,191,36,.3); } .p-degraded i { background: var(--amber); }
+  .p-offline { color: var(--fg-3); background: rgba(255,255,255,.04); border: 1px solid var(--border-2); } .p-offline i { background: var(--fg-3); }
+  .state p { margin: 0; font-size: 13px; color: var(--fg-2); }
+
+  /* pipeline */
+  .pipe { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; }
+  .step {
+    border: 1px solid var(--border); border-radius: 12px; background: var(--surface);
+    padding: 13px 15px; font-size: 13px; font-weight: 600; display: flex; align-items: center; gap: 9px;
+  }
+  .step span.n { font-size: 10.5px; color: var(--fg-3); font-weight: 700; letter-spacing: .08em; }
+  .arrow { color: var(--fg-3); font-size: 15px; }
+
+  /* metrics */
+  .metrics { display: grid; grid-template-columns: repeat(4, 1fr); gap: 16px; }
+  .metric { border-left: 2px solid var(--accent); padding-left: 16px; }
+  .metric b { display: block; font-size: 30px; letter-spacing: -.03em; font-weight: 800; }
+  .metric span { font-size: 12.8px; color: var(--fg-2); }
+
+  /* code */
+  .code {
+    border: 1px solid var(--border); border-radius: var(--radius); overflow: hidden;
+    background: #0a0b0e;
+  }
+  .code-head { display: flex; align-items: center; gap: 8px; padding: 10px 14px; border-bottom: 1px solid var(--border); font-size: 11.5px; color: var(--fg-3); }
+  pre { margin: 0; padding: 16px; overflow-x: auto; font-size: 12.8px; line-height: 1.75; }
+  code { font-family: 'JetBrains Mono', ui-monospace, monospace; }
+  .c-dim { color: #52525b; } .c-acc { color: var(--accent); } .c-str { color: #a5f3d0; }
+
+  footer { border-top: 1px solid var(--border); padding: 34px 0 46px; }
+  .foot { display: flex; gap: 18px; flex-wrap: wrap; align-items: center; justify-content: space-between; font-size: 12.5px; color: var(--fg-3); }
+  .foot a:hover { color: var(--fg-2); }
+
+  .badge-row { display: flex; gap: 8px; flex-wrap: wrap; margin-top: 22px; }
+  .badge { font-size: 11.5px; color: var(--fg-2); border: 1px solid var(--border); border-radius: 999px; padding: 5px 11px; background: rgba(255,255,255,.02); }
+
+  @media (max-width: 980px) {
+    .hero-grid { grid-template-columns: 1fr; gap: 40px; }
+    .g3, .g2, .states, .metrics { grid-template-columns: 1fr 1fr; }
+    .nav-links { display: none; }
+  }
+  @media (max-width: 620px) {
+    section { padding: 56px 0; }
+    .g3, .g2, .states, .metrics { grid-template-columns: 1fr; }
+    .preview-body { grid-template-columns: 1fr; }
+    .preview-side { display: none; }
+    .hero { padding: 56px 0 40px; }
+  }
+  @media (prefers-reduced-motion: reduce) {
+    * { animation: none !important; transition: none !important; scroll-behavior: auto !important; }
+  }
+</style>
+</head>
+<body>
+
+<header class="nav">
+  <div class="wrap nav-inner">
+    <a class="brand" href="/">
+      <img src="/app/brand/metaloid-mark.png" alt="" />
+      <span>METALOID</span>
+    </a>
+    <nav class="nav-links" aria-label="Sections">
+      <a href="#capabilities">Capabilities</a>
+      <a href="#honesty">Honesty</a>
+      <a href="#architecture">Architecture</a>
+      <a href="#run">Run it</a>
+    </nav>
+    <a class="btn btn-primary" href="/app/">Open the app</a>
+  </div>
+</header>
+
+<main>
+  <section class="hero" style="border-top:none">
+    <div class="wrap hero-grid">
+      <div>
+        <span class="eyebrow"><i class="dot"></i> Private by architecture</span>
+        <h1>The private <span class="grad">AI operating system</span> you actually own.</h1>
+        <p class="lede">
+          METALOID is one continuous loop — open, ask, think, answer, speak, act — with voice,
+          vision, agent missions and a durable memory vault on top. Your gateway holds the keys.
+          Your browser never sees them.
+        </p>
+        <div class="cta-row">
+          <a class="btn btn-primary btn-lg" href="/app/">Launch METALOID</a>
+          <a class="btn btn-lg btn-ghost" href="#run">Run it locally</a>
+        </div>
+        <p class="cta-note">No account. No telemetry. Works offline with an honest demo state.</p>
+        <div class="badge-row">
+          <span class="badge">Voice loop · barge-in &lt; 10 ms</span>
+          <span class="badge">Hindi · Hinglish · English</span>
+          <span class="badge">30 automated tests</span>
+        </div>
+      </div>
+
+      <div class="preview" role="img" aria-label="METALOID app interface preview">
+        <div class="preview-bar">
+          <i class="tl"></i><i class="tl"></i><i class="tl"></i>
+          <span class="preview-title">METALOID</span>
+          <span class="chip online" style="margin-left:auto">ONLINE</span>
+        </div>
+        <div class="preview-body">
+          <div class="preview-side">
+            <div class="side-item active">Home</div>
+            <div class="side-item">Chat</div>
+            <div class="side-item">Live</div>
+            <div class="side-item">Memory</div>
+            <div class="side-item">History</div>
+            <div class="side-item">Settings</div>
+          </div>
+          <div class="preview-main">
+            <div class="msg user">Draft a launch plan and remember my tone preferences.</div>
+            <div class="msg ai">
+              Mission created — 4 tasks, verification on.<br />
+              <span class="c-dim mono" style="font-size:11.5px">plan → research → draft → verify</span>
+              <div class="chips" style="margin-top:9px">
+                <span class="chip">mission · running</span>
+                <span class="chip">memory · saved</span>
+              </div>
+            </div>
+            <div class="msg ai" style="display:flex;gap:9px;align-items:center">
+              <span class="typing"><i></i><i></i><i></i></span>
+              <span style="color:var(--fg-3);font-size:12.5px">synthesising verified answer…</span>
+            </div>
+            <div class="chips" style="margin-top:auto">
+              <span class="chip">fast</span><span class="chip">smart</span><span class="chip">vision</span><span class="chip">coding</span>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <section id="capabilities">
+    <div class="wrap">
+      <div class="sec-head">
+        <div class="kicker">Capabilities</div>
+        <h2>Everything a personal AI needs, in one surface.</h2>
+        <p>Not a chat box with extras. Six screens, a real agent kernel behind them, and a gateway that keeps secrets server-side.</p>
+      </div>
+      <div class="grid g3">
+        <div class="card">
+          <div class="ico"><svg viewBox="0 0 24 24"><path d="M12 2a3 3 0 0 0-3 3v6a3 3 0 0 0 6 0V5a3 3 0 0 0-3-3z"/><path d="M19 10v1a7 7 0 0 1-14 0v-1"/><path d="M12 18v4"/></svg></div>
+          <h3>Voice that keeps up</h3>
+          <p>Streaming speech in, streaming speech out, with barge-in, turn detection and Hinglish handling. Interrupt mid-sentence — the old generation dies instantly.</p>
+        </div>
+        <div class="card">
+          <div class="ico"><svg viewBox="0 0 24 24"><path d="M2 12s3.5-7 10-7 10 7 10 7-3.5 7-10 7-10-7-10-7z"/><circle cx="12" cy="12" r="3"/></svg></div>
+          <h3>Vision on demand</h3>
+          <p>Live camera, stills and screen understanding routed through vision-capable models, with an explicit "demo until connected" state instead of a fake result.</p>
+        </div>
+        <div class="card">
+          <div class="ico"><svg viewBox="0 0 24 24"><path d="M4 7h16"/><path d="M4 12h10"/><path d="M4 17h7"/><circle cx="18" cy="16" r="2.6"/></svg></div>
+          <h3>Agent missions</h3>
+          <p>Objectives become task graphs: plan, execute, retry, pause, resume, cancel. Budgets, approvals and checkpoints are enforced in code, not by the model.</p>
+        </div>
+        <div class="card">
+          <div class="ico"><svg viewBox="0 0 24 24"><path d="M12 3l8 4.5v9L12 21l-8-4.5v-9L12 3z"/><path d="M12 12l8-4.5M12 12v9M12 12L4 7.5"/></svg></div>
+          <h3>Memory vault</h3>
+          <p>Durable, categorised memories with secret redaction. The agent reads only what you keep, and it survives reloads — no cloud account required.</p>
+        </div>
+        <div class="card">
+          <div class="ico"><svg viewBox="0 0 24 24"><circle cx="11" cy="11" r="7"/><path d="M20 20l-3.6-3.6"/></svg></div>
+          <h3>Recon &amp; research</h3>
+          <p>OSINT collectors with correlation, confidence grading and exportable reports, plus deterministic research helpers for cross-checking extracts.</p>
+        </div>
+        <div class="card">
+          <div class="ico"><svg viewBox="0 0 24 24"><path d="M4 6h16v12H4z"/><path d="M8 10h.01M12 10h.01M16 10h.01"/></svg></div>
+          <h3>Model router</h3>
+          <p>Task-aware routing across free and paid models with automatic failover when a slug dies. One dead model never becomes your problem.</p>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <section id="honesty">
+    <div class="wrap">
+      <div class="sec-head">
+        <div class="kicker">Honesty by design</div>
+        <h2>It tells you what it is. Always.</h2>
+        <p>Most assistants fake a green dot. METALOID has four real states, and it will not claim to be online when it is not — no invented sources, no phantom tools, no simulated successes presented as real ones.</p>
+      </div>
+      <div class="states">
+        <div class="state">
+          <span class="pill p-online"><i></i>ONLINE</span>
+          <p>A live provider answered. Replies are real model output.</p>
+        </div>
+        <div class="state">
+          <span class="pill p-sandbox"><i></i>SANDBOX</span>
+          <p>A local provider is streaming — end to end demos without a key, clearly labelled.</p>
+        </div>
+        <div class="state">
+          <span class="pill p-degraded"><i></i>DEGRADED</span>
+          <p>A key is set but unreachable. It says so instead of failing silently.</p>
+        </div>
+        <div class="state">
+          <span class="pill p-offline"><i></i>LOCAL DEMO</span>
+          <p>No gateway. A local engine answers, marked as demo in every message.</p>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <section id="architecture">
+    <div class="wrap">
+      <div class="sec-head">
+        <div class="kicker">Architecture</div>
+        <h2>Deterministic code decides. The model reasons.</h2>
+        <p>Permissions, state transitions, schemas, validation, audit and queues are code. Interpretation, planning and language are the model's job — under a constitution it cannot edit.</p>
+      </div>
+      <div class="pipe" style="margin-bottom:34px">
+        <div class="step"><span class="n">01</span> Experience layer</div><span class="arrow">→</span>
+        <div class="step"><span class="n">02</span> Gateway &amp; CORS lock</div><span class="arrow">→</span>
+        <div class="step"><span class="n">03</span> Agent kernel</div><span class="arrow">→</span>
+        <div class="step"><span class="n">04</span> Skills &amp; tools</div><span class="arrow">→</span>
+        <div class="step"><span class="n">05</span> Verify &amp; memory</div>
+      </div>
+      <div class="grid g2">
+        <div class="card">
+          <h3>Keys never reach the browser</h3>
+          <p>Provider credentials live in the gateway's environment. The frontend talks to <span class="mono">/api</span> only, so a stolen laptop is not a stolen key.</p>
+        </div>
+        <div class="card">
+          <h3>Failover you can prove</h3>
+          <p>Dead model slugs are quarantined and skipped, rate limits roll to the next candidate, and bad credentials fail fast. Every branch is covered by tests.</p>
+        </div>
+        <div class="card">
+          <h3>Verified outputs</h3>
+          <p>A verification pass scores answers and flags placeholder text, so a "done" mission has evidence behind it.</p>
+        </div>
+        <div class="card">
+          <h3>Local-first data</h3>
+          <p>History, memories and settings live in the browser by default. Point it at a server database when you want sync — not before.</p>
+        </div>
+      </div>
+      <div class="metrics" style="margin-top:40px">
+        <div class="metric"><b>20/20</b><span>voice torture matrix, incl. barge-in &amp; Hindi</span></div>
+        <div class="metric"><b>&lt;10 ms</b><span>interrupt to LISTENING, engine-clear</span></div>
+        <div class="metric"><b>30</b><span>automated tests across app &amp; gateway</span></div>
+        <div class="metric"><b>0</b><span>secrets in the repository</span></div>
+      </div>
+    </div>
+  </section>
+
+  <section id="run">
+    <div class="wrap">
+      <div class="sec-head">
+        <div class="kicker">Run it</div>
+        <h2>Three commands to a working system.</h2>
+        <p>No account, no key required to see the whole product. Add a provider key when you want live models.</p>
+      </div>
+      <div class="grid g2">
+        <div class="code">
+          <div class="code-head"><i class="tl"></i><i class="tl"></i><i class="tl"></i><span class="mono" style="margin-left:6px">showcase — full loop, no key</span></div>
+          <pre><code><span class="c-dim"># install</span>
+<span class="c-acc">npm</span> install
+<span class="c-acc">cd</span> server &amp;&amp; <span class="c-acc">npm</span> install &amp;&amp; <span class="c-acc">cd</span> ..
+
+<span class="c-dim"># app + gateway + sandbox provider</span>
+<span class="c-acc">npm</span> run showcase   <span class="c-dim">→ localhost:5173</span></code></pre>
+        </div>
+        <div class="code">
+          <div class="code-head"><i class="tl"></i><i class="tl"></i><i class="tl"></i><span class="mono" style="margin-left:6px">live models</span></div>
+          <pre><code><span class="c-dim"># server/.env</span>
+<span class="c-str">OPENROUTER_API_KEY</span>=sk-or-...
+<span class="c-str">ALLOW_ORIGINS</span>=http://localhost:5173
+
+<span class="c-acc">npm</span> run gateway   <span class="c-dim"># :8787</span>
+<span class="c-acc">npm</span> run dev       <span class="c-dim"># :5173</span></code></pre>
+        </div>
+      </div>
+      <div class="cta-row" style="margin-top:32px">
+        <a class="btn btn-primary btn-lg" href="/app/">Open METALOID</a>
+        <a class="btn btn-lg" href="/app/#settings">Connect a provider</a>
+      </div>
+    </div>
+  </section>
+</main>
+
+<footer>
+  <div class="wrap foot">
+    <div style="display:flex;align-items:center;gap:10px">
+      <img src="/app/brand/metaloid-mark.png" alt="" style="width:20px;height:20px" />
+      <span>METALOID — private personal AI operating system</span>
+    </div>
+    <div style="display:flex;gap:18px">
+      <a href="/app/">App</a>
+      <a href="#architecture">Architecture</a>
+      <a href="#run">Self-host</a>
+    </div>
+  </div>
+</footer>
+
+</body>
+</html>
