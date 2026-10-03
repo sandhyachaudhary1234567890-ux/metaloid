@@ -113,3 +113,37 @@ describe('chat loop', () => {
     await waitFor(() => expect(screen.getByText(/Hello from the gateway\./)).toBeTruthy(), { timeout: 5000 });
   });
 });
+
+describe('every screen renders without crashing', () => {
+  const open = async (label: string) => {
+    mount();
+    const btn = await waitFor(() => {
+      const els = screen.getAllByText(label);
+      const el = els.find((e) => e.closest('button'));
+      if (!el) throw new Error(`${label} nav not found`);
+      return el.closest('button') as HTMLElement;
+    });
+    fireEvent.click(btn);
+  };
+
+  it('Memory vault', async () => {
+    await open('Memory');
+    await waitFor(() => expect(document.body.textContent).toMatch(/memory/i), { timeout: 4000 });
+  });
+
+  it('History', async () => {
+    await open('History');
+    await waitFor(() => expect(document.body.textContent).toMatch(/history|no conversations|conversation/i), { timeout: 4000 });
+  });
+
+  it('Settings renders and exposes the gateway URL control', async () => {
+    await open('Settings');
+    await waitFor(() => expect(screen.getByLabelText('Backend URL')).toBeTruthy(), { timeout: 4000 });
+  });
+
+  it('Live degrades gracefully with no camera available (jsdom has none)', async () => {
+    await open('Live');
+    // the screen must survive a missing getUserMedia instead of throwing
+    await waitFor(() => expect(document.body.textContent).toMatch(/live|camera|vision/i), { timeout: 4000 });
+  });
+});

@@ -119,11 +119,13 @@ Now:
 ## Tests
 
 ```bash
-npm test          # typecheck + 30 tests (app + gateway)
+npm test          # typecheck + 44 tests (app + gateway)
 ```
 
-- **18 app tests** (vitest + jsdom): transport contract, the four connection
-  states, app renders, and a full chat round-trip with stubbed SSE.
+- **32 app tests** (vitest + jsdom): transport contract, the four connection
+  states, every screen rendering (including Live with no camera), a full chat
+  round-trip with stubbed SSE, and the voice segmenter — including the
+  Devanagari danda regression that once stopped Hindi from being spoken.
 - **12 gateway tests** (node:test) against `server/tests/fake-provider.mjs`, a
   controllable provider that can fail the first N models, return 401/429, emit
   an empty stream or drop the socket — so failover, quarantine and error
