@@ -8,14 +8,17 @@
 | APKs | [`metaloid-debug.apk`](https://github.com/sandhyachaudhary1234567890-ux/metaloid/releases/download/apk-v3/metaloid-debug.apk) · [`metaloid-release.apk`](https://github.com/sandhyachaudhary1234567890-ux/metaloid/releases/download/apk-v3/metaloid-release.apk) |
 | Checksums | [`SHA256SUMS.txt`](https://github.com/sandhyachaudhary1234567890-ux/metaloid/releases/download/apk-v3/SHA256SUMS.txt) |
 | V4 status | **Not published.** [Run 37211404025](https://github.com/sandhyachaudhary1234567890-ux/metaloid/actions/runs/37211404025) passed unit tests, lint, and the debug APK build, but failed the API 34 emulator startup test. Release build, APK secret scan, and APK artifact upload were skipped. Do not treat V4 as a verified installable release. |
-| Next Android version | `versionCode = 3`, `versionName = 1.0.2`, so it can update V3 (`2` / `1.0.1`). |
+| Next Android version | `versionCode = 3`, `versionName = 1.0.2` (greater than V3's `2` / `1.0.1`). An in-place update also requires the signing certificate to match V3; that continuity is not yet verified. |
 
 The debug APK is easier to diagnose because it is not minified. The release APK
 is not signed with a Play Store release keystore unless the repository secrets
 below are configured; the build workflow intentionally falls back to the debug
-signing key otherwise. Neither the old V3 APK nor any future APK should be
-called device-verified unless it has actually been installed and exercised on a
-device.
+signing key otherwise. A higher `versionCode` alone does not make an APK
+installable over V3: Android also requires the same signing certificate. V3/V4
+signing continuity has not been verified, so do not promise an in-place update
+until the certificate fingerprints are compared. Neither the old V3 APK nor
+any future APK should be called device-verified unless it has actually been
+installed and exercised on a device.
 
 ## 1. Where the APK comes from
 
@@ -24,8 +27,8 @@ The APK is built by GitHub Actions, not by hand:
 
 | Trigger | Result |
 | --- | --- |
-| Any push touching `android/**` or the workflow | unit tests + lint + debug APK + release APK, uploaded as the `metaloid-apk` artifact |
-| Push a tag `apk-*` | the same build, plus a GitHub Release carrying the APKs and `SHA256SUMS.txt` |
+| Any push touching `android/**`, `docs/android/**`, or the workflow | On a successful run: unit tests + lint + emulator smoke test + debug/release APKs + secret scan, uploaded as the `metaloid-apk` artifact |
+| Push a tag `apk-*` | the same successful build, plus a GitHub Release carrying the APKs and `SHA256SUMS.txt` |
 | Manual run with `publish` ticked | same as the tag, with an auto-numbered tag |
 
 Artifacts expire (90 days); a GitHub Release does not. Do not tag `apk-v4` until
@@ -104,5 +107,9 @@ the file does not depend on that.
    PATCH extension documented in `BACKEND_CHANGES.md`.
 5. Has the exact APK been installed and exercised on a supported device? If not,
    state plainly that device behavior remains unverified.
-6. Create the `apk-v4` release only after the above gates pass, attach the two
+6. Does the APK signing-certificate fingerprint match V3? A `versionCode` bump is
+   not sufficient for an in-place update. Use the same persistent release
+   keystore, or clearly state that users must uninstall V3 first (with the
+   associated local-data loss).
+7. Create the `apk-v4` release only after the above gates pass, attach the two
    APKs and `SHA256SUMS.txt`, and verify the release page actually serves them.

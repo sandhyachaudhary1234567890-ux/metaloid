@@ -49,8 +49,8 @@ android {
         applicationId = "com.metaloid.app"
         minSdk = 26
         targetSdk = 34
-        // Bumped for every published APK: Android installs an update only when
-        // versionCode increases. apk-v3 is 2/1.0.1; V4 must be installable over it.
+        // apk-v3 is 2/1.0.1; V4 increments the versionCode to 3. An in-place
+        // update still requires the same signing certificate — see RELEASE.md.
         versionCode = 3
         versionName = "1.0.2"
 

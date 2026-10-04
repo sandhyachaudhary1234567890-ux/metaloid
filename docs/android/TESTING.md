@@ -20,7 +20,11 @@ results are from GitHub Actions only. Fresh checks against this tree on
 `npm --prefix server test` passed **78/78**; and `npm run test:unit` reported
 **56 passed, 1 failed**
 (the pre-existing session-restoration/chat-loop test described below). The
-provider HTTP matrix had previously passed **26/26**. These checks do not
+provider HTTP matrix had previously passed **26/26**. On the same date,
+`npm audit --omit=dev` and `npm --prefix server audit` reported zero
+runtime/server vulnerabilities; the all-dependency root
+`npm audit` still reports **10 dev-tool advisories** (3 moderate, 6 high,
+1 critical), unresolved and outside the Android patch. These checks do not
 verify the Android client, production deployment compatibility, signing
 continuity, or behavior on a physical device.
 
@@ -104,17 +108,20 @@ TestingLibraryElementError: Unable to find an element with the text: Chat.
   at src/App.test.tsx:110:32
 ```
 
-`git diff --stat master...HEAD -- src package.json server` is empty for this
-branch: no file under `src/` (or any web/server file) is touched by the Android
-work, so that test fails identically on `master` with this toolchain. It is not
-weakened, skipped or deleted here — weakening it to make a green light would be
-the opposite of what this document is for.
+`git diff --stat master...HEAD -- src package.json` is empty for the web client;
+this branch does contain the V4 server contract additions documented in
+`BACKEND_CHANGES.md`. The failing assertion is in the unchanged web-client test
+and is unrelated to the Android/backend changes. It is not weakened, skipped or
+deleted here — weakening it to make a green light would be the opposite of what
+this document is for.
 
-That 78/78 result was for the pre-V4 baseline, when no server source changed.
-V4 adds backend response metadata and message PATCH fields; its targeted API-v1
-and provider HTTP checks are recorded in `BACKEND_CHANGES.md`. The full server
-suite and web-client checks must be rerun against the exact V4 tree before
-claiming a complete regression pass.
+The historical 78/78 server result below was for the pre-V4 baseline. Against
+the current V4 tree on 2026-10-04, `npm --prefix server test` passed 78/78,
+the server core/artifact/skills matrices passed, and the RLS security suites
+passed 157 properties plus 49 pgTAP assertions; see `BACKEND_CHANGES.md`. The
+current root TypeScript check and production web build also passed, while the
+root unit suite remains 56/57. This is not a complete web-client regression
+pass.
 
 ## 5. What CI proves, and what is *not* verified
 
