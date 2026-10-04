@@ -277,7 +277,10 @@ export class ProviderAdapter {
       
       return { status: 'healthy', latency: Date.now() - start };
     } catch (error) {
-      return { status: 'unavailable', latency: Date.now() - start, error: error.message };
+      // The code (e.g. credential_unreadable) must survive: the caller needs
+      // to distinguish "cannot reach the provider" from "cannot open the
+      // stored key", because only one of those is fixed by retrying.
+      return { status: 'unavailable', latency: Date.now() - start, error: error.message, code: (error && error.code) || null };
     }
   }
 }
@@ -513,7 +516,7 @@ export class OpenRouterAdapter extends ProviderAdapter {
       
       return { status: 'healthy', latency: Date.now() - start };
     } catch (error) {
-      return { status: 'unavailable', latency: Date.now() - start, error: error.message };
+      return { status: 'unavailable', latency: Date.now() - start, error: error.message, code: (error && error.code) || null };
     }
   }
 }

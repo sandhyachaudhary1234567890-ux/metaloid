@@ -4,6 +4,7 @@ import { useApp } from '../lib/store';
 import { SettingsSection, SettingsRow, Seg, Toggle, Select } from '../components/SettingsGroup';
 import { SystemStatus } from '../components/SystemStatus';
 import { AccountSection } from '../components/AccountPanel';
+import { ProviderSettings } from '../components/ProviderSettings';
 import { LANGUAGES, MODELS } from '../lib/i18n';
 import { getVoices } from '../providers/tts';
 import { THEME_PRESETS } from '../lib/theme';
@@ -269,8 +270,13 @@ export function SettingsScreen() {
           id="ai"
           icon={Sparkles}
           title="AI"
-          desc="What MetaIoid calls itself, and how it answers you."
+          desc="Connect the model that answers you, then shape how it answers."
         >
+          {/* The connection control lives HERE, first — it is the reason most
+              people open Settings, and "Connect a key to go live" used to land
+              on a page with no way to connect one. */}
+          <ProviderSettings />
+
           <SettingsRow
             label="Name"
             hint="How it introduces itself."

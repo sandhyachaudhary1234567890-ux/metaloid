@@ -86,7 +86,12 @@ async function chooseModel(providerId, prefs, task) {
 }
 
 export async function orderProviders(userId, prefs = {}) {
-  const creds = (await listUserCredentialProviders(userId)).map((c) => c.providerId);
+  // A key the provider already rejected cannot answer, so it is not a
+  // candidate (it would burn a turn on every retry). It is still *listed* in
+  // Settings — the user needs to see it to replace it.
+  const creds = (await listUserCredentialProviders(userId))
+    .filter((c) => c.status !== 'invalid')
+    .map((c) => c.providerId);
   const health = healthMap(userId);
   const bad = new Set(
     [...health.entries()].filter(([, h]) => h && (h.status === 'auth_failed' || h.status === 'unavailable')).map(([pid]) => pid)
@@ -158,10 +163,25 @@ export async function chatWithProviders({ userId, messages, system, prefs = {}, 
       const err = e && e.type ? e : { type: 'UNKNOWN', message: String((e && e.message) || e).slice(0, 200) };
       recordProviderCall(pid, userId, null, false, ms, err.message);
       recordProviderUsage(userId, pid, { ms, ok: false });
-      tried.push({ providerId: pid, error: err.message || String(e).slice(0, 200) });
+      tried.push({ providerId: pid, code: err.code || null, error: err.message || String(e).slice(0, 200) });
       // any failure moves to the next candidate (an invalid key on A must
       // never block a valid key on B); loop is bounded by candidate count
     }
+  }
+  // A saved key the server cannot decrypt is not a provider outage. Saying
+  // "the model provider failed" sends the user to debug a provider that is
+  // fine and hides the one action that fixes it (replace the key), so the
+  // precise verdict is re-thrown with its own code.
+  const unreadable = tried.filter((t) => t.code === 'credential_unreadable');
+  if (unreadable.length) {
+    const names = unreadable.map((t) => t.providerId).join(', ');
+    const e = new Error(
+      `Your saved ${names} key can no longer be decrypted on the server — replace it in Settings → AI.` +
+      (tried.length > unreadable.length ? ' (Other connected providers failed too.)' : '')
+    );
+    e.code = 'credential_unreadable';
+    e.tried = tried;
+    throw e;
   }
   const names = tried.map((t) => t.providerId).join(', ');
   const e = new Error(

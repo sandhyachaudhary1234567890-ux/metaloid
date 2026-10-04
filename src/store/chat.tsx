@@ -98,7 +98,7 @@ function renderSkillResult(r: Record<string, unknown>): string {
 }
 
 export function ChatProvider({ children }: { children: React.ReactNode }) {
-  const { settings, setStatus, toast, setView, setToolsOpen, connection, setOsintOpen, setOsintTarget, setMissionsOpen, setMissionDraft, setLiveTaskId } = useSession();
+  const { settings, setStatus, toast, setView, setToolsOpen, connection, recheckConnection, setOsintOpen, setOsintTarget, setMissionsOpen, setMissionDraft, setLiveTaskId } = useSession();
   const { addMemory, memories } = useLibrary();
   const [conversations, setConversations] = useState<Conversation[]>(() => storage.loadConversations());
   const [activeId, setActiveId] = useState<string | null>(() => storage.loadActiveConv());
@@ -373,10 +373,14 @@ function titleFrom(text: string): string {
         ));
         return;
       }
-      const fallbackReply = planResponse(clean).response || 'I heard you, but the model gateway was momentarily busy. Please try again.';
+      // A reachable gateway that failed is an ERROR, not a demo: never answer a
+      // spoken turn with canned text while the user's own model is connected.
+      const fallbackReply = voiceOnline
+        ? 'I heard you, but the model did not answer just now. Say that again and I will retry.'
+        : (planResponse(clean).response || 'I heard you, but the model gateway was momentarily busy. Please try again.');
       setConversations((prev) => prev.map((c) =>
         c.id === convId
-          ? { ...c, messages: c.messages.map((m) => (m.id === assistantId ? { ...m, streaming: false, content: fallbackReply, demo: true } : m)) }
+          ? { ...c, messages: c.messages.map((m) => (m.id === assistantId ? { ...m, streaming: false, content: fallbackReply, demo: !voiceOnline } : m)) }
           : c
       ));
       emitActivity(voiceTaskId, 'voice', 'FINALIZE', 'done', 'Fallback response delivered');
@@ -1002,6 +1006,12 @@ function titleFrom(text: string): string {
         executionTimeMs: 1400,
       });
 
+      // A real answer just arrived — the connection pill/checklist are stale
+      // if they still say offline (a cold /api/health probe misses far more
+      // often than the chat route does). Re-read the truth instead of leaving
+      // the user told they are offline while their model is answering.
+      if (result.demo !== true && connection !== 'online') void recheckConnection();
+
       if (settings.autoSpeak && settings.voiceEnabled) {
         setStatus('speaking');
         await speakText(behavioral.spokenText.slice(0, 600), { rate: settings.speed }).catch(() => {});
@@ -1021,26 +1031,30 @@ function titleFrom(text: string): string {
       });
       setStatus('error');
       setIsGenerating(false);
-      // never strand an empty streaming bubble: finalize as a compact error
+      const msg = e instanceof Error ? e.message : '';
+      const code = (e as { code?: string } | null)?.code;
+      // never strand an empty streaming bubble: finalize as a compact error,
+      // carrying the server's own sentence so "replace your key" is readable
+      // on the bubble itself — not only in a toast that disappears.
       setConversations((prev) => prev.map((c) =>
         c.id === convId
           ? {
               ...c, updatedAt: Date.now(),
               messages: c.messages.map((m) =>
-                m.id === assistantId ? { ...m, streaming: false, error: true } : m
+                m.id === assistantId ? { ...m, streaming: false, error: true, errorText: msg || undefined } : m
               ),
             }
           : c
       ));
-      const msg = e instanceof Error ? e.message : '';
       emitActivity(taskId, taskKind, 'FINALIZE', 'error', 'Failed', msg.slice(0, 120));
+      const keyIssue = code === 'credential_unreadable' || /key can no longer be decrypted/i.test(msg);
       toast({
-        title: "METALOID couldn't reach the AI.",
-        desc: msg && !/abort/i.test(msg) ? msg.slice(0, 120) : 'Retry',
+        title: keyIssue ? 'Your saved AI key needs replacing.' : "METALOID couldn't reach the AI.",
+        desc: msg && !/abort/i.test(msg) ? msg.slice(0, 140) : 'Retry',
       });
       window.setTimeout(() => setStatus('idle'), 2600);
     }
-  }, [activeId, addMemory, connection, conversations, isGenerating, memories, settings, setLiveTaskId, setMissionsOpen, setMissionDraft, setOsintOpen, setOsintTarget, setStatus, setToolsOpen, setView, toast]);
+  }, [activeId, addMemory, connection, conversations, isGenerating, memories, recheckConnection, settings, setLiveTaskId, setMissionsOpen, setMissionDraft, setOsintOpen, setOsintTarget, setStatus, setToolsOpen, setView, toast]);
 
   /**
    * Account sync entry point. Additive: it only inserts conversations whose

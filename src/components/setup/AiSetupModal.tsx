@@ -4,7 +4,11 @@ import { Sparkles, Key, ArrowRight, ExternalLink, Check, AlertCircle, Loader2, S
 import { useApp } from '../../lib/store';
 import { PROVIDER_CATALOG, ProviderCatalogEntry, filterCatalog, getRecommendedFreeRoutes } from '../../lib/providers/catalog';
 import { cn } from '../../lib/cn';
-import { authHeaders } from '../../lib/auth';
+import { AuthRequiredError } from '../../lib/auth';
+import {
+  connectCredential, testCredential, refreshProviderModels, saveDefaultRoute,
+  normalizeApiKey, detectProviderFromKey,
+} from '../../lib/transport';
 import { ProviderCard } from '../ui/Provider';
 
 interface AiSetupModalProps {
@@ -13,7 +17,7 @@ interface AiSetupModalProps {
 }
 
 export function AiSetupModal({ onComplete, canSkip = true }: AiSetupModalProps) {
-  const { setModel, settings, toast } = useApp();
+  const { settings, toast } = useApp();
   const [step, setStep] = useState<'CHOICE' | 'FREE_SETUP' | 'CUSTOM_SETUP' | 'LOCAL_SETUP'>('CHOICE');
 
   // Selected provider & form state
@@ -55,120 +59,102 @@ export function AiSetupModal({ onComplete, canSkip = true }: AiSetupModalProps) 
     setStep('LOCAL_SETUP');
   };
 
-  // Perform safe live test connection
+  // Connect = store on the gateway + verify against the provider.
+  //
+  // "Connected successfully" is a claim, and it is only made after the server
+  // has actually proven the credential. The old flow fell back to client-side
+  // length checks when the gateway was unreachable and then reported success —
+  // storing nothing, verifying nothing, and leaving the user with a key that
+  // could never answer a message. That path is gone: if the key cannot be
+  // stored and verified, this says so, with the reason.
   const testAndConnect = async () => {
     if (!selectedProvider) return;
 
     setTesting(true);
     setTestResult(null);
 
+    const isLocal = step === 'LOCAL_SETUP' || selectedProvider.category === 'local';
+    const key = normalizeApiKey(apiKey);
+    const modelId = selectedModelId || localModel;
+
     try {
-      const isLocal = step === 'LOCAL_SETUP' || selectedProvider.category === 'local';
-      const endpoint = isLocal ? localBaseUrl : selectedProvider.defaultBaseUrl;
-
-      // 1. Try backend credential vault first if authenticated
-      let backendOk = false;
-      try {
-        const res = await fetch(`${settings.backendUrl}/api/providers/credentials`, {
-          method: 'POST',
-          headers: authHeaders({ 'Content-Type': 'application/json' }),
-          body: JSON.stringify({
-            providerId: selectedProvider.id,
-            credential: apiKey.trim() || 'local_key',
-            metadata: {
-              modelId: selectedModelId || localModel,
-              baseUrl: endpoint,
-              isLocal,
-            },
-          }),
-        });
-
-        if (res.ok) {
-          const data = await res.json();
-          // Test the stored credential
-          if (data?.id) {
-            const tRes = await fetch(`${settings.backendUrl}/api/providers/credentials/${data.id}/test`, {
-              method: 'POST',
-              headers: authHeaders(),
-            });
-            if (tRes.ok) {
-              const td = await tRes.json();
-              if (td.ok) {
-                backendOk = true;
-              }
-            }
+      if (isLocal) {
+        // Reachability from THIS browser is a courtesy check; the gateway
+        // performs its own when it calls the model.
+        const base = localBaseUrl.replace(/\/+$/, '');
+        try {
+          const res = await fetch(`${base}/models`, { signal: AbortSignal.timeout(4000) });
+          if (!(res.ok || res.status === 401 || res.status === 404)) {
+            throw new Error(`Unexpected reply from ${base} (${res.status}).`);
           }
+        } catch {
+          throw new Error(
+            `Nothing is answering at ${localBaseUrl}. Start Ollama or LM Studio, then try again — and note the gateway must be able to reach that address too.`,
+          );
         }
-      } catch {
-        // Backend might be offline or guest mode, proceed to client validation
+      } else if (key.length < 8) {
+        throw new Error('Paste the full API key — what is here is shorter than any provider key.');
       }
 
-      // 2. Client-side validation fallback
-      if (!backendOk) {
-        if (isLocal) {
-          // Verify local reachability
-          try {
-            const localRes = await fetch(`${localBaseUrl.replace(/\/+$/, '')}/models`, {
-              signal: AbortSignal.timeout(4000),
-            });
-            if (localRes.ok || localRes.status === 404 || localRes.status === 401) {
-              backendOk = true;
-            }
-          } catch {
-            throw new Error(`Cannot reach local server at ${localBaseUrl}. Make sure Ollama or LM Studio is running.`);
-          }
-        } else {
-          // Key format validation
-          if (!apiKey.trim()) {
-            throw new Error('Please enter an API key.');
-          }
-          if (apiKey.trim().length < 6) {
-            throw new Error('API key appears too short.');
-          }
-          backendOk = true;
-        }
+      // Store, then verify with a real provider call. Both go through the
+      // shared transport so the resolved gateway/scheme and the session token
+      // are the same ones chat uses.
+      const cred = await connectCredential(settings.backendUrl, selectedProvider.id, isLocal ? key || 'local' : key);
+      const verdict = await testCredential(settings.backendUrl, cred.id);
+      if (!verdict.ok) {
+        throw new Error(verdict.detail || `The provider did not accept this key (${verdict.status}).`);
       }
 
-      // Success!
+      // Persist the routing choice where the chat router reads it, and warm
+      // the model list so the first message does not pay for discovery.
+      await saveDefaultRoute(settings.backendUrl, { provider: selectedProvider.id, model: modelId || null }).catch(() => {});
+      await refreshProviderModels(settings.backendUrl, selectedProvider.id).catch(() => {});
+
       setTestResult({
         ok: true,
-        message: `Connected successfully to ${selectedProvider.name} · ${selectedModelId || localModel}`,
+        message: `Verified${verdict.latencyMs ? ` in ${verdict.latencyMs}ms` : ''} · ${selectedProvider.name}${modelId ? ` · ${modelId}` : ''}`,
       });
 
-      // Update active model in application
-      const mId = selectedModelId || localModel;
-      if (mId) {
-        setModel(mId as any);
-      }
-
-      // Persist user preference
       try {
         localStorage.setItem('metaloid_selected_provider', selectedProvider.id);
-        localStorage.setItem('metaloid_selected_model', mId);
+        localStorage.setItem('metaloid_selected_model', modelId);
         localStorage.setItem('metaloid_setup_completed', 'true');
       } catch {
         // ignore
       }
 
       toast({
-        title: 'AI Connected',
-        desc: `${selectedProvider.name} is now your default AI provider.`,
+        title: 'You are live',
+        desc: `${selectedProvider.name} will answer your chat.`,
       });
 
       setTimeout(() => {
         onComplete();
       }, 900);
-    } catch (err: any) {
-      setTestResult({
-        ok: false,
-        message: err.message || 'Connection test failed. Check your API key and network.',
-      });
+    } catch (err) {
+      const e = err as Error;
+      const message = e instanceof AuthRequiredError
+        ? 'Sign in first — keys are stored on your account, not in this browser.'
+        : e.message || 'Connection test failed. Check your API key and network.';
+      setTestResult({ ok: false, message });
     } finally {
       setTesting(false);
     }
   };
 
   const filteredProviders = filterCatalog(PROVIDER_CATALOG, searchQuery, activeFilter);
+
+  // What does the pasted key look like it belongs to? Only a suggestion — the
+  // key stays in the field, and the user chooses whether to switch.
+  const detectedId = detectProviderFromKey(apiKey);
+  const detectedEntry = detectedId ? PROVIDER_CATALOG.find((p) => p.id === detectedId && p.status !== 'planned') : undefined;
+  const misdirected = !!detectedEntry && !!selectedProvider && detectedEntry.id !== selectedProvider.id;
+  const switchToDetected = () => {
+    if (!detectedEntry) return;
+    setSelectedProvider(detectedEntry);
+    setSelectedModelId(detectedEntry.models[0]?.id || '');
+    setTestResult(null);
+  };
 
   return (
     <div className="h-full flex items-center justify-center p-4 overflow-y-auto">
@@ -393,6 +379,14 @@ export function AiSetupModal({ onComplete, canSkip = true }: AiSetupModalProps) 
                   <ShieldCheck size={13} className="text-success shrink-0" />
                   Your key is securely stored in your personal vault and never logged or exposed.
                 </p>
+                {misdirected && (
+                  <p className="mt-1.5 text-micro text-warning">
+                    That looks like a {detectedEntry!.name} key.{' '}
+                    <button onClick={switchToDetected} className="underline underline-offset-2 hover:brightness-110">
+                      Switch to {detectedEntry!.name}
+                    </button>
+                  </p>
+                )}
               </div>
 
               {/* Result banner */}
@@ -542,6 +536,10 @@ export function AiSetupModal({ onComplete, canSkip = true }: AiSetupModalProps) 
               </h3>
               <p className="text-ui text-[var(--fg-muted)] mt-1">
                 Zero external network calls. Connect to Ollama, LM Studio, or vLLM running on your device.
+              </p>
+              <p className="mt-1.5 text-micro text-[var(--fg-muted)]">
+                The gateway calls this address, so it must be reachable from the machine running MetaIoid —
+                the presets below are the supported ones.
               </p>
 
               <div className="mt-4 space-y-3">

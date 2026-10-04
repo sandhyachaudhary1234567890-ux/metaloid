@@ -222,19 +222,19 @@ function localOpenMode(req) {
   return ip === '::1' || ip.startsWith('127.') || ip.startsWith('::ffff:127.');
 }
 
-/** Attaches req.auth or rejects 401. Never trusts frontend ownership claims.
- * Local sessions first (fast path); Supabase Auth JWTs accepted as fallback
- * so Supabase-authenticated users work end-to-end. Supabase user ids are
- * namespaced `sb:<uuid>` to never collide with local `usr-…` ids. */
-export async function requireAuth(req, res, next) {
+/**
+ * Resolve the caller's identity WITHOUT rejecting: the same ladder requireAuth
+ * walks (local session → local-open dev → Supabase JWT), but a miss is `null`
+ * rather than a 401. Optional surfaces — /api/health reporting whether this
+ * account holds BYOK keys, for instance — need the identity without demanding
+ * one, and must never disagree with the routes that do.
+ */
+export async function resolveIdentity(req) {
   const h = req.headers.authorization || '';
   const m = h.match(/^Bearer\s+(.+)$/i);
   const token = m ? m[1].trim() : '';
   const auth = token ? validateAccess(token) : null;
-  if (auth) {
-    req.auth = auth;
-    return next();
-  }
+  if (auth) return auth;
   if (!token && localOpenMode(req)) {
     // Local dev/demo only: no auth backend is configured and the caller is on
     // this machine (or the operator explicitly asked for showcase), so
@@ -242,8 +242,7 @@ export async function requireAuth(req, res, next) {
     // A network caller NEVER takes this path, and METALOID_MODE=production
     // disables it outright — that is what keeps a deployed gateway from
     // becoming an anonymous proxy for the owner's provider key.
-    req.auth = LOCAL_AUTH;
-    return next();
+    return LOCAL_AUTH;
   }
   if (token) {
     try {
@@ -253,10 +252,21 @@ export async function requireAuth(req, res, next) {
       const { verifyToken } = await import('../auth.js');
       const su = await verifyToken(token);
       if (su && su.id) {
-        req.auth = { userId: su.id, accountId: su.id, sessionId: 'sb-session', deviceId: null, via: 'supabase', email: su.email };
-        return next();
+        return { userId: su.id, accountId: su.id, sessionId: 'sb-session', deviceId: null, via: 'supabase', email: su.email };
       }
-    } catch { /* fall through to 401 */ }
+    } catch { /* unidentified */ }
+  }
+  return null;
+}
+
+/** Attaches req.auth or rejects 401. Never trusts frontend ownership claims.
+ * Local sessions first (fast path); Supabase Auth JWTs accepted as fallback
+ * so Supabase-authenticated users work end-to-end. */
+export async function requireAuth(req, res, next) {
+  const auth = await resolveIdentity(req);
+  if (auth) {
+    req.auth = auth;
+    return next();
   }
   return res.status(401).json({ error: 'Sign in required.', code: 'AUTH_REQUIRED' });
 }

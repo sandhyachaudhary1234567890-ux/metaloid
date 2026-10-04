@@ -36,7 +36,7 @@ import { ping as dbPing, storagePing, driverInfo } from './data/index.js';
 import { streamNvidia, NVIDIA_SMART } from './nvidia.js';
 // Provider Platform imports
 import { listProviders, getProvider, getProviderModels, updateProvider } from './core/providerRegistry.js';
-import { storeUserCredential, getUserCredential, deleteUserCredential, rotateUserCredential, rotateUserCredentialById, listUserCredentialProviders, setCredentialTestStatus, getCredentialTestStatus, getCredentialAuditLog, deleteUserCredentials } from './core/credentialVault.js';
+import { storeUserCredential, getUserCredential, deleteUserCredential, rotateUserCredential, rotateUserCredentialById, listUserCredentialProviders, setCredentialTestStatus, getCredentialTestStatus, getCredentialAuditLog, deleteUserCredentials, vaultHealth, credentialReadiness } from './core/credentialVault.js';
 import { OpenRouterAdapter, NvidiaAdapter, ErrorTypes } from './core/providerAdapter.js';
 import { getAdapter, supportedProviders } from './core/providerAdapters.js';
 import { chatWithProviders } from './core/providerGateway.js';
@@ -59,7 +59,7 @@ import { renderSystemPrompt, TOOLS_MANIFEST } from './systemPrompt.js';
 import {
   createUser, verifyUser, createSession, refreshSession, revokeSession,
   revokeAllSessions, listSessions, getUser, userCount, deleteUserCascade,
-  requireAuth, optionalAuth, requireAdmin,
+  requireAuth, optionalAuth, requireAdmin, resolveIdentity,
 } from './core/users.js';
 import { getProfile, updateProfile, completeOnboarding, deleteProfile, personalizationBlock } from './core/profiles.js';
 import { getPlan, planCaps, can, checkBudget, recordUsage, usageSummary, deleteUsage } from './core/entitlements.js';
@@ -369,6 +369,38 @@ app.get('/', (req, res) => {
   });
 });
 
+/**
+ * Is the caller's own key a live path? Provider ids and a boolean only —
+ * never a secret, never even the mask. Null when nobody is identified, so the
+ * response can say "not asked" rather than "none".
+ */
+async function byokReadiness(req) {
+  const auth = await resolveIdentity(req);
+  if (!auth || !auth.userId) return null;
+  const creds = await listUserCredentialProviders(auth.userId);
+  const stored = [...new Set(creds.map((c) => c.providerId).filter(Boolean))];
+  // A credential row is not proof the key can be used. One encrypted with a
+  // different server key can never be opened again, and reporting it as ready
+  // is how "Connected" turned into every message failing. Readability is
+  // probed here (no secret leaves the vault), so health stays honest.
+  const unreadable = [];
+  for (const pid of stored) {
+    if (await credentialReadiness(auth.userId, pid) === 'unreadable') unreadable.push(pid);
+  }
+  // A key the provider already rejected is stored but not usable; separate it
+  // from "no key" so the UI can say "replace it" with the right words.
+  const rejected = [...new Set(creds.filter((c) => c.status === 'invalid').map((c) => c.providerId))];
+  const usable = stored.filter((pid) => !unreadable.includes(pid) && !rejected.includes(pid));
+  return {
+    ready: usable.length > 0,
+    providers: usable,
+    stored,
+    unreadable,
+    rejected,
+    error: unreadable.length ? 'credential_unreadable' : null,
+  };
+}
+
 // ---- health: measured state only. Nothing here is asserted because an env
 // var exists: the provider is probed, the data driver is pinged, and auth
 // reports whether tokens can actually be verified right now. ----
@@ -396,6 +428,16 @@ app.get('/api/health', async (req, res) => {
     mode: authMode(),
     reachable: authConfiguredNow ? databaseReady : true,
   };
+  // BYOK readiness for the caller, when they present a session and the shared
+  // route is not already answering. This is what lets the app stay ONLINE for
+  // an account whose own key is the live path: without it, a healthy BYOK
+  // account looked "offline" whenever the platform key was absent or
+  // unhealthy, and every reply fell back to the local demo. Provider ids and
+  // a boolean only — never the key, never the mask.
+  let byok = null;
+  if (!ai && databaseReady) {
+    byok = await byokReadiness(req).catch(() => null);
+  }
   res.json({
     ok: true,
     server: true,
@@ -411,6 +453,16 @@ app.get('/api/health', async (req, res) => {
     database: databaseReady,
     auth: authState,                       // object: configured / mode / reachable
     authState,
+    // null = not asked (no session, or the shared route is already healthy).
+    // { ready, providers } = this caller's own connected keys.
+    byok: byok ? byok.ready : false,
+    byokProviders: byok ? byok.providers : [],
+    // Rows on file whose key can no longer be decrypted — the UI says
+    // "replace it" instead of offering a fresh connect that hides the problem.
+    byokStored: byok ? byok.stored : [],
+    byokUnreadable: byok ? byok.unreadable : [],
+    byokRejected: byok ? byok.rejected : [],
+    byokError: byok ? byok.error : null,
     storage: { ready: storageReady, driver: (storage && storage.driver) || info.storage, buckets: (storage && storage.buckets) || null },
     data: { driver: info.driver, supabase_configured: info.supabase_configured, url_set: info.supabase_url_set },
     encryption: { configured: info.encryption.configured, active_key: info.encryption.activeKeyId },
@@ -547,6 +599,7 @@ function providerCodeOf(e) {
   const s = e && e.status;
   if (e && e.code === 'NO_PROVIDER') return 'no_provider';
   if (e && e.code === 'CLIENT_GONE') return 'cancelled';
+  if (e && e.code === 'credential_unreadable') return 'credential_unreadable';
   if (s === 401) return 'bad_key';
   if (s === 402) return 'no_credit';
   if (s === 429) return 'rate_limited';
@@ -564,7 +617,13 @@ app.post('/api/chat', requireAuth, rateLimit(60, 60000), async (req, res) => {
   if (typeof message !== 'string' || !message.trim() || message.length > 8000) {
     return res.status(400).json({ error: 'Invalid message.' });
   }
-  if (!OR_KEY && !NV_KEY) return res.status(503).json({ error: 'No model provider configured.' });
+  // NOTE: deliberately NO "the server has no platform key → 503" gate here.
+  // A user's own connected provider key is a complete AI path, and rejecting
+  // the request before the BYOK branch ran made a fully configured account
+  // unable to chat (it saw "No model provider configured" while Settings said
+  // "connected"). The BYOK attempt below decides; only when it reports
+  // NO_CREDENTIALS *and* no platform key exists do we fail — inside the stream,
+  // with a message that names the fix.
   // The route is behind requireAuth, so a locally-verified subject always
   // exists; reading it from one place is what keeps the model the user saved
   // visible to the router in the same request.
@@ -719,7 +778,16 @@ app.post('/api/chat', requireAuth, rateLimit(60, 60000), async (req, res) => {
     const model = candidates[0] || pickModel(models, tier);
     usedModel = model.id;
     usedProvider = 'openrouter';
-    if (!OR_KEY) throw new Error('openrouter unconfigured');
+    if (!OR_KEY) {
+      // Reached only when BYOK had nothing to try (or every connected key
+      // failed) AND this server has no shared OpenRouter key. If a key WAS
+      // tried, its own message is the useful one ("Couldn't reach openrouter…")
+      // — never replace it with a vaguer sentence. Otherwise say what to do.
+      if (byokError) throw byokError;
+      const e = new Error('No AI provider is connected yet — add a provider key in Settings → AI.');
+      e.code = 'NO_PROVIDER';
+      throw e;
+    }
     // try-next failover across free slugs (404 dead slug / 429 rate limit)
     let lastErr = null;
     let streamed = false;
@@ -1560,7 +1628,13 @@ app.post('/api/providers/credentials', requireAuth, rateLimit(10, 60000), async 
 
   try {
     const result = await storeUserCredential(req.auth.userId, providerId, credential, metadata);
-    res.status(201).json(result);
+    // Tell the truth about whether this key will survive a restart. With no
+    // stable server key the vault falls back to a per-process one, and every
+    // stored key silently becomes undecryptable on the next boot — the user
+    // did everything right and the credential still dies. The UI surfaces this
+    // instead of letting it be discovered later as "it worked yesterday".
+    const stableKey = driverInfo().encryption.configured || vaultHealth().masterKeyConfigured;
+    res.status(201).json({ ...result, credential_key: stableKey ? 'stable' : 'ephemeral' });
   } catch (error) {
     res.status(400).json({ error: error.message });
   }
@@ -1590,15 +1664,44 @@ app.post('/api/providers/credentials/:credentialId/test', requireAuth, rateLimit
     const adapter = getAdapter(credential.providerId);
     if (!adapter) return res.status(400).json({ error: 'No adapter installed for this provider yet.' });
     const h = await adapter.healthCheck(req.auth.userId);
-    await setCredentialTestStatus(req.auth.userId, credential.providerId, h.status === 'healthy' ? 'valid' : 'invalid', {
-      adapter: adapter.constructor.name,
-      latencyMs: h.latency,
-      status: h.status,
-      timestamp: new Date().toISOString(),
-    });
+    // A key the server cannot open was never offered to the provider, so it
+    // must not be recorded as "rejected" — that verdict would hide it from the
+    // chat router for good. The actionable state is "replace this key".
+    const unreadable = h.code === 'credential_unreadable';
+    if (!unreadable) {
+      await setCredentialTestStatus(req.auth.userId, credential.providerId, h.status === 'healthy' ? 'valid' : 'invalid', {
+        adapter: adapter.constructor.name,
+        latencyMs: h.latency,
+        status: h.status,
+        timestamp: new Date().toISOString(),
+      });
+    }
     recordProviderCall(credential.providerId, req.auth.userId, credential.id, h.status === 'healthy', h.latency, h.error || null);
-    res.json({ ok: h.status === 'healthy', status: h.status, latencyMs: h.latency, error: h.error || null });
+    res.json({
+      ok: h.status === 'healthy',
+      status: unreadable ? 'unreadable' : h.status,
+      code: h.code || null,
+      latencyMs: h.latency,
+      error: h.error || null,
+      // Human sentence for the inline verdict the connect form shows. The
+      // adapter's own words are kept when it has them; otherwise the status
+      // is translated here so the UI never prints a bare enum.
+      detail: h.error
+        || (h.status === 'healthy' ? 'Key accepted — the provider answered.'
+          : h.status === 'auth_failed' ? 'The provider rejected this key.'
+          : h.status === 'rate_limited' ? 'Rate-limited right now — the key itself was accepted.'
+          : h.status === 'unavailable' ? 'The provider could not be reached from the server.'
+          : `Verification returned "${h.status}".`),
+    });
   } catch (error) {
+    // A stored key the server can no longer open is not a provider failure —
+    // it is an actionable account state: re-save the key.
+    if (error && error.code === 'credential_unreadable') {
+      return res.status(409).json({
+        error: 'This saved key can no longer be decrypted on the server (the encryption key changed). Replace it to reconnect.',
+        code: 'credential_unreadable',
+      });
+    }
     res.status(400).json({ error: String(error.message || error).slice(0, 200) });
   }
 });

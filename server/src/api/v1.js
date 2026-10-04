@@ -274,7 +274,20 @@ router.post('/provider/credentials/:provider/test', LIMITS.providerWrite, h(asyn
     if (!encryptionConfigured()) {
       return bad(res, 'encryption_unconfigured', 'Cannot read the stored key: encryption is unconfigured.', 503);
     }
-    const stored = await providerCredentials.revealPlaintext?.(ctx(req), provider, label);
+    let stored = null;
+    try {
+      stored = await providerCredentials.revealPlaintext?.(ctx(req), provider, label);
+    } catch (e) {
+      // The row is on file but the server cannot open it. Say that — and do
+      // NOT record a provider verdict for a key the provider never saw.
+      if (e && e.code === 'credential_unreadable') {
+        return res.status(409).json({
+          error: 'This saved key can no longer be decrypted on the server. Replace it to reconnect.',
+          code: 'credential_unreadable',
+        });
+      }
+      throw e;
+    }
     if (!stored) return bad(res, 'not_found', 'No stored key for this provider.', 404);
     secret = stored.secret;
   }

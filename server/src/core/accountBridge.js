@@ -50,7 +50,12 @@ export async function credentialFor(userId, providerId) {
   try {
     const found = await account.providerCredentials.revealPlaintext(asCtx(userId), providerId, 'default');
     return found?.secret || null;
-  } catch {
+  } catch (e) {
+    // A key that is stored but unreadable is NOT "no key": swallowing it here
+    // is what let a broken credential look like a healthy one forever. Only
+    // the store's own "unreadable" verdict is re-thrown; anything else (a
+    // transient read failure) keeps the old, safe behaviour.
+    if (e && e.code === 'credential_unreadable') throw e;
     return null;
   }
 }

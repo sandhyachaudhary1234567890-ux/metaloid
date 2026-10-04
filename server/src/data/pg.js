@@ -472,9 +472,16 @@ export const providerCredentials = {
           return { secret: legacyDecrypt(o), provider: row.provider, label: row.label || label };
         }
       } catch {
-        /* not a legacy envelope either — null below */
+        /* not a legacy envelope either */
       }
-      return null;
+      // The row EXISTS but neither envelope opens. Returning null here made an
+      // unreadable key indistinguishable from "no key": chat silently fell back
+      // to the platform provider while Settings still showed "connected", and
+      // nothing anywhere said the credential had gone bad. Say it instead —
+      // callers translate this into "replace this key".
+      const e = new Error('This saved key can no longer be decrypted — it was encrypted with a different server key.');
+      e.code = 'credential_unreadable';
+      throw e;
     }
   },
   async remove(ctx, provider, label = 'default') {

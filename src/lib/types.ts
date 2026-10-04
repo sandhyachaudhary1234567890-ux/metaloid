@@ -64,6 +64,9 @@ export interface ChatMessage {
   attachments?: Attachment[];
   /** generation failed — bubble shows compact error + Retry */
   error?: boolean;
+  /** the server's own reason for the failure, shown instead of the generic
+      copy when we have one (e.g. "replace your key") */
+  errorText?: string;
   /** text came from the local demo engine, not a live model — the UI says so
       next to the reply instead of letting it pass as AI output */
   demo?: boolean;

@@ -381,7 +381,13 @@ const fileRepos = {
       try {
         return { secret: decryptSecret(c.encrypted_secret), provider: c.provider, label: c.label || 'default' };
       } catch {
-        return null;
+        // The row exists but cannot be opened (the envelope key changed, or the
+        // file was written by a process with a different keyring). Returning
+        // null here made a broken key look like no key — the same silent
+        // downgrade the Postgres driver no longer does.
+        const e = new Error('This saved key can no longer be decrypted — it was encrypted with a different server key.');
+        e.code = 'credential_unreadable';
+        throw e;
       }
     },
     async remove(ctx, provider, label = 'default') {

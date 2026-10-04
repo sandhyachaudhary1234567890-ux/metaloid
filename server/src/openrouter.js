@@ -235,7 +235,8 @@ export function modelSpecificFailure(e) {
  */
 export function humanizeProviderError(e) {
   const status = e && e.status;
-  if (e && e.code === 'NO_PROVIDER') return 'No AI provider is configured yet — connect a key to go online.';
+  if (e && e.code === 'NO_PROVIDER') return 'No AI provider is connected yet — add a provider key in Settings → AI.';
+  if (e && e.code === 'credential_unreadable') return 'Your saved provider key can no longer be decrypted — replace it in Settings → AI.';
   if (e && e.code === 'CLIENT_GONE') return 'Request cancelled.';
   if (status === 401) return 'The provider rejected the API key. Check OPENROUTER_API_KEY.';
   if (status === 402) return 'The provider account is out of credit.';

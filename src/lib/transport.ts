@@ -38,6 +38,31 @@ export interface ServiceHealth {
   /** True when a key exists but the provider is unreachable — never show ONLINE. */
   degraded?: boolean;
   models?: { free?: number; total?: number; catalogue?: boolean; at?: string | null };
+  /**
+   * The signed-in caller has at least one connected provider credential.
+   * The gateway reports this (when the request carries a session) so the app
+   * can stay ONLINE for a BYOK account whose own key is the live path, even
+   * if the shared platform key is missing or unhealthy. False when nobody is
+   * signed in or no key is stored.
+   */
+  byok?: boolean;
+  /** Provider ids the caller has a credential for (never the secret). */
+  byokProviders?: string[];
+  /**
+   * Provider ids with a stored row that no longer counts as connected —
+   * either unreadable (the server key changed) or rejected. The UI offers
+   * "replace it" for these instead of pretending nothing was ever saved.
+   */
+  byokStored?: string[];
+  /**
+   * Stored keys the server can no longer decrypt. Distinct from "no key":
+   * the fix is to replace the key, not to connect one for the first time.
+   */
+  byokUnreadable?: string[];
+  /** Stored keys the provider rejected outright — replace them too. */
+  byokRejected?: string[];
+  /** 'credential_unreadable' when byokUnreadable is non-empty. */
+  byokError?: string | null;
 }
 
 export const allDown: ServiceHealth = {
@@ -88,17 +113,21 @@ function altOf(base: string): string | null {
  *   mock      — answers, but the provider self-identifies as a local mock
  *   degraded  — a key is configured, the provider is unreachable
  *   online    — real provider, reachable
+ *
+ * A connected BYOK credential counts as a live path: the user's own key is
+ * what answers their chat, so a missing/unhealthy shared platform key must
+ * not park their account in "offline" (which is what silently downgraded
+ * every reply to the local demo before this).
  */
 function stateOf(h: ServiceHealth): ConnectionState {
-  if (!h.ai) return 'offline';
   if (h.provider === 'local-mock') return 'mock';
-  if (h.degraded) return 'degraded';
-  return 'online';
+  if (h.ai || h.byok) return 'online';
+  return 'offline';
 }
 
 async function probeHealth(base: string): Promise<ServiceHealth | null> {
   try {
-    const res = await probeWithColdRetry(`${base}/api/health`);
+    const res = await probeWithColdRetry(`${base}/api/health`, { headers: authHeaders() });
     if (!res || !res.ok) return null;
     const h = (await res.json()) as Partial<ServiceHealth>;
     return {
@@ -107,6 +136,12 @@ async function probeHealth(base: string): Promise<ServiceHealth | null> {
       provider: h.provider ?? null,
       degraded: !!h.degraded,
       models: h.models,
+      byok: !!h.byok,
+      byokProviders: Array.isArray(h.byokProviders) ? h.byokProviders : [],
+      byokStored: Array.isArray(h.byokStored) ? h.byokStored : [],
+      byokUnreadable: Array.isArray(h.byokUnreadable) ? h.byokUnreadable : [],
+      byokRejected: Array.isArray(h.byokRejected) ? h.byokRejected : [],
+      byokError: h.byokError ?? null,
     };
   } catch {
     return null;
@@ -203,10 +238,21 @@ export interface StreamResult {
 }
 
 /**
- * Stream a completion.
- * - Gateway reachable: real SSE from free-model router. Throws on failure
- *   (caller shows an honest error — never silent demo).
- * - Unreachable: local demo engine, demo:true.
+ * Answer a prompt.
+ *
+ * The gateway is tried FIRST. A health probe never decides whether the user's
+ * message reaches their model — that ordering caused the bug this function now
+ * refuses to reproduce: a cold start (or a slow /api/health, or a shared
+ * platform key that was merely unhealthy) made the probe miss, and a signed-in
+ * user with a working BYOK key got the canned local reply instead of an answer
+ * from the model they had connected.
+ *
+ * Rules, in order:
+ *   - POST /api/chat on the resolved base; a reachable gateway that refuses or
+ *     fails surfaces its real error (never a silent demo).
+ *   - Only a transport-level failure on every candidate base (DNS/refused/
+ *     offline) falls back to the demo engine, labelled demo:true.
+ *   - A caller abort (Stop) is rethrown as-is — it must never become a reply.
  */
 export async function streamChat(
   prompt: string,
@@ -224,93 +270,99 @@ export async function streamChat(
   onToken: (partial: string) => void
 ): Promise<StreamResult> {
   const plan = planResponse(prompt);
-  // reachability with the same scheme fallback as checkBackend, so a stale
-  // stored URL (http vs https) never silently forces demo mode
-  const base = baseOf(opts.configuredUrl);
+  // Same scheme fallback as checkBackend, so a stale stored URL (http vs
+  // https) never silently forces demo mode.
+  const primary = baseOf(opts.configuredUrl);
+  const alt = altOf(primary);
+  const bases = alt ? [primary, alt] : [primary];
 
-  let reachableBase: string | null = null;
-  const h = await probeWithColdRetry(`${base}/api/health`);
-  if (h && h.ok) reachableBase = base;
-  if (!reachableBase) {
-    const alt = altOf(base);
-    if (alt) {
-      const h2 = await probeWithColdRetry(`${alt}/api/health`);
-      if (h2 && h2.ok) {
-        reachableBase = alt;
-        resolved = alt;
-      }
+  for (const baseUrl of bases) {
+    if (opts.signal?.aborted) throw new DOMException('Aborted', 'AbortError');
+
+    // ---- real path: POST SSE ----
+    // The gateway requires a Bearer session on /api/chat (except local-open
+    // dev). Without the token every signed-in user got a 401 here and the LLM
+    // never activated — this header is the fix.
+    let res: Response;
+    try {
+      res = await fetch(`${baseUrl}/api/chat`, {
+        method: 'POST',
+        signal: opts.signal,
+        headers: authHeaders({ 'Content-Type': 'application/json' }),
+        body: JSON.stringify({ message: prompt, history: opts.history.slice(-10), task: opts.task, context: opts.context }),
+      });
+    } catch (e) {
+      // A user-initiated stop is not an unreachable gateway.
+      if (opts.signal?.aborted) throw e;
+      // Transport-level failure: this base does not exist. Try the alternate
+      // scheme once, then — and only then — the demo engine below.
+      continue;
     }
-  }
 
-  if (!reachableBase) {
-    await streamText(plan.response, onToken, { signal: opts.signal });
-    return { text: plan.response, detectedLang: plan.detectedLang, demo: true };
-  }
-  const baseUrl = reachableBase;
-
-  // ---- real path: POST SSE ----
-  // The gateway requires a Bearer session on /api/chat (except local-open
-  // dev). Without the token every signed-in user got a 401 here and the LLM
-  // never activated — this header is the fix.
-  const res = await fetch(`${baseUrl}/api/chat`, {
-    method: 'POST',
-    signal: opts.signal,
-    headers: authHeaders({ 'Content-Type': 'application/json' }),
-    body: JSON.stringify({ message: prompt, history: opts.history.slice(-10), task: opts.task, context: opts.context }),
-  });
-  if (!res.ok || !res.body) {
-    const err = await res.json().catch(() => ({}));
-    throw new Error((err as { error?: string }).error || `Gateway ${res.status}`);
-  }
-  const reader = res.body.getReader();
-  const decoder = new TextDecoder();
-  let buf = '';
-  let full = '';
-  let meta: { model?: string; tier?: string; provider?: string; demo?: boolean } = {};
-  for (;;) {
-    const { done, value } = await reader.read();
-    if (done) break;
-    buf += decoder.decode(value, { stream: true });
-    const lines = buf.split('\n');
-    buf = lines.pop() || '';
-    for (const line of lines) {
-      const s = line.trim();
-      if (!s.startsWith('data:')) continue;
-      let ev: {
-        meta?: { model: string; tier: string; provider?: string; demo?: boolean };
-        token?: string; done?: boolean; error?: string; code?: string;
-      };
-      try {
-        ev = JSON.parse(s.slice(5).trim());
-      } catch {
-        continue; // partial chunk — wait for more
-      }
-      if (ev.error) {
-        const err = new Error(ev.error) as Error & { code?: string };
-        if (ev.code) err.code = ev.code;
-        throw err;
-      }
-      if (ev.meta) meta = ev.meta;
-      if (typeof ev.token === 'string') {
-        full = ev.token;
-        onToken(full);
-      }
-      if (ev.done) {
-        reader.cancel().catch(() => {});
-        return {
-          text: full, detectedLang: plan.detectedLang,
-          demo: !!meta.demo || meta.provider === 'local-mock',
-          model: meta.model, tier: meta.tier, provider: meta.provider,
+    // The gateway answered. Any failure from here on is REAL and must be
+    // shown as an error: the user has a session and a reachable server, so a
+    // silent demo would be a lie about what happened to their message.
+    resolved = baseUrl;
+    if (!res.ok || !res.body) {
+      const err = await res.json().catch(() => ({}));
+      throw new Error((err as { error?: string }).error || `Gateway ${res.status}`);
+    }
+    const reader = res.body.getReader();
+    const decoder = new TextDecoder();
+    let buf = '';
+    let full = '';
+    let meta: { model?: string; tier?: string; provider?: string; demo?: boolean } = {};
+    for (;;) {
+      const { done, value } = await reader.read();
+      if (done) break;
+      buf += decoder.decode(value, { stream: true });
+      const lines = buf.split('\n');
+      buf = lines.pop() || '';
+      for (const line of lines) {
+        const s = line.trim();
+        if (!s.startsWith('data:')) continue;
+        let ev: {
+          meta?: { model: string; tier: string; provider?: string; demo?: boolean };
+          token?: string; done?: boolean; error?: string; code?: string;
         };
+        try {
+          ev = JSON.parse(s.slice(5).trim());
+        } catch {
+          continue; // partial chunk — wait for more
+        }
+        if (ev.error) {
+          const err = new Error(ev.error) as Error & { code?: string };
+          if (ev.code) err.code = ev.code;
+          throw err;
+        }
+        if (ev.meta) meta = ev.meta;
+        if (typeof ev.token === 'string') {
+          full = ev.token;
+          onToken(full);
+        }
+        if (ev.done) {
+          reader.cancel().catch(() => {});
+          return {
+            text: full, detectedLang: plan.detectedLang,
+            demo: !!meta.demo || meta.provider === 'local-mock',
+            model: meta.model, tier: meta.tier, provider: meta.provider,
+          };
+        }
       }
     }
+    if (!full) throw new Error('Empty response from gateway.');
+    return {
+      text: full, detectedLang: plan.detectedLang,
+      demo: !!meta.demo || meta.provider === 'local-mock',
+      model: meta.model, tier: meta.tier, provider: meta.provider,
+    };
   }
-  if (!full) throw new Error('Empty response from gateway.');
-  return {
-    text: full, detectedLang: plan.detectedLang,
-    demo: !!meta.demo || meta.provider === 'local-mock',
-    model: meta.model, tier: meta.tier, provider: meta.provider,
-  };
+
+  // The gateway could not be reached on any candidate base. This is the one
+  // and only condition that produces a demo reply.
+  if (opts.signal?.aborted) throw new DOMException('Aborted', 'AbortError');
+  await streamText(plan.response, onToken, { signal: opts.signal });
+  return { text: plan.response, detectedLang: plan.detectedLang, demo: true };
 }
 
 // ---------------- OSINT client ----------------
@@ -992,7 +1044,11 @@ export interface CredentialInfo {
   providerId: string;
   isActive: boolean;
   createdAt: string;
-  redacted: string;
+  /** Present on both stores: the masked hint, never the secret. */
+  redacted?: string;
+  masked?: string | null;
+  /** 'connected' | 'invalid' | 'unverified' — the last verification verdict. */
+  status?: string;
 }
 
 
@@ -1031,13 +1087,16 @@ export async function connectCredential(configuredUrl: string, providerId: strin
     method: 'POST',
     body: JSON.stringify({ providerId, credential }),
   });
-  return j as CredentialInfo;
+  // `credential_key: 'ephemeral'` means the server has no stable encryption
+  // key, so this saved key will stop working after a restart. Callers surface
+  // it rather than letting the user discover it tomorrow.
+  return j as CredentialInfo & { credential_key?: 'stable' | 'ephemeral' };
 }
 
 
 export async function testCredential(configuredUrl: string, credentialId: string) {
   const j = await authReq(configuredUrl, `/api/providers/credentials/${credentialId}/test`, { method: 'POST' });
-  return j as { ok: boolean; status: string; latencyMs: number; error: string | null };
+  return j as { ok: boolean; status: string; latencyMs: number; error: string | null; detail?: string };
 }
 
 
@@ -1096,6 +1155,83 @@ export async function fetchProviderUsage(configuredUrl: string) {
 export async function fetchModelCatalog(configuredUrl: string, providerId?: string) {
   const j = await authReq(configuredUrl, `/api/models/catalog${providerId ? `?providerId=${providerId}` : ''}`);
   return (j as { models: { providerId: string; modelId: string; displayName: string; capabilities: Record<string, boolean> }[] }).models;
+}
+
+/**
+ * Make a pasted secret usable.
+ *
+ * Real users paste keys with a trailing newline, surrounding quotes, or the
+ * "Bearer " prefix still attached — each of those reaches the provider as a
+ * different (wrong) key and comes back as a 401 that looks like "your key is
+ * bad". Normalising here, before the key is ever stored, removes the most
+ * common false failure in the whole BYOK flow.
+ */
+export function normalizeApiKey(raw: string): string {
+  return String(raw || '')
+    .replace(/[\u200B-\u200D\uFEFF]/g, '')     // zero-width characters from copy/paste
+    .replace(/^[\s"'`]+|[\s"'`]+$/g, '')       // whitespace + quotes
+    .replace(/^bearer\s+/i, '')                // an accidentally copied header
+    .trim();
+}
+
+/** Key prefixes of the providers the gateway ships adapters for. */
+const KEY_PREFIXES: [RegExp, string][] = [
+  [/^sk-or-/i, 'openrouter'],
+  [/^sk-ant-/i, 'anthropic'],
+  [/^sk-proj-|^sk-svcacct-|^sk-admin-|^sk-[A-Za-z0-9]{20,}$/, 'openai'],
+  [/^(AIza|AQ\.)/, 'gemini'],
+  [/^gsk_/i, 'groq'],
+  [/^csk-/i, 'cerebras'],
+  [/^nvapi-/i, 'nvidia'],
+  [/^github_pat_/i, 'github_models'],
+  [/^(tgp_v1_|together)/i, 'together'],
+  [/^fw_/i, 'fireworks'],
+];
+
+/**
+ * What provider does this key look like it belongs to?
+ * Purely a suggestion for the UI — never used to store or route anything;
+ * the user always confirms the provider, and the live test is what decides.
+ */
+export function detectProviderFromKey(raw: string): string | null {
+  const key = normalizeApiKey(raw);
+  if (key.length < 12) return null;
+  for (const [re, provider] of KEY_PREFIXES) {
+    if (re.test(key)) return provider;
+  }
+  // DeepSeek and Mistral keys have no distinctive prefix (both `sk-…`), which
+  // is why the generic OpenAI rule above deliberately requires a long body.
+  return null;
+}
+
+/**
+ * Persist the "use this provider/model" choice where the chat router reads it.
+ *
+ * Two stores carry routing today and a choice written to only one of them can
+ * be silently ignored: the account-data contract (`user_provider_settings`,
+ * read by providerGateway via accountBridge) and the profile (read as the
+ * router's fallback prefs). Writing both keeps them from disagreeing, which is
+ * exactly the "settings says X, chat answered with Y" bug.
+ */
+export async function saveDefaultRoute(
+  configuredUrl: string,
+  route: { provider?: string | null; model?: string | null },
+): Promise<void> {
+  const body: Record<string, unknown> = {};
+  if (route.provider !== undefined) body.default_provider = route.provider;
+  if (route.model !== undefined) body.default_model = route.model;
+  if (!Object.keys(body).length) return;
+  // Contract first (authoritative for chat), then the profile mirror. A
+  // mirror failure must not undo the contract write.
+  await authReq(configuredUrl, '/api/v1/provider/settings', { method: 'PUT', body: JSON.stringify(body) });
+  const mirror: Partial<RoutingPrefs> = {};
+  if (route.provider !== undefined) mirror.defaultProvider = route.provider;
+  if (route.model !== undefined) mirror.defaultModel = route.model ?? 'auto';
+  if (Object.keys(mirror).length) {
+    try {
+      await saveRouting(configuredUrl, mirror);
+    } catch { /* the profile mirror is best-effort; the contract write stands */ }
+  }
 }
 
 /** Authenticated JSON request: bearer token from the single identity module,

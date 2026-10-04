@@ -24,10 +24,18 @@ export function SystemStatus() {
   const mock = provider === 'local-mock';
   const degraded = connection === 'degraded' || (!!health?.degraded && !health?.ai);
 
+  // The user's own connected key is a live path even when the shared provider
+  // key is absent or unhealthy — say that, instead of showing "no provider".
+  const ownKeys = health?.byokProviders ?? [];
+  const unreadable = health?.byokUnreadable ?? [];
+  const rejected = health?.byokRejected ?? [];
   const billing = connection === 'checking' ? null
     : mock ? { label: 'Sandbox provider', tone: 'violet' as const }
-    : degraded ? { label: 'Provider unreachable', tone: 'amber' as const }
     : health?.ai ? { label: `Live: ${provider}`, tone: 'emerald' as const }
+    : health?.byok ? { label: `Live: your key${ownKeys.length ? ` (${ownKeys.join(', ')})` : ''}`, tone: 'emerald' as const }
+    : unreadable.length ? { label: 'Saved key needs replacing', tone: 'amber' as const }
+    : rejected.length ? { label: 'Saved key was rejected', tone: 'amber' as const }
+    : degraded ? { label: 'Provider unreachable', tone: 'amber' as const }
     : { label: 'No provider connected', tone: 'muted' as const };
 
   const toneClass = {
@@ -65,6 +73,7 @@ export function SystemStatus() {
             <span className={cn('text-small font-medium shrink-0', ok ? 'text-success' : 'text-[var(--fg-muted)]')}>
               {connection === 'checking' ? 'Checking…'
                 : ok ? (r.key === 'ai' && mock ? 'Sandbox' : 'Operational')
+                : r.key === 'ai' && (unreadable.length || rejected.length) ? 'Key needs replacing'
                 : 'Not connected'}
             </span>
           </div>

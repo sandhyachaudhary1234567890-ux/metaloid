@@ -50,6 +50,16 @@ function persistAudit() {
 
 const uid = (p) => `${p}-${Date.now().toString(36)}-${crypto.randomBytes(4).toString('hex')}`;
 
+/**
+ * A stored key the server can no longer open. Distinct from "no key": the UI
+ * must offer "replace it" rather than behaving as if nothing was ever saved.
+ */
+function unreadableError() {
+  const e = new Error('This saved key can no longer be decrypted — it was encrypted with a different server key.');
+  e.code = 'credential_unreadable';
+  return e;
+}
+
 function needUser(userId) {
   if (!userId || typeof userId !== 'string') throw new Error('userId required');
 }
@@ -130,6 +140,9 @@ export async function storeUserCredential(userId, providerId, credential, metada
       ...metadata,
       createdAt: new Date().toISOString(),
     },
+    // The mask is kept beside the ciphertext so listing credentials never
+    // needs to decrypt them — the same rule the contract store follows.
+    maskedHint: redactCredential(credential),
     isActive: true,
     lastRotatedAt: null,
     rotationCount: 0
@@ -190,21 +203,37 @@ const accountIsAuthoritative = () => String(process.env.SUPABASE_DB || '').toLow
 export async function getUserCredential(userId, providerId) {
   needUser(userId);
 
-  const fromAccount = await accountBridge.credentialFor(userId, providerId);
+  // A stored-but-unreadable key is remembered (not swallowed) so callers can
+  // say "replace this key" instead of behaving as if none was ever saved. It
+  // is only *reported* if no readable copy exists further down the chain.
+  let contractUnreadable = null;
+  let fromAccount = null;
+  try {
+    fromAccount = await accountBridge.credentialFor(userId, providerId);
+  } catch (e) {
+    if (e && e.code === 'credential_unreadable') contractUnreadable = e;
+    else throw e;
+  }
   if (fromAccount) {
     return {
       id: `contract:${providerId}`, providerId, credential: fromAccount,
       metadata: {}, isActive: true, lastRotatedAt: null, rotationCount: 0,
     };
   }
-  // Nothing in the contract, and the contract is the only configured store:
-  // this account has no key. Do NOT fall through to a stale query.
-  if (accountIsAuthoritative()) return null;
+  // Nothing readable in the contract, and the contract is the only configured
+  // store: either the account has no key, or the key it has is broken.
+  if (accountIsAuthoritative()) {
+    if (contractUnreadable) throw contractUnreadable;
+    return null;
+  }
 
   const db = await supa();
   if (db) {
     const row = await db.credGet(userId, providerId);
-    if (!row) return null;
+    if (!row) {
+      if (contractUnreadable) throw contractUnreadable;
+      return null;
+    }
     try {
       const data = db.decField(row.credential);
       if (!data) throw new Error('bad shape');
@@ -217,7 +246,7 @@ export async function getUserCredential(userId, providerId) {
       };
     } catch {
       await db.credAudit(userId, providerId, 'CREDENTIAL_DECRYPTION_FAILED', {});
-      throw new Error('Failed to decrypt credential');
+      throw unreadableError();
     }
   }
   
@@ -226,6 +255,8 @@ export async function getUserCredential(userId, providerId) {
   );
   
   if (!credential) {
+    // No readable copy anywhere: a broken contract row is the real answer.
+    if (contractUnreadable) throw contractUnreadable;
     return null;
   }
   
@@ -257,7 +288,26 @@ export async function getUserCredential(userId, providerId) {
       error: error.message
     });
     
-    throw new Error('Failed to decrypt credential');
+    throw unreadableError();
+  }
+}
+
+/**
+ * Readability of a stored key, without ever returning the secret.
+ *
+ * "Has a row" is not "works": a key encrypted under a rotated server key (or
+ * written by a process with an ephemeral master key) can never be opened
+ * again. The health probe asks this so it cannot report a broken credential
+ * as a live one — which is what left users staring at "Connected" while every
+ * message failed.
+ */
+export async function credentialReadiness(userId, providerId) {
+  try {
+    const c = await getUserCredential(userId, providerId);
+    return c ? 'readable' : 'absent';
+  } catch (e) {
+    if (e && e.code === 'credential_unreadable') return 'unreadable';
+    return 'unknown';
   }
 }
 
@@ -434,16 +484,24 @@ export async function listUserCredentialProviders(userId) {
   // is the store the app writes to, and the only one a serverless host has.
   const fromAccount = await accountBridge.listCredentials(userId);
   if (fromAccount.length) {
-    return fromAccount
-      .filter((c) => c.status !== 'invalid')
-      .map((c) => ({
-        id: c.id,
-        providerId: c.provider,
-        isActive: true,
-        createdAt: c.updated_at,
-        lastRotatedAt: null,
-        rotationCount: 0,
-      }));
+    // The mask and the last verification verdict travel with the row: the
+    // Settings list shows "••••1234 · connected" or "key rejected — replace
+    // it", and without these two fields every stored key rendered as an
+    // anonymous "key stored", which is how a rejected key stayed invisible.
+    // Every stored row is returned, including a rejected one. Hiding it made
+    // "key rejected — replace it" unreachable: the row simply vanished and the
+    // user was told nothing was connected, with no way to see what to fix.
+    // (Chat candidate ordering skips rejected keys — see providerGateway.)
+    return fromAccount.map((c) => ({
+      id: c.id,
+      providerId: c.provider,
+      isActive: true,
+      createdAt: c.updated_at,
+      lastRotatedAt: null,
+      rotationCount: 0,
+      redacted: c.masked_hint ?? null,
+      status: c.status || 'unverified',
+    }));
   }
   if (accountIsAuthoritative()) return [];
 
@@ -451,6 +509,9 @@ export async function listUserCredentialProviders(userId) {
   if (db) return db.credList(userId);
   
   return credentials.userCredentials
+    // Same rule as the contract store: the row is listed (so the user can see
+    // and replace it) even when the provider rejected it; the router is what
+    // skips rejected keys.
     .filter(c => c.userId === userId && c.isActive)
     .map(c => ({
       id: c.id,
@@ -458,7 +519,9 @@ export async function listUserCredentialProviders(userId) {
       isActive: c.isActive,
       createdAt: c.metadata.createdAt,
       lastRotatedAt: c.lastRotatedAt,
-      rotationCount: c.rotationCount
+      rotationCount: c.rotationCount,
+      redacted: c.maskedHint || null,
+      status: c.metadata?.testStatus === 'valid' ? 'connected' : c.metadata?.testStatus === 'invalid' ? 'invalid' : 'unverified',
     }));
 }
 

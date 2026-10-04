@@ -1,6 +1,7 @@
 import { memo, useCallback, useEffect, useRef, useState } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { Eye, Pencil, ArrowDown, RotateCcw, Image as ImageIcon, FileText } from 'lucide-react';
+import { AiSetupModal } from './setup/AiSetupModal';
 import type { ChatMessage } from '../lib/types';
 import { useApp } from '../lib/store';
 import { Markdown } from './chat/Markdown';
@@ -33,13 +34,34 @@ const AssistantTurn = memo(function AssistantTurn({
   isLast: boolean;
   interactive?: boolean;
 }) {
-  const { toast, regenerate, setFeedback, setVersionIndex, retryFailed, isGenerating, connection, setView } = useApp();
+  const { toast, regenerate, setFeedback, setVersionIndex, retryFailed, isGenerating, connection, setView, recheckConnection } = useApp();
+  const [setupOpen, setSetupOpen] = useState(false);
   const versions = msg.versions ?? [];
   const shown = msg.versionIndex !== undefined && msg.versionIndex >= 0 ? versions[msg.versionIndex] ?? msg.content : msg.content;
   const hasTool = (msg.toolActivity?.length ?? 0) > 0 && (msg.versionIndex === undefined || msg.versionIndex < 0);
 
+  /* The provider setup, reachable from whatever is blocking the answer: a demo
+     reply or a failed turn both end here, in place, instead of a trip through
+     Settings the user has to search. */
+  const setupModal = setupOpen ? (
+    <div className="fixed inset-0 z-[80] bg-black/70 backdrop-blur-sm flex items-center justify-center p-4">
+      <div className="w-full max-w-[620px] max-h-[92vh] overflow-y-auto">
+        <AiSetupModal
+          canSkip={true}
+          onComplete={() => {
+            setSetupOpen(false);
+            void recheckConnection();
+          }}
+        />
+      </div>
+    </div>
+  ) : null;
+
   /* ── Failure. Stated plainly, with the two things you can actually do. ── */
   if (msg.error && !msg.content) {
+    // A stored key that cannot be decrypted has exactly one fix; say it and
+    // offer it. The generic "no AI is connected" copy would be a lie here.
+    const keyIssue = !!msg.errorText && /can no longer be decrypted|replace it|rejected (this|the) key|API key/i.test(msg.errorText);
     return (
       <motion.div
         initial={{ opacity: 0, y: 4 }}
@@ -47,21 +69,29 @@ const AssistantTurn = memo(function AssistantTurn({
         transition={{ duration: duration.small, ease: ease.out }}
         className="max-w-[62ch] rounded-[var(--radius-lg)] border border-[color-mix(in_srgb,var(--danger)_28%,transparent)] bg-[color-mix(in_srgb,var(--danger)_7%,transparent)] px-4 py-3.5"
       >
-        <p className="text-body font-medium text-[var(--fg)]">That reply didn't come through.</p>
+        <p className="text-body font-medium text-[var(--fg)]">
+          {keyIssue ? 'Your saved AI key needs replacing.' : "That reply didn't come through."}
+        </p>
         <p className="mt-1 text-small text-[var(--fg-muted)] text-pretty">
-          {connection === 'online'
-            ? 'The provider stopped mid-answer. Your message is still above.'
-            : 'No AI is connected yet, so answers come from the local demo.'}
+          {msg.errorText
+            ? msg.errorText
+            : connection === 'online'
+              ? 'The provider stopped mid-answer. Your message is still above.'
+              : 'No AI is connected yet, so answers come from the local demo.'}
         </p>
         <span className="mt-3 flex items-center gap-2">
           <button onClick={() => retryFailed(msg.id)} className="btn-ghost h-8 gap-1.5 px-3 text-small">
             <RotateCcw size={12} />
             Try again
           </button>
-          <button onClick={() => setView('settings')} className="btn-ghost h-8 px-3 text-small">
-            Choose another AI
+          <button
+            onClick={() => (keyIssue ? setSetupOpen(true) : setView('settings'))}
+            className="btn-ghost h-8 px-3 text-small"
+          >
+            {keyIssue ? 'Replace your key' : 'Choose another AI'}
           </button>
         </span>
+        {setupModal}
       </motion.div>
     );
   }
@@ -105,18 +135,24 @@ const AssistantTurn = memo(function AssistantTurn({
       ) : null}
 
       {/* Demo replies say so, with the one tap that fixes it. Live replies
-          show nothing — the absence of this line IS the live indicator. */}
+          show nothing — the absence of this line IS the live indicator.
+          The tap opens the provider setup HERE, not a settings page the user
+          then has to search: a demo reply is the moment they most want the
+          fix, and it used to cost them a trip through Settings with no key
+          control in sight. */}
       {!msg.streaming && msg.demo && shown && (
         <p className="mt-2 text-small text-[var(--fg-muted)]">
           Demo reply — no AI connected.{' '}
           <button
-            onClick={() => setView('settings')}
+            onClick={() => setSetupOpen(true)}
             className="text-[var(--accent)] underline underline-offset-2 hover:brightness-110"
           >
             Connect a key to go live
           </button>
         </p>
       )}
+
+      {setupModal}
 
       {/* Streaming cursor — a soft bar, not a blinking block. */}
       {msg.streaming && shown && (

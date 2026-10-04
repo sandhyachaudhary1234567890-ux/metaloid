@@ -18,15 +18,28 @@ export function SetupChecklist() {
 
   const gatewayOk = !!health?.server;
   const signedIn = !auth.configured || auth.status === 'signed-in';
+  const byok = !!health?.byok;
+  const ownKeys = health?.byokProviders ?? [];
+  // A stored key the server cannot open is NOT the same as no key: the user
+  // already did the work, so send them to "replace it", not to "connect one".
+  const unreadable = health?.byokUnreadable ?? [];
+  const rejected = health?.byokRejected ?? [];
+  const broken = [...unreadable, ...rejected];
 
   const liveNote =
     connection === 'checking'
       ? 'Checking the gateway…'
-      : connection === 'degraded'
-        ? 'The gateway answers but the provider does not — usually a rejected or missing key.'
-        : connection === 'mock'
-          ? 'Sandbox provider active — answers are local demos, clearly labelled.'
-          : 'No gateway reached — answers come from the on-device demo engine.';
+      : unreadable.length
+        ? `Your saved ${unreadable.join(', ')} key can no longer be decrypted on the server — replace it to go live again.`
+        : rejected.length
+          ? `The provider rejected your ${rejected.join(', ')} key — replace it to go live again.`
+          : byok
+          ? `Your key is connected${ownKeys.length ? ` (${ownKeys.join(', ')})` : ''} — send a message, or recheck if this looks stale.`
+          : connection === 'degraded'
+          ? 'The gateway answers but the provider does not — usually a rejected or missing key.'
+          : connection === 'mock'
+            ? 'Sandbox provider active — answers are local demos, clearly labelled.'
+            : 'No gateway reached — answers come from the on-device demo engine.';
 
   const steps = [
     {
@@ -51,8 +64,12 @@ export function SetupChecklist() {
       n: 3,
       title: 'AI provider live',
       detail: liveNote,
-      done: false,
-      action: { label: 'Connect a key', onClick: () => setView('settings') },
+      done: byok,
+      action: byok
+        ? { label: 'Recheck', onClick: () => recheckConnection() }
+        : broken.length
+          ? { label: 'Replace key', onClick: () => setView('settings') }
+          : { label: 'Connect a key', onClick: () => setView('settings') },
     },
   ];
 

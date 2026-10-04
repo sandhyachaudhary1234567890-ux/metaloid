@@ -12,7 +12,9 @@
 import { test, before, after } from 'node:test';
 import assert from 'node:assert/strict';
 import { spawn } from 'node:child_process';
+import fs from 'node:fs';
 import net from 'node:net';
+import os from 'node:os';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 
@@ -189,17 +191,68 @@ test('silent empty stream is treated as a dead candidate', async () => {
   } finally { g.stop(); }
 });
 
-test('no key configured: 503 + no_provider before any stream starts', async () => {
-  const g = await boot({ key: '', scenario: 'ok' });
+test('a saved key the server cannot decrypt: health says so, chat names the fix', async () => {
+  const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'metaloid-unreadable-'));
+
+  // Phase 1 — store a key with a stable server key, like a normal setup.
+  let credentialId = '';
+  const first = await boot({ key: '', scenario: 'ok', extraEnv: { METALOID_DATA_DIR: dir, METALOID_CREDENTIAL_KEY: 'first-key-0123456789' } });
   try {
-    const res = await fetch(`http://127.0.0.1:${g.gatewayPort}/api/chat`, {
+    const created = await (await fetch(`http://127.0.0.1:${first.gatewayPort}/api/providers/credentials`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ message: 'hello' }),
-    });
-    assert.equal(res.status, 503);
-    const j = await res.json();
-    assert.match(j.error, /provider/i);
+      body: JSON.stringify({ providerId: 'openrouter', credential: 'sk-or-v1-unreadable-0123456789abcdef' }),
+    })).json();
+    credentialId = created.id;
+    assert.ok(credentialId, 'credential must be stored');
+    assert.equal(created.credential_key, 'stable', 'the server must report a stable encryption key');
+    const health = await (await fetch(`http://127.0.0.1:${first.gatewayPort}/api/health`)).json();
+    assert.equal(health.byok, true, 'a readable stored key is a live path');
+  } finally { first.stop(); }
+
+  // Phase 2 — the row survives, but the server can no longer open it (key
+  // rotation, redeploy, or a process that booted with an ephemeral key).
+  const file = path.join(dir, 'credentials.json');
+  const stored = JSON.parse(fs.readFileSync(file, 'utf8'));
+  assert.equal(stored.userCredentials.length, 1);
+  assert.equal(stored.userCredentials[0].id, credentialId);
+  stored.userCredentials[0].encryptedData = 'not-a-valid-envelope';
+  fs.writeFileSync(file, JSON.stringify(stored));
+
+  const second = await boot({ key: '', scenario: 'ok', extraEnv: { METALOID_DATA_DIR: dir, METALOID_CREDENTIAL_KEY: 'second-key-0123456789' } });
+  try {
+    // Health must not call this connected: "Connected" while every message
+    // fails is the exact lie this covers.
+    const health = await (await fetch(`http://127.0.0.1:${second.gatewayPort}/api/health`)).json();
+    assert.equal(health.byok, false, 'an unreadable key is not a working connection');
+    assert.deepEqual(health.byokUnreadable, ['openrouter']);
+    assert.equal(health.byokError, 'credential_unreadable');
+
+    // And the chat must say what to do — not "the model provider failed".
+    const { status, events } = await chat(second.gatewayPort, 'hi');
+    assert.equal(status, 200, 'stream already started so errors ride the stream');
+    const err = events.find((e) => e.error);
+    assert.ok(err, 'expected an error event');
+    assert.equal(err.code, 'credential_unreadable');
+    assert.match(err.error, /replace it/i);
+    assert.ok(!events.some((e) => e.token), 'a broken key must never produce a fabricated answer');
+  } finally { second.stop(); }
+});
+
+test('no key configured: streams a no_provider error naming the fix, never a silent demo', async () => {
+  const g = await boot({ key: '', scenario: 'ok' });
+  try {
+    // The route deliberately does NOT reject before trying BYOK: a connected
+    // user key is a complete path, so the request streams and the failure is
+    // reported as a stable code + sentence. (A hard 503 here is what made a
+    // BYOK-only deployment look unconfigured.)
+    const { status, events } = await chat(g.gatewayPort, 'hello');
+    assert.equal(status, 200);
+    const err = events.find((e) => e.error);
+    assert.ok(err, 'expected an error event');
+    assert.equal(err.code, 'no_provider');
+    assert.match(err.error, /provider key/i);
+    assert.ok(!events.some((e) => e.token), 'must not fabricate an answer');
   } finally { g.stop(); }
 });
 
