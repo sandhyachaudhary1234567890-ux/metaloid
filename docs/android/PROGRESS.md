@@ -4,8 +4,9 @@
 committed *and* CI has compiled it *and* its tests pass. Until then it is
 "written, unverified". No phase is ever marked done because it looks finished.
 
-Last updated: 2026-10-04, at commit `3ad76ea` — the commit whose CI run
-(`37193950163`) is green and which the published release was built from.
+Last updated: 2026-10-04, at commit `e1bb05a` — the commit whose CI run
+(`37195121775`) is green and which the published release `apk-v2` was built
+from. (`apk-v1`, from `3ad76ea`, is the earlier build of the same project.)
 
 ## Status at a glance
 
@@ -20,8 +21,8 @@ Last updated: 2026-10-04, at commit `3ad76ea` — the commit whose CI run
 | Share intake | written; CI-compiled |
 | Docs (`docs/android/*`) | written |
 | Web client regression (`npm run check`, tests, build) | run in this repository; exact output in TESTING.md §4 |
-| Whole-project CI (unit tests + lint + debug APK + minified release APK + APK secret scan) | **green**: run `37193950163` (branch) and `37194219682` (tag) |
-| Published APK | **yes** — GitHub Release `apk-v1`, built from `3ad76ea` |
+| Whole-project CI (unit tests + lint + debug APK + minified release APK + APK secret scan) | **green**: `37193950163` and `37195121775` (branch), `37194219682` and `37195469014` (tags) |
+| Published APK | **yes** — GitHub Release `apk-v2` (latest), built from `e1bb05a`; `apk-v1` from `3ad76ea` is the earlier build |
 
 **What that green run does and does not prove.** It proves the project compiles
 with no errors, the nine JVM test classes pass, `lintDebug` reports no errors
@@ -31,6 +32,28 @@ neither APK contains a privileged-secret pattern.
 It does **not** prove the app runs: nothing here has executed on a device or
 against a live gateway. `docs/android/TESTING.md` §5 lists precisely what
 remains unverified, and no claim in these documents goes beyond that.
+
+## What changed after the first green build
+
+A green build is not the same as working software, so the code was then read the
+way a user would exercise it. Four defects were found and fixed in `e1bb05a`, none
+of which any compiler or linter can see, and each now has a test or a decision
+entry behind it:
+
+1. **Offline looked like a dead gateway.** Connectivity was never consulted when
+   classifying a transport failure, so `AppError.Offline` could not be produced
+   and a phone with the radio off was told the server was unreachable.
+   `TransportKindTest` pins the distinction (and keeps a TLS failure out of it).
+2. **A share could be dropped silently.** The conversation list placed a shared
+   text in a `LaunchedEffect(Unit)`, which never re-runs for a screen that is
+   already composed — so sharing while looking at the list did nothing at all.
+3. **A share could create two conversations.** Returning to the list with an
+   assigned-but-unclaimed share re-ran the placement; it now requires
+   `PendingShare.needsConversation`.
+4. **A finished turn could be written twice.** `ChatTurnRunner` finalised on the
+   normal path *and* again in `finally`; when the first assistant-row insert had
+   failed, that second write created a second row — the same answer twice in the
+   transcript. D6's "exactly once" is now enforced by a flag.
 
 ## Phase log
 
