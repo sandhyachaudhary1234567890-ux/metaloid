@@ -2,33 +2,31 @@
 
 What is proven, how, and — just as important — what is not.
 
-## Current V4 status (last completed CI: 2026-10-04, run `37219304680`)
+## Current V4 status (last completed CI: 2026-10-04, run `37220731961`)
 
 V4 is **not ready to publish**. Run
-[37219304680](https://github.com/sandhyachaudhary1234567890-ux/metaloid/actions/runs/37219304680)
-passed JVM unit tests, lint, and debug APK assembly, then failed at
-`:app:connectedDebugAndroidTest`. Its failure report contained no instrumented
-JUnit XML, no screenshot, and no foreground/window/logcat/hierarchy output; the
-Gradle root-cause text was not included in the report. Whether this was an
-emulator/ADB failure or an app/test failure remains unknown. The test-report
-artifact was uploaded, but both its download and the Actions log download ended
-with `EOF` in this environment. The next attempt records `adb devices`/boot
-state, preserves ADB command errors, and includes the Gradle failure context in
-the commit report.
+[37220731961](https://github.com/sandhyachaudhary1234567890-ux/metaloid/actions/runs/37220731961)
+passed JVM unit tests, lint, and debug APK assembly, but the emulator action
+failed before invoking the smoke-test helper. GitHub reported
+`/usr/local/lib/android/sdk/platform-tools/adb` exiting with code 224 after
+about 15 minutes; no emulator log or instrumented-test XML was produced. This
+is consistent with the Linux KVM permission/slow-software-emulation failure
+reported for the same emulator action in
+[upstream issue #655](https://github.com/EranBoudjnah/CleanArchitectureForAndroid/issues/655),
+but KVM failure has not yet been directly confirmed on this runner. The
+[emulator action documents a KVM udev-permissions step](https://github.com/ReactiveCircus/android-emulator-runner#running-hardware-accelerated-emulators-on-linux-runners);
+the next run adds that step and verifies `/dev/kvm` access before boot.
 
-Earlier runs: [37217266554](https://github.com/sandhyachaudhary1234567890-ux/metaloid/actions/runs/37217266554)
-ran the instrumentation test but did not observe the sign-in screen; its
-hierarchy contained only an XML declaration. Runs
-[37213055749](https://github.com/sandhyachaudhary1234567890-ux/metaloid/actions/runs/37213055749)
-and
-[37213710373](https://github.com/sandhyachaudhary1234567890-ux/metaloid/actions/runs/37213710373)
-failed before instrumentation because Gradle ran from the repository root;
-[37213918933](https://github.com/sandhyachaudhary1234567890-ux/metaloid/actions/runs/37213918933)
-timed out waiting for emulator boot; and
-[37216103307](https://github.com/sandhyachaudhary1234567890-ux/metaloid/actions/runs/37216103307)
-failed before Gradle because the action executed Bash-only syntax via
-`/usr/bin/sh`. The release APK, APK secret scan, and APK upload have not
-completed. No V4 release or successful downloadable V4 APK exists.
+In prior run
+[37219304680](https://github.com/sandhyachaudhary1234567890-ux/metaloid/actions/runs/37219304680),
+the emulator action did invoke Gradle, but `:app:connectedDebugAndroidTest`
+failed without JUnit XML or useful ADB/window/screenshot data. Its artifact and
+job log downloads ended with `EOF` here. Run
+[37217266554](https://github.com/sandhyachaudhary1234567890-ux/metaloid/actions/runs/37217266554)
+ran instrumentation but did not observe the sign-in screen; its hierarchy
+contained only an XML declaration. Earlier runs failed on working directory,
+emulator boot, or POSIX-shell setup. No release APK, APK secret scan, or
+successful downloadable V4 APK exists.
 
 This environment has no Java/Gradle Android toolchain, so the Android build
 results are from GitHub Actions only. Fresh checks against this tree on
@@ -162,14 +160,14 @@ was a genuinely wrong test (a 2026 timestamp compared against a January 2026
 
 What is still not verified:
 
-* Android startup remains unverified. Run `37217266554` did not observe the
-  signed-out screen; run `37219304680` failed at
-  `:app:connectedDebugAndroidTest` without producing instrumented JUnit XML or
-  useful ADB/window/logcat/screenshot diagnostics. The next attempt captures
-  the Gradle failure context and ADB device/boot state. Runs `37213918933` and
-  `37216103307` failed in emulator setup before instrumentation. Even a passing
-  startup smoke test would not cover chat, provider setup, keyboard/insets,
-  TalkBack, or network recovery.
+* Android startup remains unverified. Run `37220731961` passed unit tests/lint/
+  debug assembly but the emulator action failed before invoking the smoke-test
+  helper (`adb` exit 224); the failure pattern is consistent with missing KVM
+  access, and the next run adds the action-recommended KVM udev rule. Run
+  `37219304680` failed in `:app:connectedDebugAndroidTest` without usable
+  diagnostics, while `37217266554` did not observe the signed-out screen. Even
+  a passing startup smoke test would not cover chat, provider setup,
+  keyboard/insets, TalkBack, or network recovery.
 * **The app has not been verified against the live gateway or on a physical
   device.** The emulator test did not establish that sign-in can proceed. Every
   behavior in `CONTRACT_MAP.md` is derived from server source/API documentation

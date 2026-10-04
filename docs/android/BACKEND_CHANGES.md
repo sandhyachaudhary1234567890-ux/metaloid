@@ -58,16 +58,19 @@ unverified. Production backend compatibility is therefore a release blocker
 until the deployment is updated and those routes are verified. No deployment
 was attempted here.
 
-Android CI run `37219304680` passed JVM unit tests, lint, and debug APK
-assembly, then failed at `:app:connectedDebugAndroidTest`. Its commit report
-contained no instrumented JUnit XML, failure screenshot, or useful
-foreground/window/logcat diagnostics; the Gradle root cause was omitted. The
-`test-reports` artifact and job log could not be downloaded in this environment
-(EOF), so the cause is unresolved. The next workflow records `adb devices` and
-boot state, keeps ADB errors, and includes Gradle failure context. Earlier runs
-`37211404025` and `37217266554` did not reach the signed-out screen; the latter's
-hierarchy contained only an XML declaration. Runs `37213055749` and `37213710373`
-failed before instrumentation because Gradle ran from the repository root;
+Android CI run `37220731961` passed JVM unit tests, lint, and debug APK
+assembly, but the emulator action failed before invoking the smoke helper with
+`adb` exit code 224 after about 15 minutes; no emulator log or instrumented
+JUnit XML was produced. This resembles the KVM-permission/slow-emulator failure
+reported for the same action in [upstream issue #655](https://github.com/EranBoudjnah/CleanArchitectureForAndroid/issues/655),
+but KVM failure is not confirmed on this runner. The next workflow applies the
+[action's documented KVM udev rule](https://github.com/ReactiveCircus/android-emulator-runner#running-hardware-accelerated-emulators-on-linux-runners)
+and checks `/dev/kvm` access before boot. Prior run `37219304680` reached
+`:app:connectedDebugAndroidTest` but failed without useful diagnostics; its
+artifact and job log downloads ended with EOF. Runs `37211404025` and
+`37217266554` did not reach the signed-out screen; the latter's hierarchy
+contained only an XML declaration. Runs `37213055749` and `37213710373` failed
+before instrumentation because Gradle ran from the repository root;
 `37213918933` timed out waiting for emulator boot; and `37216103307` failed
 before Gradle because the action executed Bash-only `set -o pipefail` via
 `/usr/bin/sh`. The workflow still uses `working-directory: android`, a one-line

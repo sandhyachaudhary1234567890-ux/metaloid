@@ -87,6 +87,18 @@ jobs:
             :app:assembleDebug 2>&1 | tee "$RUNNER_TEMP/ci-build.log"
           gradle --no-daemon --stacktrace :app:lintDebug 2>&1 | tee -a "$RUNNER_TEMP/ci-build.log"
 
+      # Linux-hosted Android emulators need KVM device permissions. Recent
+      # ubuntu-latest images may otherwise fall back to software emulation and
+      # fail or time out before the test script is invoked.
+      - name: Enable KVM group permissions
+        run: |
+          echo 'KERNEL=="kvm", GROUP="kvm", MODE="0666", OPTIONS+="static_node=kvm"' | sudo tee /etc/udev/rules.d/99-kvm4all.rules
+          sudo udevadm control --reload-rules
+          sudo udevadm trigger --name-match=kvm
+          sudo udevadm settle
+          ls -l /dev/kvm
+          test -r /dev/kvm && test -w /dev/kvm
+
       - name: Emulator startup smoke test
         uses: reactivecircus/android-emulator-runner@v2
         with:
