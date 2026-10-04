@@ -94,6 +94,8 @@ function baseOf(configured: string): string {
   return resolved || rawBase(configured);
 }
 
+
+
 // scheme-swap rescue: localhost gateways exist as http OR https depending
 // on whether LAN certs were generated. Try the other scheme on failure so
 // a stale stored URL (or fresh default) never strands the app offline.

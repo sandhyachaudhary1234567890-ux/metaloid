@@ -915,8 +915,9 @@ function titleFrom(text: string): string {
     setStatus('thinking');
     setDetectedLang(null);
 
-    // thinking beat — real latency window once backend streams
-    await new Promise((r) => setTimeout(r, 550 + Math.random() * 500));
+    // Micro-beat so the status flip paints before the first token lands.
+    // Kept tiny on purpose: every millisecond here delays a real answer.
+    await new Promise((r) => setTimeout(r, 120));
     if (controller.signal.aborted) return;
 
     const assistantId = uid('msg');

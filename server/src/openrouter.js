@@ -124,12 +124,34 @@ export async function listFreeModels() {
 }
 
 export function pickModel(models, task) {
-  const live = models.filter((m) => !isQuarantined(m.id));
+  const live = bySize(models.filter((m) => !isQuarantined(m.id)));
   for (const tier of tiersFor(task)) {
     const m = live.find((x) => x.tier === tier);
     if (m) return m;
   }
   return live[0] || FALLBACK_FREE[0];
+}
+
+/**
+ * Small-first ordering within the live list (stable: catalogue order wins
+ * ties). Smaller weights answer sooner and rate-limit less often, so the
+ * first candidate tried is usually the quickest — without ever demoting
+ * across tiers (a small smart model never jumps ahead of the tier order).
+ */
+function sizeScore(id) {
+  const s = String(id || '').toLowerCase();
+  const m = s.match(/(\d+(?:\.\d+)?)\s*b\b/);
+  if (m) return Number(m[1]);
+  if (/mini|flash|haiku|3b|1b|nano/.test(s)) return 5;
+  if (/70b|72b|405b|400b|ultra|opus/.test(s)) return 80;
+  return 30;
+}
+
+function bySize(list) {
+  return list
+    .map((m, i) => ({ m, i }))
+    .sort((a, b) => (sizeScore(a.m.id) - sizeScore(b.m.id)) || (a.i - b.i))
+    .map((x) => x.m);
 }
 
 function tiersFor(task) {
@@ -145,7 +167,7 @@ function tiersFor(task) {
  * Quarantined slugs are never returned.
  */
 export function pickCandidates(models, task, max = 4, preferredModel = '') {
-  const live = models.filter((m) => !isQuarantined(m.id));
+  const live = bySize(models.filter((m) => !isQuarantined(m.id)));
   const out = [];
   const push = (m) => {
     if (m && !out.some((x) => x.id === m.id)) out.push(m);
