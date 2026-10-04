@@ -35,6 +35,19 @@ function trimBase(url) {
 }
 
 /**
+ * Referer OpenRouter sees. Must be the real deployment origin: a key with
+ * allowed-referrer restrictions rejects anything else, and `localhost` from
+ * a production server is exactly such a rejection. Same chain as the
+ * platform-key path in server/src/openrouter.js.
+ */
+function referer() {
+  return process.env.PUBLIC_APP_URL
+    || (process.env.VERCEL_PROJECT_PRODUCTION_URL ? `https://${process.env.VERCEL_PROJECT_PRODUCTION_URL}` : '')
+    || (process.env.VERCEL_URL ? `https://${process.env.VERCEL_URL}` : '')
+    || 'http://localhost:5173';
+}
+
+/**
  * How long to wait for a provider to *start* answering, before giving up.
  * Not a cap on the answer itself: a long generation is legitimate, but a
  * provider that never sends response headers is not, and without this the
@@ -299,7 +312,7 @@ export class OpenRouterAdapter extends ProviderAdapter {
       const response = await fetch(`${this.baseUrl}/models`, {
         headers: {
           'Authorization': `Bearer ${credential.credential}`,
-          'HTTP-Referer': process.env.PUBLIC_APP_URL || 'http://localhost:5173',
+          'HTTP-Referer': referer(),
           'X-Title': 'METALOID'
         },
         signal: AbortSignal.timeout(8000)
@@ -357,7 +370,7 @@ export class OpenRouterAdapter extends ProviderAdapter {
         headers: {
           'Content-Type': 'application/json',
           'Authorization': `Bearer ${credential.credential}`,
-          'HTTP-Referer': process.env.PUBLIC_APP_URL || 'http://localhost:5173',
+          'HTTP-Referer': referer(),
           'X-Title': 'METALOID'
         },
         body: JSON.stringify({
@@ -408,7 +421,7 @@ export class OpenRouterAdapter extends ProviderAdapter {
           headers: {
             'Content-Type': 'application/json',
             'Authorization': `Bearer ${credential.credential}`,
-            'HTTP-Referer': process.env.PUBLIC_APP_URL || 'http://localhost:5173',
+            'HTTP-Referer': referer(),
             'X-Title': 'METALOID'
           },
           body: JSON.stringify({

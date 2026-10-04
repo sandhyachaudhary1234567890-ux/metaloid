@@ -24,6 +24,7 @@
 import pg from 'pg';
 import crypto from 'node:crypto';
 import { normalizeTaskStatus, taskIsFinished } from './vocabulary.js';
+import { decrypt as legacyDecrypt } from '../core/crypto.js';
 
 const { Pool } = pg;
 
@@ -462,6 +463,17 @@ export const providerCredentials = {
     try {
       return { secret: decryptSecret(row.secret_ciphertext), provider: row.provider, label: row.label || label };
     } catch {
+      // Legacy envelope: keys stored before the vault/contract unification
+      // used core/crypto's {salt, iv, encrypted, authTag} shape. Read them so
+      // a previously saved key activates without forcing the user to re-save.
+      try {
+        const o = typeof row.secret_ciphertext === 'string' ? JSON.parse(row.secret_ciphertext) : row.secret_ciphertext;
+        if (o && o.salt && o.iv && o.encrypted && o.authTag) {
+          return { secret: legacyDecrypt(o), provider: row.provider, label: row.label || label };
+        }
+      } catch {
+        /* not a legacy envelope either — null below */
+      }
       return null;
     }
   },
