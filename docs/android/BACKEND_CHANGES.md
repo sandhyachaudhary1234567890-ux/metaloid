@@ -58,25 +58,20 @@ unverified. Production backend compatibility is therefore a release blocker
 until the deployment is updated and those routes are verified. No deployment
 was attempted here.
 
-Android CI run `37220731961` passed JVM unit tests, lint, and debug APK
-assembly, but the emulator action failed before invoking the smoke helper with
-`adb` exit code 224 after about 15 minutes; no emulator log or instrumented
-JUnit XML was produced. This resembles the KVM-permission/slow-emulator failure
-reported for the same action in [upstream issue #655](https://github.com/EranBoudjnah/CleanArchitectureForAndroid/issues/655),
-but KVM failure is not confirmed on this runner. The next workflow applies the
-[action's documented KVM udev rule](https://github.com/ReactiveCircus/android-emulator-runner#running-hardware-accelerated-emulators-on-linux-runners)
-and checks `/dev/kvm` access before boot. Prior run `37219304680` reached
-`:app:connectedDebugAndroidTest` but failed without useful diagnostics; its
-artifact and job log downloads ended with EOF. Runs `37211404025` and
-`37217266554` did not reach the signed-out screen; the latter's hierarchy
-contained only an XML declaration. Runs `37213055749` and `37213710373` failed
-before instrumentation because Gradle ran from the repository root;
-`37213918933` timed out waiting for emulator boot; and `37216103307` failed
-before Gradle because the action executed Bash-only `set -o pipefail` via
-`/usr/bin/sh`. The workflow still uses `working-directory: android`, a one-line
-Bash helper invocation, and a 900-second boot allowance. Release APK build,
-secret scan, and APK upload have not passed. V4 has not been installed on a
-physical device; V3/V4 signing continuity and performance/accessibility audits
-are also outstanding. Do not use `METAIOID V4 — MARKET READY` or publish an APK
-release until the CI, deployed backend, signing, and device release gates are
-actually satisfied.
+Android CI run `37221933634` passed JVM unit tests, lint, both APK assemblies,
+and the API 34 signed-out cold-launch smoke test after the KVM step verified
+read/write access to `/dev/kvm`. The APK step reached the separate
+configured-gateway-host assertion, which failed on the debug APK. The check had
+`grep -q` at the end of a multi-command pipeline under `pipefail`; a local large
+stream reproduction returns SIGPIPE status 141 on a true early match. The next
+run searches a saved DEX-strings file instead. The workflow's privileged-secret
+pattern check did not fail, but APK collection/upload and the release job were
+skipped. Run `37220731961` had failed before the helper with `adb` exit 224,
+consistent with the KVM-permission issue in [upstream issue #655](https://github.com/EranBoudjnah/CleanArchitectureForAndroid/issues/655);
+run `37219304680` failed inside `:app:connectedDebugAndroidTest` without useful
+diagnostics. Earlier runs had setup/script or sign-in failures. Production
+backend compatibility remains unverified and is a release blocker. V4 has not
+been installed on a physical device; V3/V4 signing continuity and
+performance/accessibility audits are also outstanding. Do not use
+`METAIOID V4 — MARKET READY` or publish an APK release until the CI, deployed
+backend, signing, and device release gates are actually satisfied.

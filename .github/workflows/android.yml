@@ -160,7 +160,11 @@ jobs:
           gateway_host=${gateway_host%%/*}
           for apk in app/build/outputs/apk/debug/app-debug.apk app/build/outputs/apk/release/app-release.apk; do
             test -f "$apk" || { echo "::error::missing expected APK: $apk"; exit 1; }
-            if unzip -p "$apk" '*.dex' | strings -n 8 | grep -Fq "$gateway_host"; then
+            # Don't put grep -q in this pipeline: with GitHub's pipefail shell,
+            # an early match can SIGPIPE unzip/strings and make a true match fail.
+            dex_strings="$RUNNER_TEMP/$(basename "$apk").strings"
+            unzip -p "$apk" '*.dex' | strings -n 8 > "$dex_strings"
+            if grep -Fq -- "$gateway_host" "$dex_strings"; then
               echo "$apk carries the configured gateway"
             else
               echo "::error::$apk does not carry the configured gateway host"

@@ -6,36 +6,35 @@ committed *and* CI has compiled it *and* its tests pass. Until then it is
 
 Historical baseline: the published V3 release is `apk-v3` (see
 `docs/android/RELEASE.md`). V4 is committed to the Arena working branch, but it
-is **not ready to publish**: latest run `37220731961` passed JVM tests, lint,
-and debug APK assembly, then the emulator action failed before invoking the
-smoke helper with `adb` exit code 224. No emulator log or instrumented JUnit
-XML was produced. This resembles the KVM-permission/slow-emulator failure
-reported for this action in [upstream issue #655](https://github.com/EranBoudjnah/CleanArchitectureForAndroid/issues/655),
-but the runner's KVM state has not been directly observed. The next workflow
-uses the action-recommended KVM udev rule and checks `/dev/kvm` access before
-boot. Earlier runs failed on emulator boot (`37213918933`), the action's POSIX
-shell (`37216103307`), the Gradle working directory (`37213055749`,
-`37213710373`), an unobserved signed-out screen (`37211404025`, `37217266554`),
-or the in-test Gradle failure without diagnostics (`37219304680`).
+is **not ready to publish**: latest run `37221933634` passed JVM tests, lint,
+the API 34 cold-launch smoke test, and both APK assemblies. The KVM permission
+step succeeded. The final APK step then failed at its baked-gateway-host check;
+that check used `grep -q` in a pipeline under `pipefail`, which a local large
+stream reproduction shows can turn a true match into SIGPIPE status 141. The
+workflow now searches a saved DEX-strings file instead. The prohibited-secret
+pattern scan itself did not fail, but APK collection/upload and release were
+skipped. Earlier run `37220731961` failed before the helper with `adb` exit 224,
+consistent with [upstream issue #655](https://github.com/EranBoudjnah/CleanArchitectureForAndroid/issues/655)
+on KVM permissions; `/dev/kvm` is now checked before boot. Older runs failed on
+boot, shell, working directory, or sign-in assertion. Backend compatibility,
+signing continuity, physical-device acceptance, and a downloadable V4 APK are
+still unverified.
 
 ## Current V4 increment — compiled, partially verified; not release-ready
 
 Changes include backend-backed first-run provider setup and readiness gating,
 Smart Connect plus server-catalog model selection, route persistence, chat
-retry/finalization metadata fixes, and related regression coverage. GitHub
-GitHub Actions passed JVM tests, lint, and debug APK assembly in run
-`37220731961`, but the emulator action failed before invoking the smoke helper;
-GitHub reported `adb` exit code 224 after about 15 minutes. No emulator log or
-instrumented-test XML was produced. This is consistent with the Linux KVM
-permission issue reported for the same action, though it is not confirmed for
-this runner. The next workflow applies the action's KVM udev rule and checks
-`/dev/kvm` permissions. Run `37219304680` reached `:app:connectedDebugAndroidTest`
-but failed without useful diagnostics; runs `37211404025` and `37217266554`
-failed to observe the signed-out screen. Earlier runs failed on working
-directory, emulator boot, or POSIX-shell setup. Release APK build, APK secret
-scan, and APK upload have not passed. No V4 release or successful downloadable
-V4 APK exists. See `TESTING.md` for verification limits and
-`BACKEND_CHANGES.md` for the additive server contract changes.
+retry/finalization metadata fixes, and related regression coverage. Run
+`37221933634` passed JVM tests/lint, the API 34 sign-in smoke test, and debug
+and minified release APK assembly. The KVM check succeeded. The workflow's
+separate configured-gateway-host check failed because `grep -q` can SIGPIPE
+upstream commands under `pipefail`; the check is now changed to search extracted
+DEX strings. Forbidden-secret patterns were not detected, but the step failure
+prevented APK collection/upload and skipped the release job. Backend
+compatibility, signing continuity, physical-device acceptance, and the final
+APK security gate remain unverified. No V4 release or downloadable V4 APK
+exists yet. See `TESTING.md` for verification limits and `BACKEND_CHANGES.md`
+for the additive server contract changes.
 
 ## Status at a glance
 
@@ -50,7 +49,7 @@ V4 APK exists. See `TESTING.md` for verification limits and
 | Share intake | written; CI-compiled |
 | Docs (`docs/android/*`) | written |
 | Web client regression (`npm run check`, tests, build) | run in this repository; exact output in TESTING.md §4 |
-| Whole-project CI (unit tests + lint + debug APK + emulator smoke + minified release APK + APK secret scan) | Historical V1/V2/V3 runs are green; run `37220731961` passed JVM tests/lint/debug assembly but the emulator action failed before its helper (`adb` exit 224, no JUnit XML). Earlier V4 runs failed signed-out assertion or in-test emulator setup. Release APK, APK secret scan, and APK artifact remain unverified |
+| Whole-project CI (unit tests + lint + debug APK + emulator smoke + minified release APK + APK secret scan) | Run `37221933634` passed JVM tests/lint, API 34 sign-in smoke, and both APK assemblies. The KVM step passed; the final gateway-host assertion failed (likely `grep -q`/`pipefail` SIGPIPE). APK collection, upload, and release remain unverified |
 | Published APK | **yes — V3 only**: GitHub Release `apk-v3`; there is no V4 artifact yet |
 
 **Historical runs below are baseline evidence only.** V4 has its own CI run,
@@ -100,7 +99,7 @@ entry behind it:
 | 13 — Voice | **Not shipped in this build.** The gateway reports `voice: false`; the client shows voice as unavailable rather than offering a control that cannot work. The on-device recogniser path is the first item of the next increment (see DECISIONS.md § Voice). | deliberately not implemented |
 | 14 — Settings & diagnostics | Theme, accent, reduced motion, server address, sign-out (device and everywhere), capabilities report, redacted log export. | done |
 | 15 — Hardening | No secrets in the app or the build; release checklist; R8 rules; cleartext refused outside debug; link handling restricted to http(s) without embedded credentials. | done |
-| 16 — Tests | JVM unit tests for the pure logic (parser, reducer, redaction, error map, time, markdown, routes, attachment size/draft store where pure) + CI assembly, lint, and API 34 emulator startup. Historical CI run `37193950163` passed the then-current suite; V4 JVM tests/lint/debug assembly pass, but run `37220731961` failed before the emulator helper (`adb` exit 224). Earlier V4 runs failed the signed-out assertion or in-test emulator setup. This phase remains in progress. | in progress |
+| 16 — Tests | JVM unit tests for the pure logic (parser, reducer, redaction, error map, time, markdown, routes, attachment size/draft store where pure) + CI assembly, lint, and API 34 emulator startup. Run `37221933634` passed V4 JVM tests/lint and the signed-out smoke assertion; APK host verification and APK upload remain blocked by the scan-step false failure. This phase remains in progress. | in progress |
 | 17 — Report | This file plus `TESTING.md`. | done |
 
 ## What is deliberately absent

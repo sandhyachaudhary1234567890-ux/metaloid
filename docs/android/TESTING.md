@@ -2,31 +2,32 @@
 
 What is proven, how, and — just as important — what is not.
 
-## Current V4 status (last completed CI: 2026-10-04, run `37220731961`)
+## Current V4 status (last completed CI: 2026-10-04, run `37221933634`)
 
 V4 is **not ready to publish**. Run
-[37220731961](https://github.com/sandhyachaudhary1234567890-ux/metaloid/actions/runs/37220731961)
-passed JVM unit tests, lint, and debug APK assembly, but the emulator action
-failed before invoking the smoke-test helper. GitHub reported
-`/usr/local/lib/android/sdk/platform-tools/adb` exiting with code 224 after
-about 15 minutes; no emulator log or instrumented-test XML was produced. This
-is consistent with the Linux KVM permission/slow-software-emulation failure
-reported for the same emulator action in
-[upstream issue #655](https://github.com/EranBoudjnah/CleanArchitectureForAndroid/issues/655),
-but KVM failure has not yet been directly confirmed on this runner. The
-[emulator action documents a KVM udev-permissions step](https://github.com/ReactiveCircus/android-emulator-runner#running-hardware-accelerated-emulators-on-linux-runners);
-the next run adds that step and verifies `/dev/kvm` access before boot.
+[37221933634](https://github.com/sandhyachaudhary1234567890-ux/metaloid/actions/runs/37221933634)
+passed JVM tests, lint, debug APK assembly, the KVM access step, and the API 34
+cold-launch smoke test; the minified release APK also assembled. The APK scan
+reached its separate baked-gateway-host check, but reported that the debug APK
+lacked the configured host. The check piped `unzip | strings | grep -Fq` under
+`pipefail`; a local reproduction on a large stream showed grep's early match
+can SIGPIPE its producer and turn a real match into status 141. The next commit
+changes the assertion to grep an extracted strings file, avoiding that
+false-negative path. Since the step failed, APK collection/upload and the
+release job did not run; no downloadable V4 APK exists yet.
 
-In prior run
-[37219304680](https://github.com/sandhyachaudhary1234567890-ux/metaloid/actions/runs/37219304680),
-the emulator action did invoke Gradle, but `:app:connectedDebugAndroidTest`
-failed without JUnit XML or useful ADB/window/screenshot data. Its artifact and
-job log downloads ended with `EOF` here. Run
-[37217266554](https://github.com/sandhyachaudhary1234567890-ux/metaloid/actions/runs/37217266554)
-ran instrumentation but did not observe the sign-in screen; its hierarchy
-contained only an XML declaration. Earlier runs failed on working directory,
-emulator boot, or POSIX-shell setup. No release APK, APK secret scan, or
-successful downloadable V4 APK exists.
+The preceding run
+[37220731961](https://github.com/sandhyachaudhary1234567890-ux/metaloid/actions/runs/37220731961)
+failed before the smoke helper with `adb` exit 224 and no emulator log. This
+resembled the KVM-permission/slow-software-emulation failure described in
+[upstream issue #655](https://github.com/EranBoudjnah/CleanArchitectureForAndroid/issues/655).
+With the [emulator action's documented KVM udev rule](https://github.com/ReactiveCircus/android-emulator-runner#running-hardware-accelerated-emulators-on-linux-runners)
+in place, the CI step verified `/dev/kvm` was readable/writable and the smoke
+step passed on the next run.
+Earlier runs `37219304680` and `37217266554` had failed inside instrumentation;
+the latter did not observe the signed-out screen. Production backend
+compatibility, signing continuity, physical-device acceptance, and the APK
+security scan/upload remain release blockers.
 
 This environment has no Java/Gradle Android toolchain, so the Android build
 results are from GitHub Actions only. Fresh checks against this tree on
@@ -160,14 +161,12 @@ was a genuinely wrong test (a 2026 timestamp compared against a January 2026
 
 What is still not verified:
 
-* Android startup remains unverified. Run `37220731961` passed unit tests/lint/
-  debug assembly but the emulator action failed before invoking the smoke-test
-  helper (`adb` exit 224); the failure pattern is consistent with missing KVM
-  access, and the next run adds the action-recommended KVM udev rule. Run
-  `37219304680` failed in `:app:connectedDebugAndroidTest` without usable
-  diagnostics, while `37217266554` did not observe the signed-out screen. Even
-  a passing startup smoke test would not cover chat, provider setup,
-  keyboard/insets, TalkBack, or network recovery.
+* The signed-out cold-launch screen passed on the API 34 emulator in run
+  `37221933634` after the KVM-permissions step. That smoke test only verifies
+  startup/sign-in visibility; it does not cover chat, provider setup,
+  keyboard/insets, TalkBack, or network recovery. Earlier runs `37220731961`
+  and `37219304680` failed in emulator setup, and `37217266554` did not observe
+  the signed-out screen.
 * **The app has not been verified against the live gateway or on a physical
   device.** The emulator test did not establish that sign-in can proceed. Every
   behavior in `CONTRACT_MAP.md` is derived from server source/API documentation
