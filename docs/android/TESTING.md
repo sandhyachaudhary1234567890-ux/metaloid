@@ -21,7 +21,7 @@ outstanding.
 | Android lint (errors fail the build) | `gradle :app:lintDebug` | GitHub Actions |
 | Debug APK | `gradle :app:assembleDebug` | GitHub Actions |
 | Release APK (minified + shrunk) | `gradle :app:assembleRelease` | GitHub Actions |
-| Instrumented UI tests | `gradle :app:connectedDebugAndroidTest` | **not run in CI** (no device) — see §5 |
+| Emulator startup smoke test | `gradle :app:connectedDebugAndroidTest` | GitHub Actions, API 34 emulator |
 | APK secret scan | workflow step *Secret scan of the APKs* | GitHub Actions |
 
 CI is the compiler. There is no local Android SDK in the environment these
@@ -128,10 +128,10 @@ was a genuinely wrong test (a 2026 timestamp compared against a January 2026
 
 What is still not verified:
 
-* **No instrumented tests were executed.** They are not part of CI (no emulator
-  in the workflow) and no device was available while writing this. The
-  `androidTest` dependencies are in the build so that running them locally is a
-  one-command operation.
+* The Android workflow runs a cold-launch instrumented smoke test on an API 34
+  emulator. This exercises Activity creation, bootstrap, and the signed-out
+  screen; it is not a full device acceptance pass for chat, provider setup,
+  keyboard/insets, TalkBack, or network recovery.
 * **The app has never been run against a live gateway, and has never been run at
   all.** Every behaviour in `CONTRACT_MAP.md` is derived from the server source
   and the API document, then encoded in unit tests — but "derived and

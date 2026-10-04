@@ -87,6 +87,18 @@ jobs:
             :app:assembleDebug 2>&1 | tee "$RUNNER_TEMP/ci-build.log"
           gradle --no-daemon --stacktrace :app:lintDebug 2>&1 | tee -a "$RUNNER_TEMP/ci-build.log"
 
+      - name: Emulator startup smoke test
+        uses: reactivecircus/android-emulator-runner@v2
+        with:
+          api-level: 34
+          target: google_apis
+          arch: x86_64
+          profile: pixel_2
+          disable-animations: true
+          script: |
+            cd android
+            gradle --no-daemon --stacktrace :app:connectedDebugAndroidTest
+
       - name: Release APK (minified)
         env:
           METALOID_GATEWAY_URL: ${{ vars.METALOID_GATEWAY_URL || 'https://metaloid.vercel.app' }}
