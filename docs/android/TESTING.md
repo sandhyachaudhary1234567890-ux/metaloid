@@ -2,7 +2,7 @@
 
 What is proven, how, and — just as important — what is not.
 
-## Current V4 status (last completed CI: 2026-10-04, run `37213918933`)
+## Current V4 status (last completed CI: 2026-10-04, run `37216103307`)
 
 V4 is **not ready to publish**. In run
 [37211404025](https://github.com/sandhyachaudhary1234567890-ux/metaloid/actions/runs/37211404025),
@@ -11,16 +11,19 @@ did not observe "Sign in to continue" within 45 seconds. Runs
 [37213055749](https://github.com/sandhyachaudhary1234567890-ux/metaloid/actions/runs/37213055749)
 and
 [37213710373](https://github.com/sandhyachaudhary1234567890-ux/metaloid/actions/runs/37213710373)
-passed those build steps but launched the smoke-test Gradle command from the
-repository root, before any instrumentation ran. Run
+passed those build steps but launched Gradle from the repository root, before
+instrumentation ran. Run
 [37213918933](https://github.com/sandhyachaudhary1234567890-ux/metaloid/actions/runs/37213918933)
-again passed unit tests/lint/debug assembly, but the emulator action timed out
-waiting for API 34 to boot; its script and instrumentation never started. The
-next workflow revision uses the action's `working-directory: android` input,
-raises the emulator boot allowance to 900 seconds, and retains UI hierarchy and
-app-log capture for an actual instrumentation failure. The app-side cause from
-37211404025 remains unknown. Release APK build, APK secret scan, and APK upload
-have not completed. No V4 release or successful downloadable V4 artifact exists.
+then timed out waiting for the emulator to boot. Run
+[37216103307](https://github.com/sandhyachaudhary1234567890-ux/metaloid/actions/runs/37216103307)
+passed unit tests/lint/debug assembly but failed before Gradle: the emulator
+action runs each script line via `/usr/bin/sh`, where the Bash-only
+`set -o pipefail` exited with code 2. The next workflow keeps the action's
+`working-directory: android`, allows 900 seconds for boot, and runs the Bash
+diagnostics from one helper script invoked as a single `bash` command. The
+app-side cause from 37211404025 remains unknown. Release APK build, APK secret
+scan, and APK upload have not completed. No V4 release or successful
+downloadable V4 artifact exists.
 
 This environment has no Java/Gradle Android toolchain, so the Android build
 results are from GitHub Actions only. Fresh checks against this tree on
@@ -155,11 +158,12 @@ was a genuinely wrong test (a 2026 timestamp compared against a January 2026
 What is still not verified:
 
 * The only app-side cold-launch test so far, run `37211404025`, did **not**
-  reach the signed-out screen. The latest run (`37213918933`) timed out while
-  booting the emulator, before the test or its UI/logcat diagnostics could run.
-  Activity bootstrap and signed-out behavior therefore remain unverified. Even
-  a passing startup smoke test would not cover chat, provider setup,
-  keyboard/insets, TalkBack, or network recovery.
+  reach the signed-out screen. More recent runs failed before instrumentation:
+  `37213918933` timed out while booting the emulator, and `37216103307` stopped
+  on Bash syntax passed to `/usr/bin/sh`. No new UI/logcat test diagnostics
+  were produced. Activity bootstrap and signed-out behavior therefore remain
+  unverified. Even a passing startup smoke test would not cover chat, provider
+  setup, keyboard/insets, TalkBack, or network recovery.
 * **The app has not been verified against the live gateway or on a physical
   device.** The emulator test did not establish that sign-in can proceed. Every
   behavior in `CONTRACT_MAP.md` is derived from server source/API documentation

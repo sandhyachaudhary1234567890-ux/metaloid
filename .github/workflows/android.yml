@@ -98,31 +98,9 @@ jobs:
           working-directory: android
           disable-animations: true
           emulator-options: -no-window -gpu swiftshader_indirect -noaudio -no-boot-anim -no-snapshot-save
-          script: |
-            set -o pipefail
-            set +e
-            echo "Emulator Gradle working directory: $PWD"
-            gradle --no-daemon --stacktrace :app:connectedDebugAndroidTest 2>&1 | tee "$RUNNER_TEMP/ci-emulator.log"
-            result=$?
-            if [ "$result" -ne 0 ]; then
-              {
-                echo
-                echo '--- recent app/emulator logcat ---'
-                app_pid=$(adb shell pidof -s com.metaloid.app.debug 2>/dev/null | tr -d '\r' || true)
-                if [ -n "$app_pid" ]; then
-                  adb logcat -d -v time --pid="$app_pid" 2>/dev/null | tail -160 || true
-                else
-                  adb logcat -d -v time -t 1200 2>/dev/null \
-                    | grep -E 'AndroidRuntime|FATAL EXCEPTION|System.err|com\.metaloid|metaloid|MetaIoid' \
-                    | tail -120 || true
-                fi
-                echo
-                echo '--- visible emulator window hierarchy ---'
-                adb shell uiautomator dump /sdcard/metaloid-window.xml >/dev/null 2>&1 || true
-                adb shell cat /sdcard/metaloid-window.xml 2>/dev/null || true
-              } | tee -a "$RUNNER_TEMP/ci-emulator.log"
-            fi
-            exit "$result"
+          # The action runs each script input line through /usr/bin/sh; keep Bash
+          # logic in one helper and invoke that file in one POSIX-compatible line.
+          script: bash tools/emulator-smoke.sh
 
       - name: Release APK (minified)
         env:
