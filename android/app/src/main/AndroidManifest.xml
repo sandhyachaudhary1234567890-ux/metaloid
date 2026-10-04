@@ -9,39 +9,25 @@
 
     INTERNET              the app is a client of a remote gateway
     ACCESS_NETWORK_STATE  honest offline/degraded reporting (Section 9)
-    RECORD_AUDIO          voice input only — requested at the moment of use,
-                          never at launch; the recogniser runs on-device
 
   There is no storage permission: files are chosen through the system picker,
   which grants per-URI access. There is no POST_NOTIFICATIONS: V1 does not
   raise notifications, because the backend has no push channel to drive them.
+  There is deliberately **no RECORD_AUDIO**: V1 has no voice feature, and a
+  permission for a feature that does not exist is a lie in the install dialog.
+
+  Component names are fully qualified rather than relative: the R class is
+  generated in the namespace `com.metaloid.app`, while these classes live in
+  `com.metaloid`, so a leading-dot name would resolve to a class that does not
+  exist (lint's MissingClass check caught exactly that).
 -->
 <manifest xmlns:android="http://schemas.android.com/apk/res/android">
 
     <uses-permission android:name="android.permission.INTERNET" />
     <uses-permission android:name="android.permission.ACCESS_NETWORK_STATE" />
-    <uses-permission android:name="android.permission.RECORD_AUDIO" />
-
-    <uses-feature
-        android:name="android.hardware.microphone"
-        android:required="false" />
-
-    <!--
-      Android 11+ package visibility: the microphone button asks these two
-      services whether they exist before offering voice, so the app can say
-      "Voice isn't available on this device" instead of failing silently.
-    -->
-    <queries>
-        <intent>
-            <action android:name="android.speech.RecognitionService" />
-        </intent>
-        <intent>
-            <action android:name="android.intent.action.TTS_SERVICE" />
-        </intent>
-    </queries>
 
     <application
-        android:name=".MetaIoidApplication"
+        android:name="com.metaloid.MetaIoidApplication"
         android:allowBackup="false"
         android:dataExtractionRules="@xml/data_extraction_rules"
         android:enableOnBackInvokedCallback="true"
@@ -59,7 +45,7 @@
           call, no parsing, no policy decision lives here (rule R10).
         -->
         <activity
-            android:name=".MainActivity"
+            android:name="com.metaloid.MainActivity"
             android:configChanges="orientation|screenSize|screenLayout|keyboardHidden|uiMode"
             android:exported="true"
             android:launchMode="singleTop"
@@ -77,7 +63,7 @@
           by which an arbitrary external URI reaches the uploader.
         -->
         <activity
-            android:name=".feature.share.ShareReceiverActivity"
+            android:name="com.metaloid.feature.share.ShareReceiverActivity"
             android:excludeFromRecents="true"
             android:exported="true"
             android:noHistory="true"

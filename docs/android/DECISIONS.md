@@ -140,6 +140,12 @@ recogniser path (no audio leaves the phone) is designed in
 it would require a microphone permission flow, a partial-result composer and a
 test pass on real hardware that this build has not had.
 
+Consequently the manifest declares **no** `RECORD_AUDIO` permission and no
+speech-service `<queries>`: an install dialog that asks for the microphone in an
+app with no voice feature is a false statement about what the app does. The
+`AppError.VoiceUnavailable` type and the voice preference keys exist for the next
+increment; nothing in this build reads them.
+
 ## D16 — The design tokens are transcribed, not re-invented
 
 `Tokens.kt` is a direct transcription of `src/design/tokens.ts`,
