@@ -27,7 +27,7 @@ import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.ArrowDropDown
 import androidx.compose.material.icons.filled.CheckCircle
-import androidx.compose.material.icons.filled.DeleteOutline
+import androidx.compose.material.icons.filled.Delete
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.DropdownMenu
 import androidx.compose.material3.DropdownMenuItem
@@ -504,7 +504,7 @@ private fun CredentialRow(
                         .semantics { contentDescription = "Test ${provider?.name ?: providerId} key" },
                 )
                 Icon(
-                    Icons.Filled.DeleteOutline,
+                    Icons.Filled.Delete,
                     contentDescription = "Remove ${provider?.name ?: providerId} key",
                     tint = colors.danger,
                     modifier = Modifier

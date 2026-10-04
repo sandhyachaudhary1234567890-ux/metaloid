@@ -307,7 +307,7 @@ class ChatTurnRunner(
         } else {
             return PersistenceResult()
         }
-        val errorFromUpdate = finalise(messageId, text, status, error, latencyMs)
+        val errorFromUpdate = finalise(messageId, text, status, error, latencyMs, model, provider)
         return PersistenceResult(messageId = messageId, error = errorFromUpdate)
     }
 
@@ -381,7 +381,9 @@ class ChatTurnRunner(
         text: String,
         status: String,
         error: AppError?,
-        latencyMs: Long? = null,
+        latencyMs: Long?,
+        model: String?,
+        provider: String?,
     ): AppError? = try {
         when (
             val result = api.updateMessage(

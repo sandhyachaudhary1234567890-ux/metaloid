@@ -406,7 +406,7 @@ class ChatViewModel(private val container: AppContainer) : ViewModel() {
             when (val result = container.api.setProviderRoute(providerId, modelId)) {
                 is ApiResult.Ok -> {
                     val saved = result.value.settings
-                    if (saved?.defaultProvider != providerId || saved.defaultModel != modelId) {
+                    if (saved == null || saved.defaultProvider != providerId || saved.defaultModel != modelId) {
                         _state.value = _state.value.copy(
                             modelSaving = false,
                             modelPickerError = AppError.InvalidInput("The server did not confirm the saved model route."),

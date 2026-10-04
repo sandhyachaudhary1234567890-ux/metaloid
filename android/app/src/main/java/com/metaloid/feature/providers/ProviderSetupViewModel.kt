@@ -487,7 +487,7 @@ class ProviderSetupViewModel(private val container: AppContainer) : ViewModel() 
                 }
                 is ApiResult.Ok -> {
                     val persisted = update.value.settings
-                    if (persisted?.defaultProvider != providerId || persisted.defaultModel != modelId) {
+                    if (persisted == null || persisted.defaultProvider != providerId || persisted.defaultModel != modelId) {
                         mutableState.value = mutableState.value.copy(
                             finishing = false,
                             status = ProviderSetupStatus.ProviderUnavailable,
