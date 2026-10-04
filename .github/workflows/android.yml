@@ -231,6 +231,7 @@ jobs:
             android/app/build/reports/lint-results-*.html
             android/app/build/outputs/androidTest-results/**
             ${{ runner.temp }}/ci-emulator.log
+            ${{ runner.temp }}/ci-emulator-failure.png
           if-no-files-found: ignore
           retention-days: 14
 

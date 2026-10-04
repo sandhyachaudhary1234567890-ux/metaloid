@@ -59,17 +59,18 @@ until the deployment is updated and those routes are verified. No deployment
 was attempted here.
 
 Android CI runs `37211404025`, `37213055749`, `37213710373`, `37213918933`,
-and `37216103307` all passed JVM unit tests, lint, and debug APK assembly. Run
-`37211404025` did not reach the signed-out screen. Runs `37213055749` and
-`37213710373` failed before instrumentation because Gradle ran from the
-repository root; `37213918933` timed out waiting for emulator boot; and
-`37216103307` failed before Gradle because the action executed Bash-only
-`set -o pipefail` via `/usr/bin/sh`. The next workflow invokes a Bash helper as
-one command, uses the action's explicit `working-directory: android`, and allows
-900 seconds for emulator boot. UI hierarchy and app-log capture remain in the
-helper for instrumentation failures. The app-side cause from `37211404025`
-remains unknown. The release APK build and secret scan have not passed. V4 has
-not been installed on a physical device; V3/V4 signing continuity and
-performance/accessibility audits are also outstanding. Do not use
-`METAIOID V4 — MARKET READY` or publish an APK release until the CI, deployed
-backend, signing, and device release gates are actually satisfied.
+`37216103307`, and `37217266554` all passed JVM unit tests, lint, and debug APK
+assembly. Runs `37211404025` and `37217266554` did not reach the signed-out
+screen; the latter's hierarchy dump contained only an XML declaration. Runs
+`37213055749` and `37213710373` failed before instrumentation because Gradle
+ran from the repository root; `37213918933` timed out waiting for emulator
+boot; and `37216103307` failed before Gradle because the action executed
+Bash-only `set -o pipefail` via `/usr/bin/sh`. The next workflow records the
+foreground package/window and uploads a failure screenshot, using the action's
+explicit `working-directory: android`, one-line Bash helper invocation, and
+900-second boot allowance. The app-side cause remains unknown. The release APK
+build and secret scan have not passed. V4 has not been installed on a physical
+device; V3/V4 signing continuity and performance/accessibility audits are also
+outstanding. Do not use `METAIOID V4 — MARKET READY` or publish an APK release
+until the CI, deployed backend, signing, and device release gates are actually
+satisfied.

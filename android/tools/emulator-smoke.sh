@@ -15,6 +15,21 @@ set -e
 if [ "$result" -ne 0 ]; then
   {
     echo
+    echo '--- foreground activity/window ---'
+    adb shell dumpsys activity activities 2>/dev/null \
+      | grep -E 'mResumedActivity|topResumedActivity' | tail -6 || true
+    adb shell dumpsys window 2>/dev/null \
+      | grep -E 'mCurrentFocus|mFocusedApp|mFocusedWindow' | tail -6 || true
+    screenshot_file="${RUNNER_TEMP:-/tmp}/ci-emulator-failure.png"
+    adb pull /sdcard/Android/data/com.metaloid.app.debug.test/files/metaloid-smoke-failure.png \
+      "$screenshot_file" >/dev/null 2>&1 || true
+    if [ -s "$screenshot_file" ]; then
+      echo "Failure screenshot captured ($screenshot_file, $(du -h "$screenshot_file" | cut -f1))."
+    else
+      rm -f "$screenshot_file"
+      echo 'Failure screenshot was not available.'
+    fi
+    echo
     echo '--- recent app/emulator logcat ---'
     app_pid=$(adb shell pidof -s com.metaloid.app.debug 2>/dev/null | tr -d '\r' || true)
     if [ -n "$app_pid" ]; then
