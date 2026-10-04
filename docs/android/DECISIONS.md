@@ -262,3 +262,16 @@ it (`AuthModePreferenceTest`). Two properties matter:
    else — a form that cannot work there;
 2. a late-arriving list never moves a user who has already tapped a tab
    (`userChoseMode`).
+
+## D25 — The system back button walks the app's own stack
+
+`MetaIoidApp` registers a `BackHandler` that is enabled whenever the route stack
+is deeper than its root and calls `AppViewModel.back()`. Disabled at the root, so
+the platform still gets to do what it does there (and, because the manifest opts
+into `enableOnBackInvokedCallback`, predictive back keeps working instead of being
+swallowed by an always-enabled handler).
+
+The handler is one line, and without it the hardware/gesture back button closes
+the app from *every* screen — a mission detail, a chat, a settings page. The back
+arrow in the top bar and the system gesture now run the same code, which is the
+only way "back" can mean one thing.

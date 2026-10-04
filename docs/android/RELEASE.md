@@ -71,6 +71,17 @@ offers email sign-in against a Supabase-backed gateway (see DECISIONS.md D24).
 * `local.properties` and any `*.jks` / `*.keystore` are gitignored; a keystore is
   never committed.
 
+## 4b. R8 rules that must name real classes
+
+`proguard-rules.pro` keeps the manifest's entry points explicitly. They live in
+`com.metaloid` (`MetaIoidApplication`, `MainActivity`,
+`feature.share.ShareReceiverActivity`), **not** in the namespace
+`com.metaloid.app` that the `R` class and `BuildConfig` come from — a rule that
+names the wrong package protects nothing, and the symptom would be a release APK
+that starts and immediately dies with `ClassNotFoundException` while the debug
+build works. AGP also feeds the manifest to R8; the explicit rules are there so
+the file does not depend on that.
+
 ## 5. Release checklist (re-read before tagging)
 
 1. Is `main` (or the branch you are releasing) green on the `android` workflow —

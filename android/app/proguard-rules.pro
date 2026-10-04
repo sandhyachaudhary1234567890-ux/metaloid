@@ -40,8 +40,14 @@
 -dontwarn kotlinx.coroutines.debug.**
 
 # ── App entry points referenced from the manifest ─────────────────────────────
--keep class com.metaloid.app.MetaIoidApplication { *; }
--keep class com.metaloid.app.MainActivity { *; }
+# The manifest names these classes by their *fully qualified* names (they live in
+# com.metaloid, not in the namespace com.metaloid.app — see AndroidManifest.xml),
+# and the platform instantiates them reflectively. AGP also feeds the manifest to
+# R8, but a rule that names the wrong package is a rule that protects nothing, so
+# these are written out explicitly and correctly.
+-keep class com.metaloid.MetaIoidApplication { *; }
+-keep class com.metaloid.MainActivity { *; }
+-keep class com.metaloid.feature.share.ShareReceiverActivity { *; }
 
 # Keep the file name and line numbers: the app's own crash log needs a readable
 # trace, and this is a client that never ships a source-mapping service.

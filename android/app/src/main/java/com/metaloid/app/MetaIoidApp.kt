@@ -1,5 +1,6 @@
 package com.metaloid.app
 
+import androidx.activity.compose.BackHandler
 import androidx.compose.animation.AnimatedContent
 import androidx.compose.animation.core.tween
 import androidx.compose.animation.fadeIn
@@ -132,6 +133,17 @@ private fun SignedInShell(container: AppContainer, appViewModel: AppViewModel, r
     val current = routes.lastOrNull() ?: Route.Conversations
     val showBar = current is Route.Conversations || current is Route.Memory ||
         current is Route.Missions || current is Route.Research
+
+    // The system back gesture and the on-screen back arrow must do the same
+    // thing, and they must walk *this* app's stack rather than the Activity's.
+    // Without this handler the back button closes the app from every screen —
+    // the single most likely thing to make someone put the phone down.
+    //
+    // Disabled at the root on purpose: at the root there is nothing to pop, and
+    // leaving it disabled is what lets the platform do its own thing (and, since
+    // the manifest opts into `enableOnBackInvokedCallback`, keeps predictive back
+    // working rather than swallowed).
+    BackHandler(enabled = routes.size > 1) { appViewModel.back() }
 
     Column(Modifier.fillMaxSize()) {
         Box(Modifier.weight(1f)) {
