@@ -21,7 +21,7 @@
 -- exact text to a real PostgreSQL engine and fails if it does not apply
 -- cleanly, so a broken bundle cannot reach a project.
 --
--- Contents (10 migrations, in order):
+-- Contents (11 migrations, in order):
 --    1. 0001_core_schema.sql
 --    2. 0002_rls_and_grants.sql
 --    3. 0003_storage.sql
@@ -32,6 +32,7 @@
 --    8. 005_pairing_codes.sql
 --    9. 006_artifact_deleted.sql
 --   10. 007_gateway_columns.sql
+--   11. 008_signup_trigger_never_fails.sql
 -- ═══════════════════════════════════════════════════════════════════════
 
 
@@ -1016,4 +1017,44 @@ alter table public.memories add column if not exists last_used_at timestamptz;
 -- credentials: test-write columns (rotation/audit columns already exist).
 alter table public.user_provider_credentials add column if not exists last_tested_at timestamptz;
 alter table public.user_provider_credentials add column if not exists last_test_status text;
+
+
+-- ──────────────────────────────────────────────────────────────────────────
+-- ── 008_signup_trigger_never_fails.sql
+-- ──────────────────────────────────────────────────────────────────────────
+
+-- 008: signup trigger that can never fail a signup.
+--
+-- Supabase Auth reports any failure inside on_auth_user_created as the opaque
+-- "Database error saving new user", with the real cause hidden. A profile row
+-- is bookkeeping: if its insert errors for any reason (a half-applied schema,
+-- a future column change), the user row must still commit. The application
+-- backfills a missing profile on first read (see server/src/data/pg.js
+-- profiles.get and core/supadb.js profileUpsert), so swallowing here loses
+-- nothing and can never lock a user out of signing up.
+--
+-- Re-runnable: create or replace + drop-if-exists. Touches only public
+-- objects owned through the normal editor role — no storage tables involved.
+-- STATUS: pending apply.
+
+create or replace function public.handle_new_user()
+returns trigger
+language plpgsql
+security definer
+set search_path = public
+as $$
+begin
+  insert into public.profiles (id, display_name)
+  values (new.id, coalesce(new.raw_user_meta_data->>'display_name', split_part(new.email, '@', 1)))
+  on conflict (id) do nothing;
+  return new;
+exception when others then
+  -- Never veto identity creation over profile bookkeeping.
+  return new;
+end;
+$$;
+
+drop trigger if exists on_auth_user_created on auth.users;
+create trigger on_auth_user_created after insert on auth.users
+  for each row execute function public.handle_new_user();
 
