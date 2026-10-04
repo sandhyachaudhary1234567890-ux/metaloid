@@ -49,7 +49,8 @@ class TimeFormatTest {
 
     @Test
     fun `a previous year is a full date`() {
-        assertEquals("12 Mar 2025", TimeFormat.relative(base, at("2026-01-05T00:00:00Z"), utc))
+        // Read from 2026, a March 2025 timestamp needs the year spelled out.
+        assertEquals("12 Mar 2025", TimeFormat.relative("2025-03-12T09:30:00Z", at("2026-01-05T00:00:00Z"), utc))
     }
 
     @Test

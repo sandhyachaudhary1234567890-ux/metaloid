@@ -54,9 +54,36 @@ npm --prefix server test
 npm run build
 ```
 
-Recorded results for this commit: `TODO_AT_PUSH` — see the commit message and
-the CI run for the exact output. If any of these fail, the Android change is not
-finished.
+### Recorded results
+
+Run in this repository on 2026-10-04, against the commit that carries this
+document (`246c8dd`), with Node 22.22.3 / npm 10.9.8:
+
+| Command | Result |
+|---|---|
+| `npm install` | `added 430 packages in 10s` |
+| `npm run check` (`tsc --noEmit`) | clean — no diagnostics |
+| `npm run test:unit` (`vitest run`) | **56 passed, 1 failed** across 5 files — see below |
+| `npm --prefix server test` (`node --test`) | `# tests 78 / # pass 78 / # fail 0 / # duration_ms 36329` |
+| `npm run build` (`tsc -b && vite build && node scripts/build-landing.mjs`) | built in 7.57 s, then `[landing] copied landing/ → dist/ (site at /, app at /app/)` |
+
+The one failure is **pre-existing and unrelated to the Android client**:
+
+```
+FAIL  src/App.test.tsx > chat loop > sends a message and renders the streamed reply
+TestingLibraryElementError: Unable to find an element with the text: Chat.
+  at src/App.test.tsx:110:32
+```
+
+`git diff --stat master...HEAD -- src package.json server` is empty for this
+branch: no file under `src/` (or any web/server file) is touched by the Android
+work, so that test fails identically on `master` with this toolchain. It is not
+weakened, skipped or deleted here — weakening it to make a green light would be
+the opposite of what this document is for.
+
+The server suite (78/78) is the one that actually matters for this project's
+rule that **no server change is required**: it passes unchanged because no server
+file is modified by this branch.
 
 ## 5. What is *not* verified
 

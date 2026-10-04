@@ -112,8 +112,10 @@ jobs:
             echo
             echo '```'
             # Compiler messages first: they are the only actionable part.
-            if grep -qE '^(e: |FAILURE: |error: )' "$RUNNER_TEMP/ci-build.log"; then
-              grep -E '^(e: |FAILURE: |error: |Execution failed|What went wrong|> Task .* FAILED|Caused by: )' "$RUNNER_TEMP/ci-build.log" | head -250
+            if grep -qE '^(e: |FAILURE: |error: |Error: )' "$RUNNER_TEMP/ci-build.log"; then
+              grep -E '^(e: |FAILURE: |error: |Error: |Execution failed|What went wrong|> Task .* FAILED|Caused by: )' "$RUNNER_TEMP/ci-build.log" | head -200
+              # Lint reports start with the file, not the word Error.
+              grep -E '\.(kt|kts|java|xml):[0-9]+: (Error|Warning): ' "$RUNNER_TEMP/ci-build.log" | head -80 || true
             else
               grep -E 'FAILURE|Execution failed|What went wrong|> Task .* FAILED|Caused by: ' "$RUNNER_TEMP/ci-build.log" | head -40
               echo
