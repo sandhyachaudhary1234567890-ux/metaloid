@@ -626,11 +626,23 @@ app.post('/api/chat', requireAuth, rateLimit(60, 60000), async (req, res) => {
 
   // Budget is checked after headers are sent, so a rejection must be an SSE
   // error event (HTTP status is already 200) — not a JSON status.
-  const budget = await checkBudget(userId, 'chat').catch((e) => ({ ok: false, error: String((e && e.message) || e) }));
+  // A budget-store outage must never brick chat: fail open with a log line
+  // (usage simply goes uncounted) rather than fail closed on a metrics error.
+  let budget = { ok: true };
+  try {
+    budget = await checkBudget(userId, 'chat');
+  } catch (e) {
+    console.error('[gateway] budget check unavailable, allowing chat:', String((e && e.message) || e).slice(0, 160));
+  }
   if (!budget.ok) {
     failAndEnd({ error: budget.error || 'Budget exceeded. Try again later.', code: 'rate_limited' });
     return;
   }
+  // Usage telemetry must never break a reply: a failed write is logged and
+  // the stream continues.
+  const countUsage = () => recordUsage(userId, 'chat').catch((e) => {
+    console.error('[gateway] usage record failed:', String((e && e.message) || e).slice(0, 160));
+  });
 
   const messages = [
     ...history.filter((m) => m && (m.role === 'user' || m.role === 'assistant') && typeof m.content === 'string')
@@ -674,7 +686,7 @@ app.post('/api/chat', requireAuth, rateLimit(60, 60000), async (req, res) => {
     usedModel = out.model;
     usedProvider = out.providerId;
     trackModel({ provider: out.providerId, model: out.model, tier, ms: Date.now() - t0, ok: true });
-    await recordUsage(userId, 'chat');
+    await countUsage();
     send({ done: true });
     clearTimeout(timer);
     stopHeartbeat();
@@ -742,7 +754,7 @@ app.post('/api/chat', requireAuth, rateLimit(60, 60000), async (req, res) => {
     }
     if (!streamed) throw lastErr || new Error('openrouter failed');
     trackModel({ provider: usedProvider || PROVIDER_LABEL, model: usedModel, tier, ms: Date.now() - t0, ok: true });
-    await recordUsage(userId, 'chat');
+    await countUsage();
     send({ done: true });
   } catch (e) {
     // NVIDIA fallback only when entitled (see NV_ON)

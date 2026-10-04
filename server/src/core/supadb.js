@@ -72,8 +72,11 @@ const PROFILE_KEYMAP = {
 
 function rowToProfile(row) {
   if (!row) return null;
+  // profiles.id IS the user id (uuid PK referencing auth.users) — there is
+  // no user_id column on this table. Naming user_id here was 42703 on every
+  // profile read/write in Supabase mode.
   return {
-    userId: row.user_id,
+    userId: row.id,
     displayName: row.display_name || '', language: row.language || 'auto',
     timezone: row.timezone || '', tone: row.tone || 'neutral',
     verbosity: row.verbosity || 'balanced', voice: row.voice || 'Natural English',
@@ -90,17 +93,17 @@ function rowToProfile(row) {
 }
 
 export async function profileDelete(userId) {
-  await q('delete from profiles where user_id = $1', [userId], 'profileDelete');
+  await q('delete from profiles where id = $1', [userId], 'profileDelete');
   return true;
 }
 
 export async function profileGet(userId) {
-  const r = await q('select * from profiles where user_id = $1', [userId], 'profileGet');
+  const r = await q('select * from profiles where id = $1', [userId], 'profileGet');
   return rowToProfile(r.rows[0]);
 }
 
 export async function profileUpsert(userId, patch) {
-  await q('insert into profiles (user_id) values ($1) on conflict (user_id) do nothing', [userId], 'profileEnsure');
+  await q('insert into profiles (id) values ($1) on conflict (id) do nothing', [userId], 'profileEnsure');
   const sets = [];
   const updVals = [userId];
   let n = 2;
@@ -114,7 +117,7 @@ export async function profileUpsert(userId, patch) {
     sets.push(`onboarded_at = $${n++}`);
     updVals.push(patch.onboardedAt);
   }
-  const r = await q(`update profiles set ${sets.join(', ')} where user_id = $1 returning *`, updVals, 'profileUpsert');
+  const r = await q(`update profiles set ${sets.join(', ')} where id = $1 returning *`, updVals, 'profileUpsert');
   if (!r.rows.length) return profileGet(userId);
   return rowToProfile(r.rows[0]);
 }
@@ -134,9 +137,17 @@ export function decField(s) {
   }
 }
 
+// user_provider_credentials columns are (user_id, provider, label,
+// secret_ciphertext, masked_hint, key_version, status, last_checked_at,
+// last_rotated_at, rotation_count, metadata, last_tested_at,
+// last_test_status). The old names (provider_id, encrypted_secret,
+// is_active) were 42703 here, so saving or listing a provider key failed in
+// Supabase mode. Status mapping: this layer's isActive means "not revoked as
+// invalid"; a freshly stored key is 'unverified' until proven (same rule as
+// the v1 contract path in data/pg.js).
 function credRowToPublic(r) {
   return {
-    id: r.id, providerId: r.provider_id, isActive: r.is_active,
+    id: r.id, providerId: r.provider, isActive: r.status !== 'invalid',
     createdAt: r.created_at, lastRotatedAt: r.last_rotated_at,
     rotationCount: r.rotation_count,
   };
@@ -145,11 +156,11 @@ function credRowToPublic(r) {
 export async function credStore(userId, providerId, encryptedObj, metadata = {}, redacted = '****') {
   const now = new Date().toISOString();
   void metadata;
-  const existing = await q('select id, rotation_count from user_provider_credentials where user_id=$1 and provider_id=$2', [userId, providerId], 'credStoreRead');
+  const existing = await q(`select id, rotation_count from user_provider_credentials where user_id=$1 and provider=$2 and label='default'`, [userId, providerId], 'credStoreRead');
   if (existing.rows.length) {
     const prev = existing.rows[0].rotation_count || 0;
     const r = await q(
-      'update user_provider_credentials set encrypted_secret=$1, is_active=true, last_rotated_at=null, rotation_count=0, updated_at=now() where user_id=$2 and provider_id=$3 returning *',
+      `update user_provider_credentials set secret_ciphertext=$1, status='unverified', last_rotated_at=null, rotation_count=0, updated_at=now() where user_id=$2 and provider=$3 and label='default' returning *`,
       [encField(encryptedObj), userId, providerId], 'credStoreUpdate'
     );
     await credAudit(userId, providerId, 'CREDENTIAL_ROTATED', { previousRotationCount: prev, newRotationCount: 0, id: r.rows[0].id });
@@ -157,8 +168,8 @@ export async function credStore(userId, providerId, encryptedObj, metadata = {},
     return { ...pub, redacted, createdAt: pub.createdAt || now };
   }
   const r = await q(
-    `insert into user_provider_credentials (user_id, provider_id, encrypted_secret, is_active, last_rotated_at, rotation_count)
-     values ($1,$2,$3,true,null,0) returning *`,
+    `insert into user_provider_credentials (user_id, provider, label, secret_ciphertext, status)
+     values ($1,$2,'default',$3,'unverified') returning *`,
     [userId, providerId, encField(encryptedObj)], 'credStore'
   );
   await credAudit(userId, providerId, 'CREDENTIAL_STORED', { id: r.rows[0].id });
@@ -167,23 +178,23 @@ export async function credStore(userId, providerId, encryptedObj, metadata = {},
 }
 
 export async function credGet(userId, providerId) {
-  const r = await q('select * from user_provider_credentials where user_id=$1 and provider_id=$2 and is_active=true', [userId, providerId], 'credGet');
+  const r = await q(`select * from user_provider_credentials where user_id=$1 and provider=$2 and label='default' and status <> 'invalid'`, [userId, providerId], 'credGet');
   const row = r.rows[0];
   if (!row) return null;
   return {
-    id: row.id, providerId: row.provider_id, credential: row.encrypted_secret,
-    metadata: {}, isActive: row.is_active,
+    id: row.id, providerId: row.provider, credential: row.secret_ciphertext,
+    metadata: {}, isActive: row.status !== 'invalid',
     lastRotatedAt: row.last_rotated_at, rotationCount: row.rotation_count,
   };
 }
 
 export async function credList(userId) {
-  const r = await q('select * from user_provider_credentials where user_id=$1 and is_active=true order by created_at', [userId], 'credList');
+  const r = await q(`select * from user_provider_credentials where user_id=$1 and status <> 'invalid' order by created_at`, [userId], 'credList');
   return r.rows.map(credRowToPublic);
 }
 
 export async function credDelete(userId, providerId) {
-  const r = await q('delete from user_provider_credentials where user_id=$1 and provider_id=$2 returning id', [userId, providerId], 'credDelete');
+  const r = await q('delete from user_provider_credentials where user_id=$1 and provider=$2 returning id', [userId, providerId], 'credDelete');
   if (!r.rows.length) return { ok: false, error: 'Credential not found' };
   await credAudit(userId, providerId, 'CREDENTIAL_DELETED', {});
   return { ok: true };
@@ -193,21 +204,21 @@ export async function credRotateById(userId, credId, encryptedObj, redacted = '*
   const cur = await q('select * from user_provider_credentials where id=$1 and user_id=$2', [credId, userId], 'credRotateRead');
   if (!cur.rows.length) return { ok: false, error: 'Credential not found' };
   const prev = cur.rows[0].rotation_count || 0;
-  await q('update user_provider_credentials set encrypted_secret=$1, last_rotated_at=now(), rotation_count=$2, updated_at=now() where id=$3', [encField(encryptedObj), prev + 1, credId], 'credRotateWrite');
-  await credAudit(userId, cur.rows[0].provider_id, 'CREDENTIAL_ROTATED', { previousRotationCount: prev, newRotationCount: prev + 1 });
+  await q('update user_provider_credentials set secret_ciphertext=$1, last_rotated_at=now(), rotation_count=$2, updated_at=now() where id=$3', [encField(encryptedObj), prev + 1, credId], 'credRotateWrite');
+  await credAudit(userId, cur.rows[0].provider, 'CREDENTIAL_ROTATED', { previousRotationCount: prev, newRotationCount: prev + 1 });
   return { ok: true, rotationCount: prev + 1, redacted };
 }
 
 export async function credTestStatus(userId, providerId, status, metadata = {}) {
-  const r = await q('select id from user_provider_credentials where user_id=$1 and provider_id=$2', [userId, providerId], 'credTestRead');
+  const r = await q(`select id from user_provider_credentials where user_id=$1 and provider=$2 and label='default'`, [userId, providerId], 'credTestRead');
   if (!r.rows.length) return { ok: false, error: 'Credential not found' };
-  await q('update user_provider_credentials set last_tested_at=now(), last_test_status=$1, metadata=coalesce(metadata,\'{}\'::jsonb) || $2, updated_at=now() where user_id=$3 and provider_id=$4', [status, JSON.stringify({ testMetadata: metadata }), userId, providerId], 'credTestWrite');
+  await q(`update user_provider_credentials set last_tested_at=now(), last_test_status=$1, metadata=coalesce(metadata,'{}'::jsonb) || $2, updated_at=now() where user_id=$3 and provider=$4 and label='default'`, [status, JSON.stringify({ testMetadata: metadata }), userId, providerId], 'credTestWrite');
   await credAudit(userId, providerId, 'CREDENTIAL_TESTED', { status });
   return { ok: true, status };
 }
 
 export async function credTestGet(userId, providerId) {
-  const r = await q('select provider_id, last_tested_at, last_test_status, metadata from user_provider_credentials where user_id=$1 and provider_id=$2', [userId, providerId], 'credTestGet');
+  const r = await q(`select provider, last_tested_at, last_test_status, metadata from user_provider_credentials where user_id=$1 and provider=$2 and label='default'`, [userId, providerId], 'credTestGet');
   if (!r.rows.length) return null;
   const row = r.rows[0];
   return {
@@ -237,17 +248,22 @@ export async function credDeleteAll(userId) {
 
 // ---------- usage + plans ----------
 
+// usage_events columns are (user_id, provider, model, request_id, task,
+// tokens_in, tokens_out, latency_ms, status): the meter kind maps to `task`,
+// token counts to tokens_in, durations to latency_ms. The old names (kind,
+// tokens, ms, provider_id) were 42703 here, which blocked every /api/chat
+// call at the budget gate in Supabase mode.
 export async function usageRecord(userId, kind, amount = 1, extra = {}) {
   const n = Math.min(Math.max(1, Math.floor(amount) || 1), 100);
   for (let i = 0; i < n; i++) {
-    await q('insert into usage_events (user_id, kind, provider_id, tokens, ms) values ($1,$2,$3,$4,$5)', [userId, kind, extra.providerId || null, extra.tokens || 0, extra.ms || 0], 'usageRecord');
+    await q(`insert into usage_events (user_id, task, provider, tokens_in, latency_ms, status) values ($1,$2,$3,$4,$5,'ok')`, [userId, kind, extra.providerId || null, extra.tokens || 0, extra.ms || 0], 'usageRecord');
   }
   return true;
 }
 
 export async function usageCounts(userId, kind) {
-  const day = await q(`select count(*)::int c from usage_events where user_id=$1 and kind=$2 and created_at >= date_trunc('day', now())`, [userId, kind], 'usageDay');
-  const month = await q(`select count(*)::int c, coalesce(sum(tokens),0)::int t from usage_events where user_id=$1 and kind=$2 and created_at >= date_trunc('month', now())`, [userId, kind], 'usageMonth');
+  const day = await q(`select count(*)::int c from usage_events where user_id=$1 and task=$2 and created_at >= date_trunc('day', now())`, [userId, kind], 'usageDay');
+  const month = await q(`select count(*)::int c, coalesce(sum(tokens_in),0)::int t from usage_events where user_id=$1 and task=$2 and created_at >= date_trunc('month', now())`, [userId, kind], 'usageMonth');
   return { day: day.rows[0].c, month: month.rows[0].c, monthTokens: month.rows[0].t };
 }
 

@@ -115,14 +115,20 @@ test('the bundle applies cleanly to a real PostgreSQL engine', async () => {
     // The whole point: one paste, no partial failure.
     await db.exec(SQL);
 
-    // The tables the gateway queries must exist with the columns its SQL names.
+    // The tables the gateway queries must exist with the columns its SQL names
+    // (both the v1 contract in server/src/data/pg.js and the gateway layer in
+    // server/src/core/supadb.js — a column named by either is guarded here, so
+    // drift fails in CI instead of as 42703 in production).
     const expected = {
-      profiles: ['id', 'display_name', 'avatar_url', 'onboarding_completed', 'preferred_provider', 'preferred_model', 'theme', 'voice_preference', 'memory_preference', 'updated_at'],
+      profiles: ['id', 'display_name', 'avatar_url', 'onboarding_completed', 'preferred_provider', 'preferred_model', 'theme', 'voice_preference', 'memory_preference', 'updated_at',
+        'language', 'timezone', 'tone', 'verbosity', 'voice', 'voice_speed', 'proactivity', 'autonomy', 'interests', 'goals', 'default_provider', 'fallback_providers', 'favorite_models', 'onboarding_done', 'onboarded_at', 'plan'],
       conversations: ['id', 'user_id', 'title', 'model', 'provider', 'archived', 'updated_at'],
       messages: ['id', 'conversation_id', 'user_id', 'role', 'content', 'model', 'provider', 'status', 'error_code', 'tokens', 'latency_ms', 'metadata'],
-      memories: ['id', 'user_id', 'content', 'category', 'kind', 'pinned', 'updated_at'],
+      memories: ['id', 'user_id', 'content', 'category', 'kind', 'pinned', 'updated_at',
+        'class', 'source', 'confidence', 'scope', 'workspace_id', 'project_id', 'deleted_at', 'last_verified_at', 'last_used_at'],
       user_provider_settings: ['user_id', 'default_provider', 'default_model', 'fallback_enabled', 'free_only'],
-      user_provider_credentials: ['id', 'user_id', 'provider', 'label', 'masked_hint', 'secret_ciphertext', 'key_version', 'status', 'last_checked_at'],
+      user_provider_credentials: ['id', 'user_id', 'provider', 'label', 'masked_hint', 'secret_ciphertext', 'key_version', 'status', 'last_checked_at',
+        'last_rotated_at', 'rotation_count', 'metadata', 'last_tested_at', 'last_test_status'],
       usage_events: ['id', 'user_id', 'provider', 'model', 'request_id', 'task', 'tokens_in', 'tokens_out', 'latency_ms', 'status'],
       agent_tasks: ['id', 'user_id', 'conversation_id', 'type', 'objective', 'status', 'progress', 'result', 'error', 'completed_at'],
       tool_events: ['id', 'user_id', 'conversation_id', 'task_id', 'tool', 'state', 'detail'],
