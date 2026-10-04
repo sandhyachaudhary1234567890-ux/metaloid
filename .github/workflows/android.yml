@@ -121,6 +121,19 @@ jobs:
               tail -60 "$RUNNER_TEMP/ci-build.log"
             fi
             echo '```'
+            # Unit-test failures never reach the Gradle log — they live in the
+            # JUnit XML, so read the assertion text out of it.
+            if compgen -G "app/build/test-results/testDebugUnitTest/*.xml" > /dev/null; then
+              echo
+              echo '**Failing unit tests**'
+              echo '```'
+              grep -ho '<testcase [^>]*[^/]>' app/build/test-results/testDebugUnitTest/*.xml \
+                | sed -e 's/ time="[^"]*"//' -e 's/^/FAILED /' | head -60 || true
+              grep -ho '<failure[^>]*>' app/build/test-results/testDebugUnitTest/*.xml \
+                | sed -e 's/&#10;/ /g' -e 's/&quot;/\"/g' -e 's/&apos;/'"'"'/g' -e 's/&lt;/</g' -e 's/&gt;/>/g' \
+                | cut -c1-600 | head -80 || true
+              echo '```'
+            fi
           } > "$RUNNER_TEMP/comment.md"
           gh api --method POST \
             "repos/${{ github.repository }}/commits/${{ github.sha }}/comments" \
