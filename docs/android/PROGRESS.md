@@ -6,33 +6,39 @@ committed *and* CI has compiled it *and* its tests pass. Until then it is
 
 Historical baseline: the published V3 release is `apk-v3` (see
 `docs/android/RELEASE.md`). V4 is committed to the Arena working branch, but it
-is **not ready to publish**: latest run `37217266554` built the debug APK and
-passed JVM tests/lint, then ran the emulator test but could not observe the
-signed-out screen. The test's UI hierarchy contained only an XML declaration;
-foreground-window and screenshot diagnostics are being added. Earlier runs
+is **not ready to publish**: latest run `37219304680` passed JVM tests, lint,
+and debug APK assembly, then failed at `:app:connectedDebugAndroidTest`. Its
+report had no instrumented JUnit XML, screenshot, or useful ADB/window/logcat
+diagnostics, and omitted the Gradle root cause. The test-report artifact and
+Actions log both failed to download here with EOF, so it remains unknown whether
+this was an emulator/ADB failure or an app/test failure. The next workflow
+captures ADB device/boot state and the Gradle failure context. Earlier runs
 failed on the emulator boot timeout (`37213918933`), the action's POSIX shell
 (`37216103307`), the Gradle working directory (`37213055749`, `37213710373`),
-or the same signed-out assertion (`37211404025`). The current workflow uses the
-emulator action's explicit Android working directory, allows 900 seconds for
-boot, and invokes Bash diagnostics via one helper command.
+or the signed-out assertion (`37211404025`, `37217266554`). The workflow now
+uses the emulator action's explicit Android working directory, allows 900
+seconds for boot, and invokes Bash diagnostics via one helper command.
 
 ## Current V4 increment — compiled, partially verified; not release-ready
 
 Changes include backend-backed first-run provider setup and readiness gating,
 Smart Connect plus server-catalog model selection, route persistence, chat
 retry/finalization metadata fixes, and related regression coverage. GitHub
-Actions compiled the app and passed JVM tests, lint, and debug APK assembly.
-Run `37211404025` and latest run `37217266554` executed the instrumented test
-but could not observe the signed-out screen; the latest run's hierarchy dump
-contained only an XML declaration. Runs `37213055749` and `37213710373` failed
-before instrumentation because Gradle ran from the repository root; run
-`37213918933` timed out while booting the emulator; and run `37216103307` failed
-before Gradle because Bash-only `set -o pipefail` was executed via `/usr/bin/sh`.
-The next workflow adds foreground-window metadata and a screenshot artifact to
-help diagnose the still-unknown app-side failure. The release APK build, APK
-secret scan, and artifact upload have not passed. No V4 release or successful
-downloadable V4 artifact exists. See `TESTING.md` for verification limits and
-`BACKEND_CHANGES.md` for the additive server contract changes.
+Actions compiled the app and passed JVM tests, lint, and debug APK assembly in
+run `37219304680`, but `:app:connectedDebugAndroidTest` failed without producing
+instrumented-test JUnit XML or screenshot/ADB/window diagnostics. The comment
+report omitted the Gradle root cause; its test-report artifact and job log could
+not be downloaded due EOF. Runs `37211404025` and `37217266554` separately failed
+to observe the signed-out screen; `37217266554` had only an XML declaration in
+its hierarchy. Runs `37213055749` and `37213710373` failed before instrumentation
+because Gradle ran from the repository root; run `37213918933` timed out while
+booting the emulator; and run `37216103307` failed before Gradle because
+Bash-only `set -o pipefail` was executed via `/usr/bin/sh`. The next workflow
+adds explicit ADB device/boot state, keeps ADB errors, and reports Gradle's
+failure context. Release APK build, APK secret scan, and APK upload have not
+passed. No V4 release or successful downloadable V4 APK exists. See
+`TESTING.md` for verification limits and `BACKEND_CHANGES.md` for the additive
+server contract changes.
 
 ## Status at a glance
 
@@ -47,7 +53,7 @@ downloadable V4 artifact exists. See `TESTING.md` for verification limits and
 | Share intake | written; CI-compiled |
 | Docs (`docs/android/*`) | written |
 | Web client regression (`npm run check`, tests, build) | run in this repository; exact output in TESTING.md §4 |
-| Whole-project CI (unit tests + lint + debug APK + emulator smoke + minified release APK + APK secret scan) | Historical V1/V2/V3 runs are green; V4 JVM tests/lint/debug assembly pass, but `37211404025` and `37217266554` failed the app-side signed-out assertion, `37213055749`/`37213710373` failed on the working directory, `37213918933` timed out waiting for emulator boot, and `37216103307` failed on Bash syntax passed to `/usr/bin/sh`. Release APK, secret scan, and artifact upload remain unverified |
+| Whole-project CI (unit tests + lint + debug APK + emulator smoke + minified release APK + APK secret scan) | Historical V1/V2/V3 runs are green; run `37219304680` passed JVM tests/lint/debug assembly but failed `:app:connectedDebugAndroidTest` without test XML or actionable ADB/Gradle diagnostics. Earlier V4 runs failed the signed-out assertion, emulator boot/setup, or working directory. Release APK, APK secret scan, and APK artifact remain unverified |
 | Published APK | **yes — V3 only**: GitHub Release `apk-v3`; there is no V4 artifact yet |
 
 **Historical runs below are baseline evidence only.** V4 has its own CI run,
@@ -97,7 +103,7 @@ entry behind it:
 | 13 — Voice | **Not shipped in this build.** The gateway reports `voice: false`; the client shows voice as unavailable rather than offering a control that cannot work. The on-device recogniser path is the first item of the next increment (see DECISIONS.md § Voice). | deliberately not implemented |
 | 14 — Settings & diagnostics | Theme, accent, reduced motion, server address, sign-out (device and everywhere), capabilities report, redacted log export. | done |
 | 15 — Hardening | No secrets in the app or the build; release checklist; R8 rules; cleartext refused outside debug; link handling restricted to http(s) without embedded credentials. | done |
-| 16 — Tests | JVM unit tests for the pure logic (parser, reducer, redaction, error map, time, markdown, routes, attachment size/draft store where pure) + CI assembly, lint, and API 34 emulator startup. Historical CI run `37193950163` passed the then-current suite; V4 JVM tests/lint/debug assembly pass, but `37211404025` and `37217266554` failed the signed-out smoke assertion, `37213055749`/`37213710373` failed on the working directory, `37213918933` timed out before emulator boot, and `37216103307` failed because Bash syntax was sent to `/usr/bin/sh`. This phase remains in progress. | in progress |
+| 16 — Tests | JVM unit tests for the pure logic (parser, reducer, redaction, error map, time, markdown, routes, attachment size/draft store where pure) + CI assembly, lint, and API 34 emulator startup. Historical CI run `37193950163` passed the then-current suite; V4 JVM tests/lint/debug assembly pass, but run `37219304680` failed `:app:connectedDebugAndroidTest` without instrumented-test XML or actionable diagnostics. Earlier V4 runs failed the signed-out assertion, emulator boot/setup, or working directory. This phase remains in progress. | in progress |
 | 17 — Report | This file plus `TESTING.md`. | done |
 
 ## What is deliberately absent

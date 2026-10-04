@@ -202,7 +202,11 @@ jobs:
               echo
               echo '**Emulator smoke-test compiler/test diagnostics**'
               echo '```'
-              grep -nE '(^e: |^error: |Unresolved reference|Type mismatch|Expecting|Compilation error|FAILURE:|Execution failed|> Task .* FAILED|AndroidRuntime|FATAL EXCEPTION|recent app/emulator logcat|visible emulator window hierarchy)' "$RUNNER_TEMP/ci-emulator.log" | head -160 || true
+              echo '--- Gradle failure context ---'
+              grep -n -A60 '^FAILURE: Build failed with an exception\.' "$RUNNER_TEMP/ci-emulator.log" | head -70 || true
+              echo
+              echo '--- matching diagnostics ---'
+              grep -nEi '(^e: |^error: |Unresolved reference|Type mismatch|Expecting|Compilation error|FAILURE:|What went wrong:|Execution failed|Caused by:|There were failing tests|No connected devices|device.*offline|offline.*device|> Task .* FAILED|AndroidRuntime|FATAL EXCEPTION|recent app/emulator logcat|visible emulator window hierarchy)' "$RUNNER_TEMP/ci-emulator.log" | head -160 || true
               echo
               echo '--- last 80 lines ---'
               tail -80 "$RUNNER_TEMP/ci-emulator.log"
@@ -214,6 +218,9 @@ jobs:
               echo '```'
               grep -ho '<failure[^>]*>[^<]*' app/build/outputs/androidTest-results/connected/debug/*.xml | head -40 || true
               echo '```'
+            else
+              echo
+              echo '**No instrumented-test result XML was produced**'
             fi
           } > "$RUNNER_TEMP/comment.md"
           gh api --method POST \
