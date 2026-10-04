@@ -399,6 +399,9 @@ app.get('/api/health', async (req, res) => {
   res.json({
     ok: true,
     server: true,
+    // Deploy fingerprint: Vercel injects the commit SHA, so anyone can verify
+    // exactly which code is live without dashboard access.
+    build: process.env.VERCEL_GIT_COMMIT_SHA || 'local',
     ai,
     degraded: !ai && providerSet,
     provider: providerSet ? PROVIDER_LABEL : null,
