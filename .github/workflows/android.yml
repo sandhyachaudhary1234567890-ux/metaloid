@@ -97,9 +97,7 @@ jobs:
           disable-animations: true
           emulator-options: -no-window -gpu swiftshader_indirect -noaudio -no-boot-anim -no-snapshot-save
           script: |
-            set -o pipefail
-            cd android
-            gradle --no-daemon --stacktrace :app:connectedDebugAndroidTest 2>&1 | tee "$RUNNER_TEMP/ci-emulator.log"
+            bash -o pipefail -c 'cd android && gradle --no-daemon --stacktrace :app:connectedDebugAndroidTest 2>&1 | tee "$RUNNER_TEMP/ci-emulator.log"'
 
       - name: Release APK (minified)
         env:
