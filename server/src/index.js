@@ -55,6 +55,7 @@ import {
   COLLECTORS, validateTarget, createInvestigation, getInvestigationFor, listInvestigations,
   runInvestigation, reportMarkdown, reportCSV, deleteUserInvestigations,
 } from './osint.js';
+import { needsResearch, research, researchBlock } from './websearch.js';
 import { renderSystemPrompt, TOOLS_MANIFEST } from './systemPrompt.js';
 // Identity + user layer
 import {
@@ -731,16 +732,26 @@ app.post('/api/chat', requireAuth, rateLimit(60, 60000), async (req, res) => {
     { role: 'user', content: message },
   ];
   const tier = task && ['fast', 'smart', 'vision', 'coding', 'voice'].includes(task) ? task : classifyTask(message);
-  // Parallelize profile + personalization (two DB reads) so pre-stream
-  // latency is one round-trip, not two. Failures fall back to anonymous
-  // context — never fail a chat on a profile read.
-  const [profile, personalization] = await Promise.all([
+  // Parallelize profile + personalization (two DB reads) + live web research
+  // (three sources at once) so pre-stream latency is one round-trip, not
+  // three. Failures fall back to anonymous context — never fail a chat on a
+  // profile read or a research fetch.
+  const [profile, personalization, researchText] = await Promise.all([
     Promise.resolve().then(() => getProfile(userId)).catch(() => ({})),
     Promise.resolve().then(() => personalizationBlock(userId)).catch(() => ''),
+    Promise.resolve().then(async () => {
+      try {
+        if (!needsResearch(message)) return '';
+        return researchBlock(await research(message));
+      } catch {
+        return '';
+      }
+    }),
   ]);
   const ctx = { ...(req.body?.context || {}) };
   if (profile && profile.displayName) ctx.userName = profile.displayName;
   const system = buildRuntimeContext(ctx, personalization || '')
+    + (researchText || '')
     + (tier === 'voice'
       ? '\n\nVOICE MODE: this reply will be SPOKEN aloud. Keep it to 1–3 short sentences, conversational, no markdown, no lists, no URLs, no code. Say numbers and units in words. If the full answer needs detail, speak the key point first in one sentence.'
       : '');
