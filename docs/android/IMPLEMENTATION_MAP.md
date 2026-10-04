@@ -124,4 +124,5 @@ com.metaloid
 they test: `core/streaming/{SseParserTest,StreamEventParserTest}`,
 `feature/chat/domain/StreamReducerTest`, `core/common/RedactTest`,
 `core/network/{ErrorMapperTest,TransportKindTest}`, `core/backend/BackendAddressTest`,
+`core/share/PendingShareTest`,
 `core/ui/{TimeFormatTest,MarkdownParserTest}`, `app/RouteCodecTest`.

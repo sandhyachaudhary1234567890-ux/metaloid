@@ -79,6 +79,17 @@ object PendingShare {
         return current
     }
 
-    /** A short title for the conversation this share will create. */
-    fun title(): String? = _waiting.value?.lineSequence()?.firstOrNull()?.trim()?.take(60)?.ifBlank { null }
+    /**
+     * A short title for the conversation this share will create.
+     *
+     * The first line that has any text in it: a share whose text starts with a
+     * blank line (a copied quote usually does) must still get a conversation,
+     * and a null title here means the list screen places nothing.
+     */
+    fun title(): String? = _waiting.value
+        ?.lineSequence()
+        ?.firstOrNull { it.isNotBlank() }
+        ?.trim()
+        ?.take(60)
+        ?.ifBlank { null }
 }

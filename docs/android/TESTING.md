@@ -35,6 +35,7 @@ permanent.
 | `TimeFormatTest` | Relative time, absent timestamps as `—`, clock skew, durations, byte counts. |
 | `MarkdownParserTest` | Headings, lists (with depth), quotes, rules, fenced code — including an **unterminated fence**, which is what a streamed code block looks like mid-flight — and inline spans including an unclosed emphasis marker. |
 | `RouteCodecTest` | The persisted navigation stack round-trips; unknown segments are dropped rather than guessed; `research` vs `researchDetail` do not collide. |
+| `PendingShareTest` | The shared text's waiting room: needs a conversation until one is assigned, claimable only by that conversation and only once, a blank share is ignored, a new share forgets the old conversation, and a share whose text starts with a blank line still gets a title. |
 
 The tests are written against behaviour a user can observe, not against
 implementation details: they would still pass if the internals were rewritten,
