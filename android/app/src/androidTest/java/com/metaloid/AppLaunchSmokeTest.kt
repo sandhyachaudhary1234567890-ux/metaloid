@@ -1,27 +1,28 @@
 package com.metaloid
 
-import androidx.compose.ui.test.assertExists
-import androidx.compose.ui.test.junit4.createAndroidComposeRule
-import androidx.compose.ui.test.onNodeWithText
-import androidx.compose.ui.test.onAllNodesWithText
-import androidx.compose.ui.test.fetchSemanticsNodes
+import androidx.test.ext.junit.rules.ActivityScenarioRule
 import androidx.test.ext.junit.runners.AndroidJUnit4
+import androidx.test.platform.app.InstrumentationRegistry
+import androidx.test.uiautomator.By
+import androidx.test.uiautomator.UiDevice
+import androidx.test.uiautomator.Until
+import org.junit.Assert.assertNotNull
+import org.junit.Assert.assertTrue
 import org.junit.Rule
 import org.junit.Test
 import org.junit.runner.RunWith
 
-/** Exercises a real Activity on an emulator, including bootstrap and first-run auth UI. */
+/** Cold-launch smoke test on a real Android emulator. */
 @RunWith(AndroidJUnit4::class)
 class AppLaunchSmokeTest {
     @get:Rule
-    val composeRule = createAndroidComposeRule<MainActivity>()
+    val activity = ActivityScenarioRule(MainActivity::class.java)
 
     @Test
     fun coldLaunchReachesTheSignedOutScreen() {
-        composeRule.waitUntil(timeoutMillis = 45_000) {
-            composeRule.onAllNodesWithText("Sign in to continue").fetchSemanticsNodes().isNotEmpty()
-        }
-        composeRule.onNodeWithText("MetaIoid").assertExists()
-        composeRule.onNodeWithText("Sign in to continue").assertExists()
+        val device = UiDevice.getInstance(InstrumentationRegistry.getInstrumentation())
+        val signIn = device.wait(Until.findObject(By.text("Sign in to continue")), 45_000)
+        assertNotNull("The app did not reach its first-run sign-in screen", signIn)
+        assertTrue("The sign-in screen is not visible", signIn!!.isDisplayed)
     }
 }
