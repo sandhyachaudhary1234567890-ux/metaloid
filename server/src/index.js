@@ -180,6 +180,14 @@ const ALLOWED = new Set([...ORIGINS, ...lanOrigins()]);
 const ALLOWED_ORIGINS = new Set(
   (process.env.ALLOW_ORIGINS || '').split(',').map((s) => s.trim()).filter(Boolean)
 );
+// The deployment's own origin must always be allowed, even when the operator
+// forgot to list it in ALLOW_ORIGINS (the exact outage that broke browser
+// login on Vercel). PUBLIC_APP_URL is ours; Vercel injects VERCEL_URL /
+// VERCEL_PROJECT_PRODUCTION_URL automatically.
+for (const v of [process.env.PUBLIC_APP_URL, process.env.VERCEL_PROJECT_PRODUCTION_URL && `https://${process.env.VERCEL_PROJECT_PRODUCTION_URL}`, process.env.VERCEL_URL && `https://${process.env.VERCEL_URL}`]) {
+  const s = String(v || '').trim().replace(/\/$/, '');
+  if (s) ALLOWED_ORIGINS.add(s);
+}
 const ALLOWED_MOBILE = new Set(
   (process.env.ALLOW_MOBILE_ORIGINS || '').split(',').map((s) => s.trim()).filter(Boolean)
 );
@@ -195,6 +203,19 @@ function isAllowedOrigin(origin) {
   try {
     const h = new URL(origin).hostname;
     if (ALLOW_VERCEL_PREVIEWS && h.endsWith('.vercel.app')) return true;
+    // Single-project deployments (metaloid.vercel.app serving both app + API
+    // same-origin) must never be blocked by a missing allowlist entry: the
+    // browser's Origin always matches the deployment that served it.
+    // This is safe because it only allows the host Vercel assigned to us.
+    const ownHosts = new Set();
+    for (const v of [process.env.PUBLIC_APP_URL, process.env.VERCEL_PROJECT_PRODUCTION_URL, process.env.VERCEL_URL]) {
+      try {
+        const u = String(v || '').trim();
+        if (!u) continue;
+        ownHosts.add(new URL(u.includes('://') ? u : `https://${u}`).hostname);
+      } catch { /* ignore malformed */ }
+    }
+    if (ownHosts.has(h)) return true;
     if (ALLOW_LOCAL_ORIGINS && (h === 'localhost' || h === '127.0.0.1'
       || h.startsWith('192.168.') || h.startsWith('10.')
       || /^172\.(1[6-9]|2[0-9]|3[0-1])\./.test(h))) return true;
@@ -417,6 +438,25 @@ app.get('/api/ready', (req, res) => {
   res.status(ready ? 200 : 503).json({ ready, checks });
 });
 
+// ---- public runtime config: browser-safe values only ----
+// Vercel refuses to save JWT-looking values with a VITE_ prefix as Secret,
+// and Config-typed vars only reach the *server* (Vite inlines VITE_ at build
+// time, so post-build env changes are invisible to the bundle anyway).
+// The anon key + project URL are public by design (RLS is what protects
+// data), so the browser fetches them here when the build-time env is empty.
+// NEVER add service-role keys, JWT secrets, encryption keys, or provider
+// API keys to this response.
+app.get('/api/config', (req, res) => {
+  const url = (process.env.SUPABASE_URL || process.env.VITE_SUPABASE_URL || '').trim();
+  const anon = (process.env.SUPABASE_ANON_KEY || process.env.VITE_SUPABASE_ANON_KEY || '').trim();
+  res.setHeader('Cache-Control', 'public, max-age=300');
+  res.json({
+    supabaseUrl: url || null,
+    supabaseAnonKey: anon || null,
+    configured: Boolean(url && anon),
+  });
+});
+
 // ================= AUTH (public) =================
 
 const authLimit = rateLimit(Number(process.env.METALOID_AUTH_LIMIT || 10), 60000);
@@ -526,8 +566,71 @@ app.post('/api/chat', requireAuth, rateLimit(60, 60000), async (req, res) => {
   // exists; reading it from one place is what keeps the model the user saved
   // visible to the router in the same request.
   const userId = requireIdentity(req);
-  const budget = await checkBudget(userId, 'chat');
-  if (!budget.ok) return res.status(429).json({ error: budget.error });
+
+  // Vercel/serverless fix: flush SSE headers BEFORE any slow work.
+  // Hobby plans kill a function that sends nothing in the first ~10s, and
+  // cold-start + JWKS + DB + catalogue fetch easily exceeds that. Sending
+  // headers + a comment immediately keeps proxies/buffers from timing out,
+  // and the heartbeat below keeps the stream alive while OpenRouter's free
+  // tier thinks (TTFT is often 5-15s). Frontend ignores non-data: lines.
+  res.writeHead(200, {
+    'Content-Type': 'text/event-stream',
+    'Cache-Control': 'no-cache, no-transform',
+    Connection: 'keep-alive',
+    'X-Accel-Buffering': 'no',
+  });
+  if (typeof res.flushHeaders === 'function') {
+    try { res.flushHeaders(); } catch { /* non-critical */ }
+  }
+  try { res.write(': connected\n\n'); } catch { /* client already gone */ }
+  const controller = new AbortController();
+  // Stay under the platform limit (Vercel maxDuration 60s + our 50s
+  // no-response guard): abort upstream at 50s so we send a clean SSE error
+  // instead of the platform's opaque 504.
+  const timer = setTimeout(() => controller.abort(), 50000);
+  const heartbeat = setInterval(() => {
+    try {
+      if (!res.writableEnded) res.write(': ping\n\n');
+    } catch { /* closed below */ }
+  }, 8000);
+  if (typeof heartbeat.unref === 'function') heartbeat.unref();
+  const stopHeartbeat = () => clearInterval(heartbeat);
+  // NOTE: res (not req) — req 'close' fires as soon as a POST body is
+  // consumed, which would abort every stream instantly.
+  res.on('close', () => { stopHeartbeat(); controller.abort(); });
+  // a dead client socket must end the stream, never the process
+  res.on('error', () => {
+    stopHeartbeat();
+    try {
+      controller.abort();
+    } catch { /* already settled */ }
+  });
+  const send = (obj) => {
+    try {
+      res.write(`data: ${JSON.stringify(obj)}\n\n`);
+    } catch {
+      stopHeartbeat();
+      controller.abort();
+      const e = new Error('client gone');
+      e.code = 'CLIENT_GONE';
+      throw e;
+    }
+  };
+  const failAndEnd = (errObj) => {
+    try { send(errObj); } catch { /* client gone */ }
+    clearTimeout(timer);
+    stopHeartbeat();
+    try { res.end(); } catch { /* already ended */ }
+  };
+  const t0 = Date.now();
+
+  // Budget is checked after headers are sent, so a rejection must be an SSE
+  // error event (HTTP status is already 200) — not a JSON status.
+  const budget = await checkBudget(userId, 'chat').catch((e) => ({ ok: false, error: String((e && e.message) || e) }));
+  if (!budget.ok) {
+    failAndEnd({ error: budget.error || 'Budget exceeded. Try again later.', code: 'rate_limited' });
+    return;
+  }
 
   const messages = [
     ...history.filter((m) => m && (m.role === 'user' || m.role === 'assistant') && typeof m.content === 'string')
@@ -535,42 +638,19 @@ app.post('/api/chat', requireAuth, rateLimit(60, 60000), async (req, res) => {
     { role: 'user', content: message },
   ];
   const tier = task && ['fast', 'smart', 'vision', 'coding', 'voice'].includes(task) ? task : classifyTask(message);
-  // identity comes from the session, not the client: profile name wins.
-  const profile = await getProfile(userId);
+  // Parallelize profile + personalization (two DB reads) so pre-stream
+  // latency is one round-trip, not two. Failures fall back to anonymous
+  // context — never fail a chat on a profile read.
+  const [profile, personalization] = await Promise.all([
+    Promise.resolve().then(() => getProfile(userId)).catch(() => ({})),
+    Promise.resolve().then(() => personalizationBlock(userId)).catch(() => ''),
+  ]);
   const ctx = { ...(req.body?.context || {}) };
-  if (profile.displayName) ctx.userName = profile.displayName;
-  const system = buildRuntimeContext(ctx, await personalizationBlock(userId))
+  if (profile && profile.displayName) ctx.userName = profile.displayName;
+  const system = buildRuntimeContext(ctx, personalization || '')
     + (tier === 'voice'
       ? '\n\nVOICE MODE: this reply will be SPOKEN aloud. Keep it to 1–3 short sentences, conversational, no markdown, no lists, no URLs, no code. Say numbers and units in words. If the full answer needs detail, speak the key point first in one sentence.'
       : '');
-
-  res.writeHead(200, {
-    'Content-Type': 'text/event-stream',
-    'Cache-Control': 'no-cache',
-    Connection: 'keep-alive',
-  });
-  const send = (obj) => {
-    try {
-      res.write(`data: ${JSON.stringify(obj)}\n\n`);
-    } catch {
-      controller.abort();
-      const e = new Error('client gone');
-      e.code = 'CLIENT_GONE';
-      throw e;
-    }
-  };
-  const controller = new AbortController();
-  const timer = setTimeout(() => controller.abort(), 90000);
-  // NOTE: res (not req) — req 'close' fires as soon as a POST body is
-  // consumed, which would abort every stream instantly.
-  res.on('close', () => controller.abort());
-  // a dead client socket must end the stream, never the process
-  res.on('error', () => {
-    try {
-      controller.abort();
-    } catch { /* already settled */ }
-  });
-  const t0 = Date.now();
   let usedModel = '';
   let usedProvider = '';
   let usedTier = tier;
@@ -580,9 +660,10 @@ app.post('/api/chat', requireAuth, rateLimit(60, 60000), async (req, res) => {
   // routing prefs + health) stream here; platform keys stay as fallback.
   let byokError = null;
   try {
-    const prefs = await getProfile(userId);
+    // Reuse the profile already fetched above — a second DB read here added
+    // ~500ms on every cold start for no reason.
     const out = await chatWithProviders({
-      userId: userId, messages, system, prefs,
+      userId: userId, messages, system, prefs: profile || {},
       // The classified tier drives candidate ordering, so a voice turn asks
       // for a fast model and a coding turn for a coding one.
       task: tier,
@@ -596,6 +677,7 @@ app.post('/api/chat', requireAuth, rateLimit(60, 60000), async (req, res) => {
     await recordUsage(userId, 'chat');
     send({ done: true });
     clearTimeout(timer);
+    stopHeartbeat();
     res.end();
     return;
   } catch (e) {
@@ -607,12 +689,17 @@ app.post('/api/chat', requireAuth, rateLimit(60, 60000), async (req, res) => {
   }
 
   try {
-    const models = await listFreeModels();
+    // Catalogue + account prefs in parallel: sequential awaits cost ~1-2s on
+    // cold start (catalogue fetch + DB read). Either failure falls back —
+    // catalogue to the static free list, prefs to {} — never a hard fail.
+    const [models, accountPrefs] = await Promise.all([
+      listFreeModels().catch(() => []),
+      prefsFor(userId).catch(() => ({})),
+    ]);
     // The account preference must reach the shared platform-key path too. BYOK
     // routing already reads it through providerGateway; without this bridge a
     // user who had no connected key saw the saved model in Settings but the
     // next request silently reverted to task-tier order.
-    const accountPrefs = await prefsFor(userId);
     const candidates = pickCandidates(models, tier, 3, accountPrefs.defaultModel);
     const model = candidates[0] || pickModel(models, tier);
     usedModel = model.id;
@@ -681,10 +768,17 @@ app.post('/api/chat', requireAuth, rateLimit(60, 60000), async (req, res) => {
       if (!controller.signal.aborted && !(e && e.code === 'CLIENT_GONE')) {
         console.error('[gateway] chat failed:', (e && e.message) || e);
       }
-      send({ error: humanizeProviderError(e), code: providerCodeOf(e) });
+      // If our own 50s budget aborted the upstream fetch, say so plainly
+      // (retryable) instead of the generic provider text.
+      if (controller.signal.aborted) {
+        send({ error: 'The model took too long and was stopped. Try a shorter question or retry.', code: 'timeout' });
+      } else {
+        send({ error: humanizeProviderError(e), code: providerCodeOf(e) });
+      }
     }
   } finally {
     clearTimeout(timer);
+    stopHeartbeat();
     res.end();
   }
 });

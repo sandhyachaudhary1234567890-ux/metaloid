@@ -11,7 +11,7 @@ import {
   getSession, setSession as saveSession, clearSession, onSessionChange,
   type AuthUser,
 } from '../lib/auth';
-import { saveSbSession, sbAccessToken, sbRefreshToken, sbSignOut, supabaseConfigured } from '../lib/supabaseAuth';
+import { saveSbSession, sbAccessToken, sbRefreshToken, sbSignOut } from '../lib/supabaseAuth';
 import { authSignup as apiSignup, authLogin as apiLogin, authLogout as apiLogout, fetchMe as apiMe } from '../lib/transport';
 
 export interface ModalState {
@@ -184,7 +184,10 @@ export function SessionProvider({ children }: { children: React.ReactNode }) {
   // Supabase email sessions are adopted too (sb token → gateway /me).
   useEffect(() => {
     const adoptSb = async (): Promise<boolean> => {
-      if (getSession() || !supabaseConfigured()) return false;
+      // No sync supabaseConfigured() gate: build-time env may be empty while
+      // /api/config still supplies the project (sbAccessToken resolves null
+      // when truly unconfigured, which is the same outcome).
+      if (getSession()) return false;
       const token = await sbAccessToken().catch(() => null);
       if (!token) return false;
       saveSession({ access: token, refresh: (await sbRefreshToken()) || '', user: { id: 'sb:pending', handle: 'email', displayName: '', role: 'user', createdAt: '' } });

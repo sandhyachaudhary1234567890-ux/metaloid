@@ -98,7 +98,11 @@ function classify(id) {
 export async function listFreeModels() {
   if (Date.now() - cache.at < CACHE_MS && cache.models.length) return cache.models;
   try {
-    const r = await fetch(`${BASE}/models`, { signal: AbortSignal.timeout(8000) });
+    // 5s, not 8s: on serverless (Vercel ~10s first-byte budget) a slow
+    // catalogue fetch must fail fast to the static fallback, not eat the
+    // whole function budget before the chat stream even starts.
+    const ms = Number(process.env.METALOID_MODELS_TIMEOUT_MS || 5000);
+    const r = await fetch(`${BASE}/models`, { signal: AbortSignal.timeout(ms) });
     if (!r.ok) throw new Error(`models ${r.status}`);
     const j = await r.json();
     const free = (j.data || [])
@@ -255,10 +259,14 @@ export function classifyTask(message) {
 const SYSTEM_FALLBACK = `You are METALOID, a private personal AI assistant. Be concise unless complexity demands detail. Mirror Hindi/Hinglish/English. Never invent sources, tools, or results. Disagree respectfully when the user is wrong.`;
 
 function headers(apiKey) {
+  const referer = process.env.PUBLIC_APP_URL
+    || (process.env.VERCEL_PROJECT_PRODUCTION_URL ? `https://${process.env.VERCEL_PROJECT_PRODUCTION_URL}` : '')
+    || (process.env.VERCEL_URL ? `https://${process.env.VERCEL_URL}` : '')
+    || 'http://localhost:5173';
   return {
     'Content-Type': 'application/json',
     Authorization: `Bearer ${apiKey}`,
-    'HTTP-Referer': process.env.PUBLIC_APP_URL || 'http://localhost:5173',
+    'HTTP-Referer': referer,
     'X-Title': 'METALOID',
   };
 }

@@ -8,7 +8,7 @@
 
 import React, { createContext, useCallback, useContext, useEffect, useMemo, useState } from 'react';
 import type { Session, User } from '@supabase/supabase-js';
-import { getSupabase, supabaseConfigured } from './supabase';
+import { getSupabase } from './supabase';
 
 // ── Gateway session helpers ────────────────────────────────────────────────
 // One credential store: when Supabase is configured it is the only identity
@@ -175,18 +175,24 @@ function humanizeAuthError(message: string): { message: string; code: string } {
 }
 
 export function AuthProvider({ children }: { children: React.ReactNode }) {
-  const configured = supabaseConfigured();
-  const [status, setStatus] = useState<AuthStatus>(configured ? 'loading' : 'unconfigured');
+  // Start in loading: build-time env may be empty while the runtime fallback
+  // (/api/config) can still supply the project URL + anon key. The bootstrap
+  // below resolves the client first and only reports unconfigured when both
+  // sources are empty.
+  const [status, setStatus] = useState<AuthStatus>('loading');
   const [session, setSession] = useState<Session | null>(null);
   const [recoveryMode, setRecoveryMode] = useState(false);
 
   // Session bootstrap + refresh. `onAuthStateChange` also fires for token
   // refreshes, so this one subscription keeps the whole app current.
   useEffect(() => {
-    if (!configured) return;
     let alive = true;
     getSupabase().then(async (sb) => {
-      if (!sb || !alive) return;
+      if (!alive) return;
+      if (!sb) {
+        setStatus('unconfigured');
+        return;
+      }
       const { data } = await sb.auth.getSession();
       if (!alive) return;
       setSession(data.session ?? null);
@@ -204,7 +210,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       return () => sub?.subscription?.unsubscribe?.();
     });
     return () => { alive = false; };
-  }, [configured]);
+  }, []);
 
   const signUp = useCallback(async (email: string, password: string, displayName?: string): Promise<AuthResult> => {
     const sb = await getSupabase();
@@ -270,6 +276,10 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     return { ok: true, message: 'Verification email sent.' };
   }, []);
 
+  // Derived from bootstrap outcome (build-time env OR /api/config runtime
+  // fallback): loading counts as configured so the UI waits instead of
+  // flashing "unconfigured" before the runtime fetch resolves.
+  const configured = status !== 'unconfigured';
   const value = useMemo<AuthValue>(() => ({
     configured,
     status,
