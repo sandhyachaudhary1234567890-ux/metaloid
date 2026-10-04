@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import { useApp } from '../lib/store';
+import { useAuth } from '../lib/auth';
 import { SettingsRow, Seg } from './SettingsGroup';
 import {
   fetchProviders, fetchProviderModels, refreshProviderModels, fetchProviderHelp,
@@ -45,10 +46,16 @@ const FREE_NOTE: Record<string, string> = {
 
 export function ProviderSettings() {
   const { settings, connection, health, authUser, toast, recheckConnection } = useApp();
-  // Managing keys needs a session AND a gateway that can answer. Those are two
-  // different problems and are reported as two different sentences below.
+  const auth = useAuth();
+  // Managing keys needs a gateway that can answer, and an identity to store
+  // them under. Those are two different problems and get two different
+  // sentences below.
   const gatewayReachable = !!health?.server || connection === 'online' || connection === 'mock' || connection === 'degraded';
-  const signedIn = !!authUser;
+  // A self-hosted gateway with no auth service stores the key under its
+  // local owner (local-open mode) and needs no account — the same rule the
+  // setup checklist already uses. Requiring a session there left a perfectly
+  // usable single-user deployment with no way to connect a key at all.
+  const signedIn = !!authUser || !auth.configured;
   const canManage = signedIn && gatewayReachable;
 
   const [providers, setProviders] = useState<ProviderInfo[]>([]);
