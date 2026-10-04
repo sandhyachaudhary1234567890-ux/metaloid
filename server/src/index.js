@@ -1633,7 +1633,29 @@ app.get('/api/providers', requireAuth, (req, res) => {
 // block — express matches in order and it would otherwise swallow
 // /credentials, /health, /routing, /usage literals.
 
-app.get('/api/providers/:providerId/models', requireAuth, (req, res) => {
+app.get('/api/providers/:providerId/models', requireAuth, async (req, res) => {
+  // OpenRouter's registry manifest is intentionally empty — its catalogue is
+  // live, not static. Serve the live free catalogue here so model pickers
+  // never show an empty provider. Everywhere else keeps the registry list.
+  if (req.params.providerId === 'openrouter') {
+    try {
+      const live = await listFreeModels();
+      return res.json({
+        models: live.map((m) => ({
+          modelId: m.id,
+          displayName: m.name || m.id,
+          capabilities: {
+            text: true, streaming: true,
+            ...(m.tier === 'vision' ? { vision: true } : {}),
+            ...(m.tier === 'coding' ? { coding: true } : {}),
+          },
+          contextLimit: m.context || null,
+        })),
+      });
+    } catch {
+      /* fall through to the (empty) registry list */
+    }
+  }
   const models = getProviderModels(req.params.providerId);
   res.json({ models });
 });
