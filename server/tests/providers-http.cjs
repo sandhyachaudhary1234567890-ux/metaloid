@@ -55,6 +55,11 @@
     const lp = await api('GET', '/api/providers', tA);
     ok('5 families listed w/ adapter flags', lp.s === 200 && lp.b.providers.length >= 5 && lp.b.providers.every((p) => typeof p.adapter === 'boolean'));
     ok('openai/anthropic/gemini have adapters', ['openai', 'anthropic', 'gemini'].every((id) => lp.b.providers.find((p) => p.providerId === id)?.adapter));
+    const openai = lp.b.providers.find((p) => p.providerId === 'openai');
+    ok('provider catalog declares secret auth type and pricing URL', openai?.authType === 'api_key' && openai?.pricingUrl === 'https://openai.com/api/pricing');
+    const modelCatalog = await api('GET', '/api/providers/openai/models', tA);
+    const gpt4o = modelCatalog.b.models?.find((m) => m.modelId === 'gpt-4o');
+    ok('model catalog preserves unknown free/pricing status', modelCatalog.s === 200 && !!gpt4o && gpt4o.free === null && gpt4o.pricing === null && gpt4o.unavailable === null);
     const help = await api('GET', '/api/providers/openai/help', tA);
     ok('help has official key URL', help.s === 200 && help.b.keyUrl === 'https://platform.openai.com/api-keys');
     const st = await api('POST', '/api/providers/credentials', tA, { providerId: 'openai', credential: 'sk-testuserkey1234567890' });

@@ -146,7 +146,7 @@ DELETE /api/v1/conversations/:id        → { deleted: true }  (cascades message
 GET    /api/v1/conversations/:id/messages?limit=&cursor=
 POST   /api/v1/conversations/:id/messages
        { role, content, model?, provider?, status?, metadata? }
-PATCH  /api/v1/messages/:id             { content?, status?, error_code?, tokens?, latency_ms? }
+PATCH  /api/v1/messages/:id             { content?, model?, provider?, status?, error_code?, tokens?, latency_ms? }
 POST   /api/v1/conversations/:id/messages/recover   → { recovered: n }
 ```
 
@@ -178,12 +178,16 @@ database round-trip before the first token:
 
 1. `POST /api/v1/conversations` (new thread) or reuse `conversation_id`.
 2. `POST …/messages` with `{role:"user", status:"complete"}`.
-3. Open the SSE stream. Render `token` frames as they arrive.
-4. On `done` → `POST …/messages` with `{role:"assistant", status:"complete",
-   content: fullText, model, provider}`.
-5. If the user backs out or the socket dies → `PATCH /api/v1/messages/:id`
-   `{status:"cancelled"}` for the assistant row, or call `…/messages/recover`
-   on the next launch so nothing is left in `streaming` forever.
+3. Open the SSE stream. Render cumulative `token` frames by replacement.
+4. On the first non-empty token, create the assistant row with
+   `{role:"assistant", status:"streaming", content: fullText, model?, provider?}`.
+   Do this asynchronously so database latency does not delay visible tokens.
+5. On `done` / user stop / terminal error, `PATCH /api/v1/messages/:id` with
+   the final `content`, actual final `model`/`provider` when known, and terminal
+   `status` (`complete`, `cancelled`, or `error`). This PATCH also clears stale
+   model/provider metadata after a fallback if the final route is unknown.
+6. If the process dies, call `…/messages/recover` when reopening the
+   conversation so nothing is left in `streaming` forever.
 
 `recover` exists precisely so a process death does not leave a half-written
 turn open: it marks every `streaming` message in that conversation as
@@ -232,12 +236,20 @@ key, and none ever will. A submitted key is encrypted at rest (AES-256-GCM
 under a server-side key) and the app should clear it from memory and from the
 input field the moment the call returns.
 
-Model discovery (`GET /api/models`) is a gateway endpoint, unchanged: free and
-paid slugs, with `free: true|false` and quarantined slugs flagged
-`unavailable: true` (the provider rejected them recently — the gateway skips
-them automatically). Free-model availability is checked dynamically; the
-client must **never** silently switch a user to a paid model, and must show
-`free` vs `paid` honestly.
+The Android setup flow stores secrets only through the authenticated V1
+credential routes above; provider secrets are never stored in Android. The
+backend catalog and provider adapter endpoints supply provider names, auth
+shapes, model availability, free/pricing metadata, and official key/help URLs.
+The app filters to backend-declared key adapters, requests live model refresh
+when available, and never hardcodes a model slug.
+
+`GET /api/models` is the shared-route catalog. Provider-specific catalogs come
+from `GET /api/providers/:providerId/models`; `POST
+/api/providers/:providerId/models/refresh` refreshes availability. Models may
+report `free: true|false|null`, `pricing`, and `unavailable: true` (the provider
+rejected the slug recently). Unknown pricing is not called free; paid models
+are only chosen after an explicit user selection. Smart Connect remains the
+account default unless the user selects a backend-listed route.
 
 ---
 

@@ -363,6 +363,14 @@ test('messages persist, and an interrupted stream is marked cancelled, not left 
     const listed = await g.api('GET', `/api/v1/conversations/${id}/messages`, { token: tokenA });
     assert.equal(listed.json.rows.length, 2, 'both turns persisted');
 
+    const retried = await g.api('PATCH', `/api/v1/messages/${asst.json.message.id}`, {
+      token: tokenA,
+      body: { content: 'fallback answer', model: 'fallback-model', provider: null, status: 'streaming' },
+    });
+    assert.equal(retried.json.message.content, 'fallback answer');
+    assert.equal(retried.json.message.model, 'fallback-model', 'retry model replaces the first attempt metadata');
+    assert.equal(retried.json.message.provider, null, 'stale provider metadata can be cleared while the retry resolves');
+
     const recovered = await g.api('POST', `/api/v1/conversations/${id}/messages/recover`, { token: tokenA });
     assert.equal(recovered.json.recovered, 1, 'the in-flight message must be recovered');
 

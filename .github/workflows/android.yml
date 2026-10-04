@@ -1,0 +1,270 @@
+name: android
+
+# Builds, lints and tests the MetaIoid Android client, then publishes the APKs.
+#
+# Why this runs on GitHub-hosted runners: the APK must be produced from the
+# committed sources by a clean, reproducible toolchain. The workflow is the
+# single source of truth for "the app compiles and its tests pass".
+#
+#   push to any branch  -> build + unit tests + lint (fast feedback)
+#   push a tag apk-*    -> the same build, plus a GitHub Release with the APKs
+#   manual run          -> build; tick "publish" to also cut a release
+#
+# Signing: a release APK is signed with the repository's *debug* key unless a
+# real keystore is supplied through secrets (ANDROID_KEYSTORE_BASE64,
+# ANDROID_KEYSTORE_PASSWORD, ANDROID_KEY_ALIAS, ANDROID_KEY_PASSWORD). That is
+# a deliberate, documented choice for a personal build — see docs/android/RELEASE.md.
+
+on:
+  push:
+    branches: ['**']
+    tags: ['apk-*']
+    paths:
+      - 'android/**'
+      - 'docs/android/**'
+      - '.github/workflows/android.yml'
+  pull_request:
+    paths:
+      - 'android/**'
+      - 'docs/android/**'
+      - '.github/workflows/android.yml'
+  workflow_dispatch:
+    inputs:
+      publish:
+        description: 'Also create a GitHub Release with the APKs'
+        type: boolean
+        default: false
+
+permissions:
+  contents: write
+
+concurrency:
+  group: android-${{ github.ref }}
+  cancel-in-progress: false
+
+jobs:
+  build:
+    name: Build, test, lint
+    runs-on: ubuntu-latest
+    timeout-minutes: 60
+    defaults:
+      run:
+        working-directory: android
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up JDK 17
+        uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '17'
+
+      - name: Set up Gradle
+        uses: gradle/actions/setup-gradle@v4
+        with:
+          gradle-version: '8.9'
+          cache-read-only: false
+
+      - name: Show toolchain
+        run: |
+          java -version
+          gradle --version
+          echo "ANDROID_HOME=$ANDROID_HOME"
+          ls "$ANDROID_HOME/platforms" || true
+
+      - name: Unit tests + lint + debug APK
+        env:
+          # The deployment the APK talks to by default. Baked in as a *public*
+          # value (BuildConfig.GATEWAY_URL), so a freshly installed app connects
+          # to the real backend and only asks for a sign-in — no server address
+          # to type. A repository variable of the same name overrides it without
+          # touching this file; see docs/android/RELEASE.md §3.
+          METALOID_GATEWAY_URL: ${{ vars.METALOID_GATEWAY_URL || 'https://metaloid.vercel.app' }}
+        run: |
+          set -o pipefail
+          gradle --no-daemon --stacktrace \
+            :app:testDebugUnitTest \
+            :app:assembleDebug 2>&1 | tee "$RUNNER_TEMP/ci-build.log"
+          gradle --no-daemon --stacktrace :app:lintDebug 2>&1 | tee -a "$RUNNER_TEMP/ci-build.log"
+
+      - name: Release APK (minified)
+        env:
+          METALOID_GATEWAY_URL: ${{ vars.METALOID_GATEWAY_URL || 'https://metaloid.vercel.app' }}
+          ANDROID_KEYSTORE_BASE64: ${{ secrets.ANDROID_KEYSTORE_BASE64 }}
+          ANDROID_KEYSTORE_PASSWORD: ${{ secrets.ANDROID_KEYSTORE_PASSWORD }}
+          ANDROID_KEY_ALIAS: ${{ secrets.ANDROID_KEY_ALIAS }}
+          ANDROID_KEY_PASSWORD: ${{ secrets.ANDROID_KEY_PASSWORD }}
+        run: |
+          set -o pipefail
+          if [ -n "$ANDROID_KEYSTORE_BASE64" ]; then
+            echo "$ANDROID_KEYSTORE_BASE64" | base64 -d > "$RUNNER_TEMP/release.jks"
+            echo "METALOID_KEYSTORE=$RUNNER_TEMP/release.jks" >> "$GITHUB_ENV"
+          fi
+          gradle --no-daemon --stacktrace :app:assembleRelease 2>&1 | tee -a "$RUNNER_TEMP/ci-build.log"
+
+      # The app's own rule: a service-role key, provider key, JWT secret or
+      # encryption key must never be inside an installable APK. Nothing in the
+      # source contains one (the values are public identifiers only), and this
+      # step proves it on the artifact rather than trusting the source review.
+      - name: Secret scan of the APKs
+        env:
+          METALOID_GATEWAY_URL: ${{ vars.METALOID_GATEWAY_URL || 'https://metaloid.vercel.app' }}
+        run: |
+          fail=0
+          for apk in app/build/outputs/apk/debug/app-debug.apk app/build/outputs/apk/release/app-release.apk; do
+            [ -f "$apk" ] || continue
+            echo "scanning $apk ($(du -h "$apk" | cut -f1))"
+            hits=$(unzip -p "$apk" '*.dex' resources.arsc 2>/dev/null \
+              | strings -n 8 \
+              | grep -iE 'service_role|supabase_service_role|sk-or-v1|sk-ant-|sk-proj-|BEGIN [A-Z ]*PRIVATE KEY|jwt_secret|encryption_key' || true)
+            if [ -n "$hits" ]; then
+              echo "::error::a privileged secret pattern is inside $apk"
+              echo "$hits" | head -5
+              fail=1
+            fi
+          done
+          if [ "$fail" -ne 0 ]; then exit 1; fi
+          echo "no privileged secret pattern found in either APK"
+
+          # ... and prove the baked default gateway is really in there: a public
+          # URL is not a secret, but "the APK connects out of the box" is a claim
+          # worth checking on the artifact rather than in a document.
+          gateway_host=${METALOID_GATEWAY_URL#*://}
+          gateway_host=${gateway_host%%/*}
+          for apk in app/build/outputs/apk/debug/app-debug.apk app/build/outputs/apk/release/app-release.apk; do
+            test -f "$apk" || { echo "::error::missing expected APK: $apk"; exit 1; }
+            if unzip -p "$apk" '*.dex' | strings -n 8 | grep -Fq "$gateway_host"; then
+              echo "$apk carries the configured gateway"
+            else
+              echo "::error::$apk does not carry the configured gateway host"
+              exit 1
+            fi
+          done
+
+      # The build log is not always reachable (artifact hosts are blocked in some
+      # environments, and a red build publishes no APK). Reporting the compiler's
+      # own message as a commit comment makes a failure readable from anywhere
+      # `gh api` works — and permanently attached to the commit it belongs to.
+      - name: Report build failure on the commit
+        if: failure()
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          if [ ! -f "$RUNNER_TEMP/ci-build.log" ]; then
+            echo "no captured log; the failure happened before the build step"
+            exit 0
+          fi
+          {
+            echo "CI: \`:app:testDebugUnitTest\`, \`:app:assembleDebug\` or \`:app:lintDebug\` failed for \`${GITHUB_SHA:0:7}\`."
+            echo
+            echo '```'
+            # Compiler messages first: they are the only actionable part.
+            if grep -qE '^(e: |FAILURE: |error: |Error: )' "$RUNNER_TEMP/ci-build.log"; then
+              grep -E '^(e: |FAILURE: |error: |Error: |Execution failed|What went wrong|> Task .* FAILED|Caused by: )' "$RUNNER_TEMP/ci-build.log" | head -200
+              # Lint reports start with the file, not the word Error.
+              grep -E '\.(kt|kts|java|xml):[0-9]+: (Error|Warning): ' "$RUNNER_TEMP/ci-build.log" | head -80 || true
+            else
+              grep -E 'FAILURE|Execution failed|What went wrong|> Task .* FAILED|Caused by: ' "$RUNNER_TEMP/ci-build.log" | head -40
+              echo
+              echo '--- last 60 lines ---'
+              tail -60 "$RUNNER_TEMP/ci-build.log"
+            fi
+            echo '```'
+            # Unit-test failures never reach the Gradle log — they live in the
+            # JUnit XML, so read the assertion text out of it.
+            if compgen -G "app/build/test-results/testDebugUnitTest/*.xml" > /dev/null; then
+              echo
+              echo '**Failing unit tests**'
+              echo '```'
+              grep -ho '<testcase [^>]*[^/]>' app/build/test-results/testDebugUnitTest/*.xml \
+                | sed -e 's/ time="[^"]*"//' -e 's/^/FAILED /' | head -60 || true
+              grep -ho '<failure[^>]*>' app/build/test-results/testDebugUnitTest/*.xml \
+                | sed -e 's/&#10;/ /g' -e 's/&quot;/\"/g' -e 's/&apos;/'"'"'/g' -e 's/&lt;/</g' -e 's/&gt;/>/g' \
+                | cut -c1-600 | head -80 || true
+              echo '```'
+            fi
+          } > "$RUNNER_TEMP/comment.md"
+          gh api --method POST \
+            "repos/${{ github.repository }}/commits/${{ github.sha }}/comments" \
+            -F body=@"$RUNNER_TEMP/comment.md" \
+            && echo "failure reported as a commit comment"
+
+      - name: Test reports
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: test-reports
+          path: |
+            android/app/build/reports/tests/**
+            android/app/build/reports/lint-results-*.html
+          if-no-files-found: ignore
+          retention-days: 14
+
+      - name: Collect APKs
+        run: |
+          mkdir -p "$RUNNER_TEMP/apk"
+          # A stable, human-readable name: the download link never changes shape.
+          cp app/build/outputs/apk/debug/app-debug.apk "$RUNNER_TEMP/apk/metaloid-debug.apk" 2>/dev/null || true
+          cp app/build/outputs/apk/release/app-release.apk "$RUNNER_TEMP/apk/metaloid-release.apk" 2>/dev/null || true
+          ls -l "$RUNNER_TEMP/apk"
+          # Both variants are part of the documented download. Fail loudly
+          # rather than publish an incomplete release if either task/path drifts.
+          test -f "$RUNNER_TEMP/apk/metaloid-debug.apk"
+          test -f "$RUNNER_TEMP/apk/metaloid-release.apk"
+
+      - name: Upload APKs
+        uses: actions/upload-artifact@v4
+        with:
+          name: metaloid-apk
+          path: ${{ runner.temp }}/apk/*.apk
+          if-no-files-found: error
+          retention-days: 90
+
+  release:
+    name: Publish release
+    needs: build
+    if: >-
+      startsWith(github.ref, 'refs/tags/apk-') ||
+      (github.event_name == 'workflow_dispatch' && inputs.publish)
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Download APKs
+        uses: actions/download-artifact@v4
+        with:
+          name: metaloid-apk
+          path: apk
+
+      - name: Checksums
+        run: |
+          cd apk
+          sha256sum *.apk > SHA256SUMS.txt
+          cat SHA256SUMS.txt
+
+      - name: Publish
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: ${{ startsWith(github.ref, 'refs/tags/') && github.ref_name || format('apk-{0}', github.run_number) }}
+          name: MetaIoid Android ${{ startsWith(github.ref, 'refs/tags/') && github.ref_name || format('build {0}', github.run_number) }}
+          generate_release_notes: true
+          files: |
+            apk/*.apk
+            apk/SHA256SUMS.txt
+          prerelease: ${{ startsWith(github.ref, 'refs/tags/apk-v4') }}
+          body: |
+            ## MetaIoid for Android
+
+            Install **`metaloid-debug.apk`** (or `metaloid-release.apk`, minified) on an
+            Android 8.0+ device. The configured gateway is baked into the APK.
+
+            * `metaloid-release.apk` is minified and shrunk. It is signed with the
+              repository's debug key unless a production keystore was configured —
+              see `docs/android/RELEASE.md` before publishing to a store.
+            * Both APKs contain **no** service-role key, JWT secret, encryption key or
+              provider API key. The only values baked in are public identifiers.
+            * ${{ startsWith(github.ref, 'refs/tags/apk-v4') && 'This V4 build is a prerelease: it requires the matching backend source from this tag to be deployed, and has not been verified on a physical device. It is not being declared market-ready.' || 'Use the documentation for the verification and deployment status of this build.' }}
+            * Source, build instructions and the API contract this client speaks:
+              `docs/android/`.

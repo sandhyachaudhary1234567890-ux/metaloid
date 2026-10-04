@@ -1,0 +1,78 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+  MetaIoid Android — manifest.
+
+  Deliberately small. Every permission, component and attribute here is
+  justified in docs/android/DECISIONS.md § Security review; the release
+  checklist re-reads this file and fails if anything appears that is not on
+  that list.
+
+    INTERNET              the app is a client of a remote gateway
+    ACCESS_NETWORK_STATE  honest offline/degraded reporting (Section 9)
+
+  There is no storage permission: files are chosen through the system picker,
+  which grants per-URI access. There is no POST_NOTIFICATIONS: V1 does not
+  raise notifications, because the backend has no push channel to drive them.
+  There is deliberately **no RECORD_AUDIO**: V1 has no voice feature, and a
+  permission for a feature that does not exist is a lie in the install dialog.
+
+  Component names are fully qualified rather than relative: the R class is
+  generated in the namespace `com.metaloid.app`, while these classes live in
+  `com.metaloid`, so a leading-dot name would resolve to a class that does not
+  exist (lint's MissingClass check caught exactly that).
+-->
+<manifest xmlns:android="http://schemas.android.com/apk/res/android">
+
+    <uses-permission android:name="android.permission.INTERNET" />
+    <uses-permission android:name="android.permission.ACCESS_NETWORK_STATE" />
+
+    <application
+        android:name="com.metaloid.MetaIoidApplication"
+        android:allowBackup="false"
+        android:dataExtractionRules="@xml/data_extraction_rules"
+        android:enableOnBackInvokedCallback="true"
+        android:fullBackupContent="false"
+        android:icon="@mipmap/ic_launcher"
+        android:label="@string/app_name"
+        android:networkSecurityConfig="@xml/network_security_config"
+        android:roundIcon="@mipmap/ic_launcher_round"
+        android:supportsRtl="true"
+        android:theme="@style/Theme.MetaIoid"
+        android:usesCleartextTraffic="false">
+
+        <!--
+          One thin Activity. It hosts navigation and nothing else: no network
+          call, no parsing, no policy decision lives here (rule R10).
+        -->
+        <activity
+            android:name="com.metaloid.MainActivity"
+            android:configChanges="orientation|screenSize|screenLayout|keyboardHidden|uiMode"
+            android:exported="true"
+            android:launchMode="singleTop"
+            android:theme="@style/Theme.MetaIoid"
+            android:windowSoftInputMode="adjustResize">
+            <intent-filter>
+                <action android:name="android.intent.action.MAIN" />
+                <category android:name="android.intent.category.LAUNCHER" />
+            </intent-filter>
+        </activity>
+
+        <!--
+          The share sheet sends *text* to MetaIoid; binary content is not
+          accepted from other apps (no content:// intake), so there is no path
+          by which an arbitrary external URI reaches the uploader.
+        -->
+        <activity
+            android:name="com.metaloid.feature.share.ShareReceiverActivity"
+            android:excludeFromRecents="true"
+            android:exported="true"
+            android:noHistory="true"
+            android:theme="@style/Theme.MetaIoid.Transparent">
+            <intent-filter>
+                <action android:name="android.intent.action.SEND" />
+                <category android:name="android.intent.category.DEFAULT" />
+                <data android:mimeType="text/plain" />
+            </intent-filter>
+        </activity>
+    </application>
+</manifest>

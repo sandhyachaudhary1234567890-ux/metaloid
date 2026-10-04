@@ -263,6 +263,8 @@ const fileRepos = {
       if (!r) return null;
       const next = {};
       if (typeof patch.content === 'string') next.content = patch.content.slice(0, 32000);
+      if ('model' in patch) next.model = patch.model ? String(patch.model).slice(0, 120) : null;
+      if ('provider' in patch) next.provider = patch.provider ? String(patch.provider).slice(0, 40) : null;
       if (['streaming', 'complete', 'cancelled', 'error'].includes(patch.status)) next.status = patch.status;
       if ('error_code' in patch) next.error_code = patch.error_code ? String(patch.error_code).slice(0, 60) : null;
       if (Number.isFinite(patch.tokens)) next.tokens = patch.tokens;

@@ -102,7 +102,10 @@ export function registerProvider(manifest) {
       contextLimit: model.contextLimit || null,
       streaming: model.streaming !== false,
       async: model.async || false,
-      availability: model.availability || 'public'
+      availability: model.availability || 'public',
+      free: typeof model.free === 'boolean' ? model.free : null,
+      pricing: model.pricing || null,
+      unavailable: typeof model.unavailable === 'boolean' ? model.unavailable : null,
     })),
     healthCheck: healthCheck || {
       endpoint: '',

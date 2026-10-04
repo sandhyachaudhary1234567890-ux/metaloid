@@ -291,6 +291,8 @@ export const messages = {
     const args = [id, ctx.userId];
     const put = (col, val) => { args.push(val); sets.push(`${col} = $${args.length}`); };
     if (typeof patch.content === 'string') put('content', patch.content.slice(0, 32000));
+    if ('model' in patch) put('model', patch.model ? String(patch.model).slice(0, 120) : null);
+    if ('provider' in patch) put('provider', patch.provider ? String(patch.provider).slice(0, 40) : null);
     if (['streaming', 'complete', 'cancelled', 'error'].includes(patch.status)) put('status', patch.status);
     if ('error_code' in patch) put('error_code', patch.error_code ? String(patch.error_code).slice(0, 60) : null);
     if (Number.isFinite(patch.tokens)) put('tokens', patch.tokens);

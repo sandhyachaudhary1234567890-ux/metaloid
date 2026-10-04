@@ -1636,7 +1636,18 @@ app.get('/api/providers', requireAuth, (req, res) => {
   const category = req.query.category;
   const withAdapters = new Set(supportedProviders());
   res.json({
-    providers: listProviders(category).map((p) => ({ ...p, adapter: withAdapters.has(p.providerId) })),
+    providers: listProviders(category).map((p) => {
+      const manifest = getProvider(p.providerId);
+      return {
+        ...p,
+        adapter: withAdapters.has(p.providerId),
+        // A mobile key form only supports secret-based auth. Reporting the
+        // backend-declared type keeps custom/local endpoints out of a form that
+        // would otherwise ask users to paste a meaningless API key.
+        authType: manifest?.authSchema?.type || null,
+        pricingUrl: manifest?.pricingUrl || null,
+      };
+    }),
   });
 });
 
@@ -1651,6 +1662,7 @@ app.get('/api/providers/:providerId/models', requireAuth, async (req, res) => {
   if (req.params.providerId === 'openrouter') {
     try {
       const live = await listFreeModels();
+      const unavailable = new Set(modelHealth().quarantined.map((q) => q.id));
       return res.json({
         models: live.map((m) => ({
           modelId: m.id,
@@ -1661,6 +1673,9 @@ app.get('/api/providers/:providerId/models', requireAuth, async (req, res) => {
             ...(m.tier === 'coding' ? { coding: true } : {}),
           },
           contextLimit: m.context || null,
+          free: true,
+          unavailable: unavailable.has(m.id),
+          availability: unavailable.has(m.id) ? 'unavailable' : 'available',
         })),
       });
     } catch {
@@ -1668,7 +1683,14 @@ app.get('/api/providers/:providerId/models', requireAuth, async (req, res) => {
     }
   }
   const models = getProviderModels(req.params.providerId);
-  res.json({ models });
+  res.json({
+    models: models.map((model) => ({
+      ...model,
+      free: typeof model.free === 'boolean' ? model.free : null,
+      unavailable: typeof model.unavailable === 'boolean' ? model.unavailable : null,
+      pricing: model.pricing ?? null,
+    })),
+  });
 });
 
 // Credential Management
@@ -1900,11 +1922,16 @@ app.post('/api/providers/:providerId/models/refresh', requireAuth, rateLimit(10,
       models: models.map((m) => ({
         modelId: m.modelId,
         displayName: m.displayName || m.modelId,
-        capabilities: Object.entries(m.capabilities || {}).filter(([, v]) => v).map(([k]) => k),
+        capabilities: Array.isArray(m.capabilities)
+          ? m.capabilities
+          : Object.entries(m.capabilities || {}).filter(([, v]) => v).map(([k]) => k),
         contextLimit: m.contextLimit || null,
         streaming: m.streaming !== false,
         async: m.async || false,
         availability: m.availability || 'public',
+        ...(typeof m.free === 'boolean' ? { free: m.free } : {}),
+        ...(m.pricing ? { pricing: m.pricing } : {}),
+        ...(typeof m.unavailable === 'boolean' ? { unavailable: m.unavailable } : {}),
       })),
     });
     syncModelsFromRegistry({ listProviders, getProviderModels });

@@ -332,9 +332,11 @@ export class OpenRouterAdapter extends ProviderAdapter {
         displayName: model.name || model.id,
         capabilities: this._classifyCapabilities(model.id),
         contextLimit: model.context_length || null,
+        pricing: model.pricing || null,
         streaming: true,
         async: false,
-        availability: 'public'
+        availability: 'public',
+        live: true,
       }));
     } catch (error) {
       console.error('OpenRouter model listing failed:', error.message);

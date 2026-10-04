@@ -1,0 +1,18 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+  Dark mode window chrome. Same reasoning as values/themes.xml: this covers the
+  frames before Compose paints and the platform splash, nothing else. No
+  `windowLightNavigationBar` for the same reason it is absent there (API 27
+  attribute, minSdk 26, and `false` was the default anyway).
+-->
+<resources>
+    <style name="Theme.MetaIoid" parent="@android:style/Theme.Material.NoActionBar">
+        <item name="android:windowBackground">@color/brand_splash_white</item>
+        <item name="android:colorBackground">@color/brand_splash_white</item>
+        <item name="android:statusBarColor">@android:color/transparent</item>
+        <item name="android:navigationBarColor">@android:color/transparent</item>
+        <!-- Splash is white in both themes; Compose applies the selected app theme after launch. -->
+        <item name="android:windowLightStatusBar">true</item>
+        <item name="android:windowNoTitle">true</item>
+    </style>
+</resources>

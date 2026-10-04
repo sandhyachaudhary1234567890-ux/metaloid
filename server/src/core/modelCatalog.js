@@ -145,6 +145,7 @@ export function listModels(criteria = {}) {
     capabilities: m.capabilities,
     contextLimit: m.contextLimit,
     maxOutputTokens: m.maxOutputTokens,
+    pricing: m.pricing,
     availability: m.availability,
     modalities: m.modalities,
     languages: m.languages
@@ -244,6 +245,7 @@ export function syncModelsFromRegistry(providerRegistry) {
           },
           contextLimit: modelData.contextLimit,
           maxOutputTokens: modelData.maxOutputTokens,
+          pricing: modelData.pricing,
           availability: modelData.availability,
           modalities: provider.capabilities.supportedModalities
         });

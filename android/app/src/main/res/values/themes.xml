@@ -1,0 +1,29 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+  Light mode window chrome. Compose paints everything; this style only covers
+  the first frame and the splash, so the app never flashes white-on-dark or
+  dark-on-white while starting.
+
+  There is no `windowLightNavigationBar` here: it is an API 27 attribute and
+  this app supports 26, and every value it was set to (`false`) is the platform
+  default — a no-op that lint flags, correctly, on NewApi. The navigation-bar
+  icon policy is left to the platform.
+-->
+<resources>
+    <style name="Theme.MetaIoid" parent="@android:style/Theme.Material.Light.NoActionBar">
+        <item name="android:windowBackground">@color/brand_splash_white</item>
+        <item name="android:colorBackground">@color/brand_splash_white</item>
+        <item name="android:statusBarColor">@android:color/transparent</item>
+        <item name="android:navigationBarColor">@android:color/transparent</item>
+        <item name="android:windowLightStatusBar">true</item>
+        <item name="android:windowNoTitle">true</item>
+    </style>
+
+    <!-- Share-sheet intake: invisible, finishes immediately. -->
+    <style name="Theme.MetaIoid.Transparent" parent="@android:style/Theme.Material.Light.NoActionBar">
+        <item name="android:windowBackground">@android:color/transparent</item>
+        <item name="android:windowIsTranslucent">true</item>
+        <item name="android:windowNoTitle">true</item>
+        <item name="android:backgroundDimEnabled">false</item>
+    </style>
+</resources>

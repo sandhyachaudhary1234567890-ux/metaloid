@@ -1,0 +1,14 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <style name="Theme.MetaIoid" parent="@android:style/Theme.Material.Light.NoActionBar">
+        <item name="android:windowBackground">@color/brand_splash_white</item>
+        <item name="android:colorBackground">@color/brand_splash_white</item>
+        <item name="android:statusBarColor">@android:color/transparent</item>
+        <item name="android:navigationBarColor">@android:color/transparent</item>
+        <item name="android:windowLightStatusBar">true</item>
+        <item name="android:windowNoTitle">true</item>
+        <item name="android:windowSplashScreenBackground">@color/brand_splash_white</item>
+        <item name="android:windowSplashScreenAnimatedIcon">@drawable/metaloid_mark</item>
+        <item name="android:windowSplashScreenIconBackgroundColor">@color/brand_splash_white</item>
+    </style>
+</resources>
