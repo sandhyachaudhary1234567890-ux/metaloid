@@ -289,7 +289,7 @@ class ChatViewModel(private val container: AppContainer) : ViewModel() {
     fun retryLast() {
         val text = lastUserText ?: return
         if (_state.value.isStreaming) return
-        startTurnForExistingMessage(text)
+        viewModelScope.launch { startTurnForExistingMessage(text) }
     }
 
     /**
@@ -302,7 +302,7 @@ class ChatViewModel(private val container: AppContainer) : ViewModel() {
     fun regenerate() {
         val text = _state.value.messages.lastOrNull { it.role == MessageRole.User }?.text ?: lastUserText ?: return
         if (_state.value.isStreaming) return
-        startTurnForExistingMessage(text)
+        viewModelScope.launch { startTurnForExistingMessage(text) }
     }
 
     private suspend fun startTurnForExistingMessage(text: String) {

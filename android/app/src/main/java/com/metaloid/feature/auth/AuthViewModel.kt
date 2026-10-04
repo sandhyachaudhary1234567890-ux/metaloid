@@ -137,7 +137,7 @@ class AuthViewModel(private val container: AppContainer) : ViewModel() {
                 AuthMode.SUPABASE -> container.sessionManager.signUpSupabase(state.email, state.passcode)
             }
             _state.value = when (outcome) {
-                is SignUpResult.Success -> _state.value.copy(busy = false, passcode = "")
+                is SignUpResult.SignedIn -> _state.value.copy(busy = false, passcode = "")
                 is SignUpResult.EmailConfirmationRequired -> _state.value.copy(
                     busy = false,
                     passcode = "",

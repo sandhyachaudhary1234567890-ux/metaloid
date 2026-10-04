@@ -57,9 +57,10 @@ class ConnectivityMonitor(private val context: Context) {
         }
     }.distinctUntilChanged()
 
-    fun currentlyOnline(connectivity: ConnectivityManager = manager ?: return true): Boolean {
-        val network = connectivity.activeNetwork ?: return false
-        val capabilities = connectivity.getNetworkCapabilities(network) ?: return false
+    fun currentlyOnline(connectivity: ConnectivityManager? = manager): Boolean {
+        val cm = connectivity ?: return true
+        val network = cm.activeNetwork ?: return false
+        val capabilities = cm.getNetworkCapabilities(network) ?: return false
         val hasTransport = capabilities.hasTransport(NetworkCapabilities.TRANSPORT_WIFI) ||
             capabilities.hasTransport(NetworkCapabilities.TRANSPORT_CELLULAR) ||
             capabilities.hasTransport(NetworkCapabilities.TRANSPORT_ETHERNET) ||

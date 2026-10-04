@@ -26,7 +26,18 @@ import okhttp3.HttpUrl.Companion.toHttpUrlOrNull
  */
 class BackendAddress(initial: String? = null, private val allowCleartext: Boolean) {
 
-    private val _url = MutableStateFlow(initial?.let(::parse)?.getOrNull())
+    private val _url: MutableStateFlow<HttpUrl?> = MutableStateFlow(null)
+
+    init {
+        val seeded = initial?.trim().orEmpty()
+        if (seeded.isNotEmpty()) {
+            when (val parsed = parse(seeded)) {
+                is ParseResult.Success -> _url.value = parsed.value
+                is ParseResult.Failure -> Unit
+            }
+        }
+    }
+
     val url: StateFlow<HttpUrl?> = _url.asStateFlow()
 
     fun current(): HttpUrl? = _url.value
@@ -57,19 +68,19 @@ class BackendAddress(initial: String? = null, private val allowCleartext: Boolea
     private fun parse(raw: String): ParseResult {
         val withScheme = if (raw.startsWith("http://") || raw.startsWith("https://")) raw else "https://$raw"
         val url = withScheme.trimEnd('/').toHttpUrlOrNull()
-            ?: return Result.Failure("That doesn't look like a web address.")
+            ?: return ParseResult.Failure("That doesn't look like a web address.")
         if (!url.isHttps && !allowCleartext) {
-            return Result.Failure("MetaIoid needs an https:// address.")
+            return ParseResult.Failure("MetaIoid needs an https:// address.")
         }
         if (url.username.isNotEmpty() || url.password.isNotEmpty()) {
-            return Result.Failure("Remove the username and password from the address.")
+            return ParseResult.Failure("Remove the username and password from the address.")
         }
         if (url.query != null || url.fragment != null) {
-            return Result.Failure("Use just the address — no query or fragment.")
+            return ParseResult.Failure("Use just the address — no query or fragment.")
         }
         // A path is allowed (a gateway can be mounted under one, e.g.
         // https://host/metaloid); only the leading slash is normalised away.
-        return Result.Success(url)
+        return ParseResult.Success(url)
     }
 }
 

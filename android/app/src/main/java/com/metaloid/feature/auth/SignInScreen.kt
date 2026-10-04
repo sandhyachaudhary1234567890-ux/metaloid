@@ -39,7 +39,7 @@ import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.lifecycle.viewmodel.compose.viewModel
 import androidx.lifecycle.viewmodel.initializer
 import androidx.lifecycle.viewmodel.viewModelFactory
-import com.metaloid.R
+import com.metaloid.app.R
 import com.metaloid.app.AppViewModel
 import com.metaloid.core.designsystem.BannerTone
 import com.metaloid.core.designsystem.MetaBanner
@@ -209,9 +209,10 @@ fun SignInScreen(container: AppContainer, appViewModel: AppViewModel) {
             modifier = Modifier.fillMaxWidth(),
         )
 
-        if (state.notice != null) {
+        val notice = state.notice
+        if (notice != null) {
             Spacer(Modifier.height(Space.lg))
-            MetaBanner(message = state.notice, tone = BannerTone.Accent, modifier = Modifier.fillMaxWidth())
+            MetaBanner(message = notice, tone = BannerTone.Accent, modifier = Modifier.fillMaxWidth())
         }
         if (state.error != null) {
             Spacer(Modifier.height(Space.lg))

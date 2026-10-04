@@ -33,7 +33,7 @@ class ConversationsRepository(
     }
 
     @Serializable
-    private data class Cache(
+    internal data class Cache(
         val conversations: List<ConversationDto> = emptyList(),
         val messages: Map<String, List<MessageDto>> = emptyMap(),
         val savedAtEpochMs: Long = 0,
@@ -46,7 +46,7 @@ class ConversationsRepository(
 
     val hasCache: Boolean get() = cache.conversations.isNotEmpty()
 
-    suspend fun loadCache(): Cache? {
+    internal suspend fun loadCache(): Cache? {
         if (cache.savedAtEpochMs != 0L) return cache
         cacheMutex.withLock {
             if (cache.savedAtEpochMs != 0L) return cache

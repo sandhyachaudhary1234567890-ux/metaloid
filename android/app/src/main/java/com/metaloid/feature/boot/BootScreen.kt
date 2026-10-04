@@ -26,7 +26,7 @@ import androidx.compose.ui.draw.scale
 import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
-import com.metaloid.R
+import com.metaloid.app.R
 import com.metaloid.app.SystemSnapshot
 import com.metaloid.core.designsystem.BrandStatusLine
 import com.metaloid.core.designsystem.MetaIoidTheme

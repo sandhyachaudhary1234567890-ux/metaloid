@@ -61,7 +61,7 @@ class PreferencesStore(private val context: Context) {
                 ThemeMode.entries.firstOrNull { it.name == stored }
             } ?: ThemeMode.SYSTEM,
             accentId = prefs[Keys.accentId] ?: "jade",
-            reducedMotionOverride = prefs[Keys.reducedMotion],
+            reducedMotionOverride = prefs[Keys.reducedMotion]?.toBooleanStrictOrNull(),
             lastConversationId = prefs[Keys.lastConversation],
             voiceLocale = prefs[Keys.voiceLocale],
             ttsRate = prefs[Keys.ttsRate] ?: 1.0f,
@@ -78,7 +78,7 @@ class PreferencesStore(private val context: Context) {
     suspend fun setAccent(id: String) = edit { it[Keys.accentId] = id }
 
     suspend fun setReducedMotion(enabled: Boolean?) = edit { prefs ->
-        if (enabled == null) prefs.remove(Keys.reducedMotion) else prefs[Keys.reducedMotion] = enabled
+        if (enabled == null) prefs.remove(Keys.reducedMotion) else prefs[Keys.reducedMotion] = enabled.toString()
     }
 
     suspend fun setLastConversation(id: String?) = edit { prefs ->
