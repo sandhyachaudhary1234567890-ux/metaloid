@@ -197,9 +197,12 @@ jobs:
             fi
             if [ -f "$RUNNER_TEMP/ci-emulator.log" ]; then
               echo
-              echo '**Emulator smoke-test failure (last 120 lines)**'
+              echo '**Emulator smoke-test compiler/test diagnostics**'
               echo '```'
-              tail -120 "$RUNNER_TEMP/ci-emulator.log"
+              grep -nE '(^e: |^error: |Unresolved reference|Type mismatch|Expecting|Compilation error|FAILURE:|Execution failed|> Task .* FAILED)' "$RUNNER_TEMP/ci-emulator.log" | head -120 || true
+              echo
+              echo '--- last 80 lines ---'
+              tail -80 "$RUNNER_TEMP/ci-emulator.log"
               echo '```'
             fi
             if compgen -G "app/build/outputs/androidTest-results/connected/debug/*.xml" > /dev/null; then
