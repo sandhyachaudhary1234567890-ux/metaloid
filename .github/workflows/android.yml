@@ -94,6 +94,28 @@ jobs:
           fi
           gradle --no-daemon --stacktrace :app:assembleRelease 2>&1 | tee -a "$RUNNER_TEMP/ci-build.log"
 
+      # The app's own rule: a service-role key, provider key, JWT secret or
+      # encryption key must never be inside an installable APK. Nothing in the
+      # source contains one (the values are public identifiers only), and this
+      # step proves it on the artifact rather than trusting the source review.
+      - name: Secret scan of the APKs
+        run: |
+          fail=0
+          for apk in app/build/outputs/apk/debug/app-debug.apk app/build/outputs/apk/release/app-release.apk; do
+            [ -f "$apk" ] || continue
+            echo "scanning $apk ($(du -h "$apk" | cut -f1))"
+            hits=$(unzip -p "$apk" '*.dex' resources.arsc 2>/dev/null \
+              | strings -n 8 \
+              | grep -iE 'service_role|supabase_service_role|sk-or-v1|sk-ant-|sk-proj-|BEGIN [A-Z ]*PRIVATE KEY|jwt_secret|encryption_key' || true)
+            if [ -n "$hits" ]; then
+              echo "::error::a privileged secret pattern is inside $apk"
+              echo "$hits" | head -5
+              fail=1
+            fi
+          done
+          if [ "$fail" -ne 0 ]; then exit 1; fi
+          echo "no privileged secret pattern found in either APK"
+
       # The build log is not always reachable (artifact hosts are blocked in some
       # environments, and a red build publishes no APK). Reporting the compiler's
       # own message as a commit comment makes a failure readable from anywhere
