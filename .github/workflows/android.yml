@@ -97,7 +97,26 @@ jobs:
           disable-animations: true
           emulator-options: -no-window -gpu swiftshader_indirect -noaudio -no-boot-anim -no-snapshot-save
           script: |
-            bash -o pipefail -c 'cd android && gradle --no-daemon --stacktrace :app:connectedDebugAndroidTest 2>&1 | tee "$RUNNER_TEMP/ci-emulator.log"'
+            bash -o pipefail <<'BASH'
+            cd android
+            set +e
+            gradle --no-daemon --stacktrace :app:connectedDebugAndroidTest 2>&1 | tee "$RUNNER_TEMP/ci-emulator.log"
+            result=$?
+            if [ "$result" -ne 0 ]; then
+              {
+                echo
+                echo '--- recent app/emulator logcat ---'
+                adb logcat -d -v time -t 1200 2>/dev/null \
+                  | grep -E 'AndroidRuntime|FATAL EXCEPTION|System.err|com\.metaloid|metaloid|OkHttp' \
+                  | tail -120 || true
+                echo
+                echo '--- visible emulator window hierarchy ---'
+                adb shell uiautomator dump /sdcard/metaloid-window.xml >/dev/null 2>&1 || true
+                adb shell cat /sdcard/metaloid-window.xml 2>/dev/null || true
+              } | tee -a "$RUNNER_TEMP/ci-emulator.log"
+            fi
+            exit "$result"
+            BASH
 
       - name: Release APK (minified)
         env:
@@ -199,7 +218,7 @@ jobs:
               echo
               echo '**Emulator smoke-test compiler/test diagnostics**'
               echo '```'
-              grep -nE '(^e: |^error: |Unresolved reference|Type mismatch|Expecting|Compilation error|FAILURE:|Execution failed|> Task .* FAILED)' "$RUNNER_TEMP/ci-emulator.log" | head -120 || true
+              grep -nE '(^e: |^error: |Unresolved reference|Type mismatch|Expecting|Compilation error|FAILURE:|Execution failed|> Task .* FAILED|AndroidRuntime|FATAL EXCEPTION|recent app/emulator logcat|visible emulator window hierarchy)' "$RUNNER_TEMP/ci-emulator.log" | head -160 || true
               echo
               echo '--- last 80 lines ---'
               tail -80 "$RUNNER_TEMP/ci-emulator.log"

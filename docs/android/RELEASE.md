@@ -7,7 +7,7 @@
 | Latest published release | [`apk-v3`](https://github.com/sandhyachaudhary1234567890-ux/metaloid/releases/tag/apk-v3) |
 | APKs | [`metaloid-debug.apk`](https://github.com/sandhyachaudhary1234567890-ux/metaloid/releases/download/apk-v3/metaloid-debug.apk) · [`metaloid-release.apk`](https://github.com/sandhyachaudhary1234567890-ux/metaloid/releases/download/apk-v3/metaloid-release.apk) |
 | Checksums | [`SHA256SUMS.txt`](https://github.com/sandhyachaudhary1234567890-ux/metaloid/releases/download/apk-v3/SHA256SUMS.txt) |
-| V4 status | **Not published.** The V4 working tree has not completed Android CI; do not treat it as a verified installable release. |
+| V4 status | **Not published.** [Run 37211404025](https://github.com/sandhyachaudhary1234567890-ux/metaloid/actions/runs/37211404025) passed unit tests, lint, and the debug APK build, but failed the API 34 emulator startup test. Release build, APK secret scan, and APK artifact upload were skipped. Do not treat V4 as a verified installable release. |
 | Next Android version | `versionCode = 3`, `versionName = 1.0.2`, so it can update V3 (`2` / `1.0.1`). |
 
 The debug APK is easier to diagnose because it is not minified. The release APK
@@ -29,7 +29,8 @@ The APK is built by GitHub Actions, not by hand:
 | Manual run with `publish` ticked | same as the tag, with an auto-numbered tag |
 
 Artifacts expire (90 days); a GitHub Release does not. Do not tag `apk-v4` until
-the branch's Android unit tests, lint, APK builds, and APK secret scan pass.
+the branch's Android unit tests, lint, API 34 emulator smoke test, both APK
+builds, and APK secret scan pass.
 
 ## 2. Installing
 
@@ -87,7 +88,7 @@ the file does not depend on that.
 ## 5. Release checklist (re-read before tagging)
 
 1. Is the exact source revision green on the `android` workflow — unit tests,
-   lint, and **both** APK builds?
+   lint, the API 34 emulator startup smoke test, and **both** APK builds?
 2. Does the **Secret scan of the APKs** pass on both APKs? It scans every `*.dex`
    and `resources.arsc` for service-role keys, provider keys, JWT secrets and
    private-key patterns. To re-run by hand:

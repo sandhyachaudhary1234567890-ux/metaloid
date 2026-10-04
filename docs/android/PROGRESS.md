@@ -5,17 +5,22 @@ committed *and* CI has compiled it *and* its tests pass. Until then it is
 "written, unverified". No phase is ever marked done because it looks finished.
 
 Historical baseline: the published V3 release is `apk-v3` (see
-`docs/android/RELEASE.md`). The current V4 changes below are written but remain
-uncommitted and unverified until CI builds and tests this exact source.
+`docs/android/RELEASE.md`). V4 is committed to the Arena working branch, but it
+is **not ready to publish**: its latest Android CI run built the debug APK and
+passed JVM tests/lint, then failed the API 34 emulator startup smoke test. The
+current failure is still under diagnosis.
 
-## Current V4 increment — written, unverified
+## Current V4 increment — compiled, partially verified; not release-ready
 
 Changes include backend-backed first-run provider setup and readiness gating,
 Smart Connect plus server-catalog model selection, route persistence, chat
-retry/finalization metadata fixes, and related regression coverage. Android has
-not been compiled or run in this workspace. There is no V4 APK or GitHub release
-yet. See `TESTING.md` for the verification limits and
-`BACKEND_CHANGES.md` for the additive server contract changes.
+retry/finalization metadata fixes, and related regression coverage. GitHub
+Actions compiled the app and passed JVM tests, lint, and the debug APK build.
+The instrumented test ran but could not observe the signed-out screen; the
+release APK build, APK secret scan, and artifact upload were consequently
+skipped. No V4 release or successful downloadable V4 artifact exists. See
+`TESTING.md` for the verification limits and `BACKEND_CHANGES.md` for the
+additive server contract changes.
 
 ## Status at a glance
 
@@ -30,13 +35,13 @@ yet. See `TESTING.md` for the verification limits and
 | Share intake | written; CI-compiled |
 | Docs (`docs/android/*`) | written |
 | Web client regression (`npm run check`, tests, build) | run in this repository; exact output in TESTING.md §4 |
-| Whole-project CI (unit tests + lint + debug APK + minified release APK + APK secret scan) | Green for the historical V1/V2/V3 releases; **V4 has not run** |
+| Whole-project CI (unit tests + lint + debug APK + emulator smoke + minified release APK + APK secret scan) | Historical V1/V2/V3 runs are green; V4 run `37211404025` passed unit tests/lint/debug APK but failed the emulator smoke test, so release APK/secret scan/artifact upload did not run |
 | Published APK | **yes — V3 only**: GitHub Release `apk-v3`; there is no V4 artifact yet |
 
-**Historical baseline only.** The green runs recorded below prove the source
-that was built in those runs, not this V4 working tree. V4 still needs its own
-CI run. Even an APK build does **not** prove the app runs: device and live
-backend behavior must be verified separately and reported honestly.
+**Historical runs below are baseline evidence only.** V4 has its own CI run,
+but it is not green and did not produce a downloadable artifact. Even a green
+APK build does **not** prove the app runs: device and live-backend behavior must
+be verified separately and reported honestly.
 
 ## What changed after the first green build
 
@@ -80,7 +85,7 @@ entry behind it:
 | 13 — Voice | **Not shipped in this build.** The gateway reports `voice: false`; the client shows voice as unavailable rather than offering a control that cannot work. The on-device recogniser path is the first item of the next increment (see DECISIONS.md § Voice). | deliberately not implemented |
 | 14 — Settings & diagnostics | Theme, accent, reduced motion, server address, sign-out (device and everywhere), capabilities report, redacted log export. | done |
 | 15 — Hardening | No secrets in the app or the build; release checklist; R8 rules; cleartext refused outside debug; link handling restricted to http(s) without embedded credentials. | done |
-| 16 — Tests | JVM unit tests for the pure logic (parser, reducer, redaction, error map, time, markdown, routes, attachment size/draft store where pure) + CI assembly and lint. CI run `37193950163` passed all of it; the two defects CI's first red runs found (SSE comment buffering, Markdown list depth) are fixed by tests, not by weakening them. | done |
+| 16 — Tests | JVM unit tests for the pure logic (parser, reducer, redaction, error map, time, markdown, routes, attachment size/draft store where pure) + CI assembly, lint, and API 34 emulator startup. Historical CI run `37193950163` passed the then-current suite; V4 run `37211404025` passed JVM tests/lint/debug assembly but the instrumented startup test failed, so this phase remains in progress. | in progress |
 | 17 — Report | This file plus `TESTING.md`. | done |
 
 ## What is deliberately absent

@@ -2,16 +2,27 @@
 
 What is proven, how, and — just as important — what is not.
 
-## Current V4 status (2026-10-04)
+## Current V4 status (last completed CI: 2026-10-04, commit `710564e`)
 
-The V4 Android changes are not yet compiled by GitHub Actions or installed on
-a device. No V4 APK exists. This environment has no Java/Gradle Android
-toolchain. The previous green Android CI records below apply only to earlier
-released source. For the current backend changes, `npm test --prefix server`
-passed **78/78**, the provider HTTP matrix passed **26/26**, and the root
-TypeScript check plus production web build passed. These results do not verify
-the Android client; its CI, APK secret scan, and device behavior remain
-outstanding.
+V4 is **not ready to publish**. GitHub Actions run
+[37211404025](https://github.com/sandhyachaudhary1234567890-ux/metaloid/actions/runs/37211404025)
+passed JVM unit tests, lint, and the debug APK build. The API 34 emulator
+compiled and ran `AppLaunchSmokeTest`, but the app did not expose the expected
+"Sign in to continue" text within 45 seconds. Release APK build, APK secret
+scan, and APK upload were skipped after that failure. No V4 release or
+successful downloadable V4 artifact exists. The next run is being instrumented
+to capture the window hierarchy and app logcat; do not infer the cause before
+those diagnostics are available.
+
+This environment has no Java/Gradle Android toolchain, so the Android build
+results are from GitHub Actions only. Fresh checks against this tree on
+2026-10-04: `npm run check` passed; `npm run build` passed;
+`npm --prefix server test` passed **78/78**; and `npm run test:unit` reported
+**56 passed, 1 failed**
+(the pre-existing session-restoration/chat-loop test described below). The
+provider HTTP matrix had previously passed **26/26**. These checks do not
+verify the Android client, production deployment compatibility, signing
+continuity, or behavior on a physical device.
 
 ## 1. How the app is verified
 
@@ -128,17 +139,17 @@ was a genuinely wrong test (a 2026 timestamp compared against a January 2026
 
 What is still not verified:
 
-* The Android workflow runs a cold-launch instrumented smoke test on an API 34
-  emulator. This exercises Activity creation, bootstrap, and the signed-out
-  screen; it is not a full device acceptance pass for chat, provider setup,
-  keyboard/insets, TalkBack, or network recovery.
-* **The app has never been run against a live gateway, and has never been run at
-  all.** Every behaviour in `CONTRACT_MAP.md` is derived from the server source
-  and the API document, then encoded in unit tests — but "derived and
-  unit-tested" is not "observed working". The first person to install the APK
-  (Release `apk-v1`) is exercising it for the first time. A compile and a unit
-  test cannot see a wrong URL join, a missing capability gate or a crash on a
-  real device.
+* The cold-launch instrumentation test has run on an API 34 emulator, but its
+  latest run did **not** reach the signed-out screen. Until the window/logcat
+  diagnostics identify and resolve that failure, Activity bootstrap and
+  signed-out behavior are not verified. Even a passing startup smoke test would
+  not cover chat, provider setup, keyboard/insets, TalkBack, or network recovery.
+* **The app has not been verified against the live gateway or on a physical
+  device.** The emulator test did not establish that sign-in can proceed. Every
+  behavior in `CONTRACT_MAP.md` is derived from server source/API documentation
+  and encoded in unit tests — but "derived and unit-tested" is not "observed
+  working". A compile and a unit test cannot see a wrong URL join, a missing
+  capability gate, or a crash on a real device.
 * **No performance numbers.** Startup time, frame timing during streaming and
   memory use are unmeasured claims until someone measures them.
 * **Accessibility was designed, not audited.** Content descriptions exist for
