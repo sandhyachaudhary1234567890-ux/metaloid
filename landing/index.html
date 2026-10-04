@@ -241,6 +241,33 @@
   /* Fixed editor tones: the code block stays dark in both schemes. */
   .c-dim { color: #948D7F; } .c-acc { color: #5CC79A; }
 
+  /* android app promo */
+  .app-promo { display: grid; grid-template-columns: 1.05fr .95fr; gap: 56px; align-items: center; }
+  .app-meta { display: flex; gap: 8px; flex-wrap: wrap; margin: 22px 0 26px; }
+  .app-meta span { font-size: 12px; color: var(--fg-2); border: 1px solid var(--border); border-radius: 999px; padding: 5px 12px; background: var(--surface); }
+  .app-note { font-size: 12.5px; color: var(--fg-3); margin-top: 16px; max-width: 520px; }
+  .app-note a { color: var(--jade); border-bottom: 1px solid var(--jade-line); }
+  .phone {
+    width: 230px; margin: 0 auto; border: 1px solid var(--border-2); border-radius: 38px;
+    background: var(--bg-2); padding: 12px; box-shadow: 0 30px 60px -30px rgba(0,0,0,.7);
+  }
+  .phone-screen {
+    border: 1px solid var(--border); border-radius: 28px; background: var(--bg);
+    padding: 14px 12px 16px; display: flex; flex-direction: column; gap: 9px; min-height: 380px;
+  }
+  .phone-notch { width: 86px; height: 5px; border-radius: 999px; background: var(--border-2); margin: 2px auto 6px; }
+  .phone-brand { display: flex; align-items: center; gap: 7px; font-size: 10px; font-weight: 800; letter-spacing: .14em; color: var(--fg); padding: 2px 2px 4px; }
+  .phone-brand img { width: 15px; height: 15px; }
+  .bubble { max-width: 88%; border-radius: 12px; padding: 8px 10px; font-size: 11px; line-height: 1.5; }
+  .bubble.user { align-self: flex-end; background: var(--surface-2); border: 1px solid var(--border-2); }
+  .bubble.ai { background: var(--surface); border: 1px solid var(--border); }
+  .bubble.ai .go { display: block; margin-top: 6px; font-size: 10px; color: var(--jade); font-weight: 700; }
+  .phone-input {
+    margin-top: auto; border: 1px solid var(--border-2); border-radius: 999px;
+    padding: 9px 13px; font-size: 10.5px; color: var(--fg-3); display: flex; justify-content: space-between; align-items: center;
+  }
+  .phone-send { width: 22px; height: 22px; border-radius: 50%; background: var(--jade-solid); color: var(--jade-on-solid); display: grid; place-items: center; font-size: 12px; }
+
   /* closing */
   .closing { text-align: left; padding: 96px 0; }
   .closing h2 { font-size: clamp(32px, 4.4vw, 50px); max-width: 640px; }
@@ -255,7 +282,7 @@
   .foot nav a:hover { color: var(--fg); }
 
   @media (max-width: 980px) {
-    .hero-grid { grid-template-columns: 1fr; gap: 44px; }
+    .hero-grid, .app-promo { grid-template-columns: 1fr; gap: 44px; }
     .g3, .steps { grid-template-columns: 1fr 1fr; }
     .g2, .states { grid-template-columns: 1fr 1fr; }
     .nav-links { display: none; }
@@ -329,6 +356,7 @@
       <a href="#world">World</a>
       <a href="#how">How it works</a>
       <a href="#trust">Trust</a>
+      <a href="#android">Android app</a>
     </nav>
     <a class="btn btn-solid" href="/app/">Get Started</a>
   </div>
@@ -350,6 +378,7 @@
           <a class="btn btn-lg" href="#system">Explore MetaIoid</a>
         </div>
         <p class="cta-note">No account needed to look around — sign in only when you want your data to follow you across devices.</p>
+        <p class="cta-note">On Android? <a href="#android" style="color:var(--jade)">Get the app — one tap, no store needed.</a></p>
         <div class="status-row" aria-label="Deployment facts">
           <span><span class="k">App + API:</span> <span class="v">one deployment</span></span>
           <span aria-hidden="true">·</span>
@@ -595,6 +624,49 @@
     </div>
   </section>
 
+  <section class="block" id="android" aria-labelledby="android-h">
+    <div class="wrap app-promo">
+      <div>
+        <div class="kicker">MetaIoid for Android</div>
+        <h2 id="android-h">Your gateway, in your pocket.</h2>
+        <p style="color:var(--fg-2);font-size:15.5px;max-width:520px;margin:14px 0 0">
+          The full MetaIoid app as a direct download — chat, voice, memory and
+          missions against your own gateway. No store account, no waiting room:
+          tap and it installs.
+        </p>
+        <div class="app-meta" aria-label="Download details">
+          <span>metaloid-debug.apk</span>
+          <span>≈ 11 MB</span>
+          <span>Android 8.0+</span>
+          <span>apk-v3 · debug build</span>
+        </div>
+        <div class="cta-row">
+          <a class="btn btn-solid btn-lg" href="https://github.com/sandhyachaudhary1234567890-ux/metaloid/releases/download/apk-v3/metaloid-debug.apk" download="metaloid-debug.apk">Download APK</a>
+          <a class="btn btn-lg" href="/app/">Try the web app first</a>
+        </div>
+        <p class="app-note">
+          One tap starts the download straight from the release — no GitHub page in between.
+          Android will ask you to allow installs from this source once. On first run, point
+          the app at your gateway. Checksums and the minified release build live on the
+          <a href="https://github.com/sandhyachaudhary1234567890-ux/metaloid/releases/tag/apk-v3">apk-v3 release page</a>.
+        </p>
+      </div>
+      <figure class="preview" aria-label="Illustrated preview of the MetaIoid Android app" style="margin:0">
+        <div class="phone" aria-hidden="true">
+          <div class="phone-screen">
+            <div class="phone-notch"></div>
+            <div class="phone-brand"><img src="/app/brand/metaloid-mark.png" alt="" />METALOID</div>
+            <div class="bubble user">Summarise today in 3 lines.</div>
+            <div class="bubble ai">Done — markets, one launch, one result.<span class="go">ONLINE · free model</span></div>
+            <div class="bubble user">Remind me about the launch.</div>
+            <div class="phone-input"><span>Message Metaloid…</span><span class="phone-send">↑</span></div>
+          </div>
+        </div>
+        <figcaption>Illustrated preview — sample content, not a screenshot.</figcaption>
+      </figure>
+    </div>
+  </section>
+
   <div class="closing">
     <div class="wrap">
       <h2>Your intelligence, on your infrastructure.</h2>
@@ -619,6 +691,7 @@
       <a href="#world">World</a>
       <a href="#how">How it works</a>
       <a href="#trust">Trust</a>
+      <a href="#android">Android app</a>
       <a href="https://github.com/sandhyachaudhary1234567890-ux/metaloid">GitHub</a>
     </nav>
   </div>
