@@ -98,7 +98,8 @@ jobs:
           emulator-options: -no-window -gpu swiftshader_indirect -noaudio -no-boot-anim -no-snapshot-save
           script: |
             bash -o pipefail <<'BASH'
-            cd android
+            cd "$GITHUB_WORKSPACE/android" || { echo "::error::Android project directory not found under $GITHUB_WORKSPACE"; exit 1; }
+            echo "Emulator Gradle working directory: $PWD"
             set +e
             gradle --no-daemon --stacktrace :app:connectedDebugAndroidTest 2>&1 | tee "$RUNNER_TEMP/ci-emulator.log"
             result=$?

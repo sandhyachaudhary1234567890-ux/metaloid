@@ -60,8 +60,12 @@ was attempted here.
 
 Android CI run `37211404025` passed JVM unit tests, lint, and the debug APK
 build; its API 34 startup instrumentation test failed to reach the expected
-signed-out screen. The release APK build and secret scan were skipped. V4 has
-not been installed on a physical device; V3/V4 signing continuity and
-performance/accessibility audits are also outstanding. Do not use
-`METAIOID V4 — MARKET READY` or publish an APK release until the CI, deployed
-backend, signing, and device release gates are actually satisfied.
+signed-out screen. Follow-up run `37213055749` passed those same build steps but
+failed before instrumentation because the Gradle command ran from the repository
+root. The next workflow revision uses an absolute path and will emit the UI
+hierarchy/app logcat; the actual startup cause remains unknown. The release APK
+build and secret scan have not passed. V4 has not been installed on a physical
+device; V3/V4 signing continuity and performance/accessibility audits are also
+outstanding. Do not use `METAIOID V4 — MARKET READY` or publish an APK release
+until the CI, deployed backend, signing, and device release gates are actually
+satisfied.

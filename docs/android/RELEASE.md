@@ -7,7 +7,7 @@
 | Latest published release | [`apk-v3`](https://github.com/sandhyachaudhary1234567890-ux/metaloid/releases/tag/apk-v3) |
 | APKs | [`metaloid-debug.apk`](https://github.com/sandhyachaudhary1234567890-ux/metaloid/releases/download/apk-v3/metaloid-debug.apk) · [`metaloid-release.apk`](https://github.com/sandhyachaudhary1234567890-ux/metaloid/releases/download/apk-v3/metaloid-release.apk) |
 | Checksums | [`SHA256SUMS.txt`](https://github.com/sandhyachaudhary1234567890-ux/metaloid/releases/download/apk-v3/SHA256SUMS.txt) |
-| V4 status | **Not published.** [Run 37211404025](https://github.com/sandhyachaudhary1234567890-ux/metaloid/actions/runs/37211404025) passed unit tests, lint, and the debug APK build, but failed the API 34 emulator startup test. Release build, APK secret scan, and APK artifact upload were skipped. Do not treat V4 as a verified installable release. |
+| V4 status | **Not published.** [Run 37213055749](https://github.com/sandhyachaudhary1234567890-ux/metaloid/actions/runs/37213055749) passed unit tests/lint/debug assembly but failed before instrumentation because Gradle ran from the repository root. [Run 37211404025](https://github.com/sandhyachaudhary1234567890-ux/metaloid/actions/runs/37211404025) did run the emulator test, which failed to reach the sign-in text. No V4 release APK, secret scan, or downloadable artifact is verified. |
 | Next Android version | `versionCode = 3`, `versionName = 1.0.2` (greater than V3's `2` / `1.0.1`). An in-place update also requires the signing certificate to match V3; that continuity is not yet verified. |
 
 The debug APK is easier to diagnose because it is not minified. The release APK

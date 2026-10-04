@@ -2,17 +2,19 @@
 
 What is proven, how, and — just as important — what is not.
 
-## Current V4 status (last completed CI: 2026-10-04, commit `710564e`)
+## Current V4 status (last completed CI: 2026-10-04, run `37213055749`)
 
-V4 is **not ready to publish**. GitHub Actions run
-[37211404025](https://github.com/sandhyachaudhary1234567890-ux/metaloid/actions/runs/37211404025)
-passed JVM unit tests, lint, and the debug APK build. The API 34 emulator
-compiled and ran `AppLaunchSmokeTest`, but the app did not expose the expected
-"Sign in to continue" text within 45 seconds. Release APK build, APK secret
-scan, and APK upload were skipped after that failure. No V4 release or
-successful downloadable V4 artifact exists. The next run is being instrumented
-to capture the window hierarchy and app logcat; do not infer the cause before
-those diagnostics are available.
+V4 is **not ready to publish**. In run
+[37211404025](https://github.com/sandhyachaudhary1234567890-ux/metaloid/actions/runs/37211404025),
+unit tests, lint, and the debug APK build passed, but the API 34 emulator test
+ran and did not observe "Sign in to continue" within 45 seconds. A follow-up,
+[37213055749](https://github.com/sandhyachaudhary1234567890-ux/metaloid/actions/runs/37213055749),
+again passed unit tests/lint/debug assembly, but the smoke-test Gradle command
+was launched from the repository root and failed before any instrumentation
+ran. The workflow now uses the absolute Android project path and captures the
+UI hierarchy/app logcat on the next attempt; the app-side cause remains unknown.
+Release APK build, APK secret scan, and APK upload have not completed. No V4
+release or successful downloadable V4 artifact exists.
 
 This environment has no Java/Gradle Android toolchain, so the Android build
 results are from GitHub Actions only. Fresh checks against this tree on
