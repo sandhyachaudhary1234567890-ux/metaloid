@@ -167,7 +167,7 @@ jobs:
             exit 0
           fi
           {
-            echo "CI: \`:app:testDebugUnitTest\`, \`:app:assembleDebug\` or \`:app:lintDebug\` failed for \`${GITHUB_SHA:0:7}\`."
+            echo "Android CI failed for \`${GITHUB_SHA:0:7}\`."
             echo
             echo '```'
             # Compiler messages first: they are the only actionable part.

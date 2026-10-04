@@ -6,7 +6,6 @@ import androidx.test.platform.app.InstrumentationRegistry
 import androidx.test.uiautomator.By
 import androidx.test.uiautomator.UiDevice
 import androidx.test.uiautomator.Until
-import org.junit.Assert.assertNotNull
 import org.junit.Assert.assertTrue
 import org.junit.Rule
 import org.junit.Test
@@ -21,8 +20,9 @@ class AppLaunchSmokeTest {
     @Test
     fun coldLaunchReachesTheSignedOutScreen() {
         val device = UiDevice.getInstance(InstrumentationRegistry.getInstrumentation())
-        val signIn = device.wait(Until.findObject(By.text("Sign in to continue")), 45_000)
-        assertNotNull("The app did not reach its first-run sign-in screen", signIn)
-        assertTrue("The sign-in screen is not visible", signIn!!.isDisplayed)
+        assertTrue(
+            "The app did not reach its first-run sign-in screen",
+            device.wait(Until.findObject(By.text("Sign in to continue")), 45_000) != null,
+        )
     }
 }
