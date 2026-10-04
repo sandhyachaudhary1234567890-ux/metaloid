@@ -96,6 +96,19 @@ export async function storeUserCredential(userId, providerId, credential, metada
     throw new Error('credential required');
   }
 
+  // The account contract is the store chat reads (providerGateway resolves
+  // keys through accountBridge). Writing anywhere else saves a key the LLM
+  // can never use — the exact "entered the key but nothing activated" bug —
+  // so authoritative deployments write through the contract.
+  if (accountIsAuthoritative()) {
+    const row = await accountBridge.saveCredential(userId, providerId, credential);
+    return {
+      id: row.id, providerId, isActive: true,
+      createdAt: row.created_at || new Date().toISOString(),
+      redacted: redactCredential(credential),
+    };
+  }
+
   const db = await supa();
   if (db) {
     return db.credStore(userId, providerId, encrypt(credential), metadata, redactCredential(credential));
@@ -254,6 +267,13 @@ export async function getUserCredential(userId, providerId) {
 export async function deleteUserCredential(userId, providerId) {
   needUser(userId);
 
+  // Delete from the store that was written to: the account contract when it
+  // is authoritative, otherwise the legacy branches below.
+  if (accountIsAuthoritative()) {
+    const removed = await accountBridge.removeCredential(userId, providerId);
+    return removed ? { ok: true } : { ok: false, error: 'Credential not found' };
+  }
+
   const db = await supa();
   if (db) return db.credDelete(userId, providerId);
   
@@ -285,6 +305,16 @@ export async function deleteUserCredential(userId, providerId) {
  */
 export async function rotateUserCredentialById(userId, credentialId, newCredential) {
   needUser(userId);
+
+  // Rotation is an overwrite through the same contract store: the new secret
+  // lands in the envelope chat reads, and the row is marked unproven again.
+  if (accountIsAuthoritative()) {
+    const rows = await accountBridge.listCredentials(userId);
+    const found = rows.find((c) => c.id === credentialId);
+    if (!found) return { ok: false, error: 'Credential not found' };
+    const row = await accountBridge.saveCredential(userId, found.provider, newCredential);
+    return { ok: true, rotationCount: row.rotation_count || 0, redacted: redactCredential(newCredential) };
+  }
 
   const db = await supa();
   if (db) {
@@ -336,6 +366,15 @@ export async function rotateUserCredentialById(userId, credentialId, newCredenti
  */
 export async function rotateUserCredential(userId, providerId, newCredential) {
   needUser(userId);
+
+  // Same contract rule as every other write: rotate through the store chat
+  // reads, so the replacement secret is usable immediately.
+  if (accountIsAuthoritative()) {
+    const rows = await accountBridge.listCredentials(userId);
+    const found = rows.find((c) => c.provider === providerId);
+    if (!found) return { ok: false, error: 'Credential not found' };
+    return rotateUserCredentialById(userId, found.id, newCredential);
+  }
 
   const db = await supa();
   if (db) {

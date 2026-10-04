@@ -228,10 +228,13 @@ export async function streamChat(
   const baseUrl = reachableBase;
 
   // ---- real path: POST SSE ----
+  // The gateway requires a Bearer session on /api/chat (except local-open
+  // dev). Without the token every signed-in user got a 401 here and the LLM
+  // never activated — this header is the fix.
   const res = await fetch(`${baseUrl}/api/chat`, {
     method: 'POST',
     signal: opts.signal,
-    headers: { 'Content-Type': 'application/json' },
+    headers: authHeaders({ 'Content-Type': 'application/json' }),
     body: JSON.stringify({ message: prompt, history: opts.history.slice(-10), task: opts.task, context: opts.context }),
   });
   if (!res.ok || !res.body) {
@@ -305,7 +308,7 @@ export interface OsintFinding {
 export async function osintCreate(configuredUrl: string, target: string) {
   const res = await fetch(`${baseOf(configuredUrl)}/api/osint/investigations`, {
     method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
+    headers: authHeaders({ 'Content-Type': 'application/json' }),
     body: JSON.stringify({ target }),
   });
   const j = await res.json();
@@ -314,12 +317,12 @@ export async function osintCreate(configuredUrl: string, target: string) {
 }
 
 export async function osintRun(configuredUrl: string, id: string) {
-  const res = await fetch(`${baseOf(configuredUrl)}/api/osint/investigations/${id}/run`, { method: 'POST' });
+  const res = await fetch(`${baseOf(configuredUrl)}/api/osint/investigations/${id}/run`, { method: 'POST', headers: authHeaders() });
   if (!res.ok) throw new Error('Could not start investigation.');
 }
 
 export async function osintGet(configuredUrl: string, id: string) {
-  const res = await fetch(`${baseOf(configuredUrl)}/api/osint/investigations/${id}`);
+  const res = await fetch(`${baseOf(configuredUrl)}/api/osint/investigations/${id}`, { headers: authHeaders() });
   if (!res.ok) throw new Error('Investigation not found.');
   return res.json() as Promise<{
     id: string; target: string; type: string; status: string; progress: number;
@@ -332,7 +335,8 @@ export async function osintGet(configuredUrl: string, id: string) {
 
 export async function osintFindings(configuredUrl: string, id: string, type = 'all', confidence = 'all') {
   const res = await fetch(
-    `${baseOf(configuredUrl)}/api/osint/investigations/${id}/findings?type=${type}&confidence=${confidence}`
+    `${baseOf(configuredUrl)}/api/osint/investigations/${id}/findings?type=${type}&confidence=${confidence}`,
+    { headers: authHeaders() }
   );
   if (!res.ok) throw new Error('Findings unavailable.');
   const j = await res.json();
@@ -363,7 +367,7 @@ export interface Mission {
 async function missionReq(configuredUrl: string, path: string, init?: RequestInit) {
   const res = await fetch(`${baseOf(configuredUrl)}${path}`, {
     ...init,
-    headers: { 'Content-Type': 'application/json', ...(init?.headers || {}) },
+    headers: authHeaders({ 'Content-Type': 'application/json', ...((init?.headers as Record<string, string>) || {}) }),
   });
   const j = await res.json().catch(() => ({}));
   if (!res.ok) throw new Error((j as { error?: string }).error || `Mission API ${res.status}`);

@@ -419,17 +419,17 @@ export const providerCredentials = {
       const r = await run(
         `insert into public.user_provider_credentials (user_id, provider, label, secret_ciphertext, masked_hint, key_version, status)
          values ($1, $2, $3, $4, $5, $6, 'unverified')
-         on conflict (user_id, provider, label) do update set
-           secret_ciphertext = excluded.secret_ciphertext,
-           masked_hint       = excluded.masked_hint,
-           key_version       = excluded.key_version,
-           -- a replaced key has not been proven: reset the verdict
-           status            = case when public.user_provider_credentials.masked_hint is distinct from excluded.masked_hint
-                                    then 'unverified' else public.user_provider_credentials.status end,
-           last_rotated_at   = now(),
-           rotation_count    = public.user_provider_credentials.rotation_count + 1,
-           updated_at        = now()
-         returning id, user_id, provider, label, masked_hint, key_version, status, last_checked_at, created_at, updated_at`,
+          on conflict (user_id, provider, label) do update set
+            secret_ciphertext = excluded.secret_ciphertext,
+            masked_hint       = excluded.masked_hint,
+            key_version       = excluded.key_version,
+            -- a replaced key has not been proven: reset the verdict
+            status            = case when public.user_provider_credentials.masked_hint is distinct from excluded.masked_hint
+                                     then 'unverified' else public.user_provider_credentials.status end,
+            last_rotated_at   = now(),
+            rotation_count    = public.user_provider_credentials.rotation_count + 1,
+            updated_at        = now()
+          returning id, user_id, provider, label, masked_hint, key_version, status, last_checked_at, created_at, updated_at, rotation_count, last_rotated_at`,
         [ctx.userId, provider, label, envelope, masked, keyVersion]
       );
       return one(r);

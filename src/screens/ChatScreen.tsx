@@ -4,6 +4,7 @@ import { Square, MoreHorizontal, Pencil, Trash2, Plus, Telescope, Hammer, ChartN
 import { useApp } from '../lib/store';
 import { useAuth } from '../lib/auth';
 import { ChatWindow } from '../components/ChatWindow';
+import { SetupChecklist } from '../components/SetupChecklist';
 import { CommandBar, COMPOSER_MODES, type ComposerMode } from '../components/CommandBar';
 import { Artwork } from '../components/ui/Artwork';
 import { Proactive } from '../components/ui/Proactive';
@@ -93,6 +94,9 @@ function Welcome({ firstName, onPick }: { firstName: string | null; onPick: (m: 
             </motion.button>
           ))}
         </div>
+
+        {/* Process indicator: only renders while the app is not live. */}
+        <SetupChecklist />
 
         {/* Real task activity, emitted by the agent runtime. Hidden until then. */}
         <div className="mt-6 w-full">
