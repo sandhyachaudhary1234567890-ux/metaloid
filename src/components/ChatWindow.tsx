@@ -139,8 +139,9 @@ const AssistantTurn = memo(function AssistantTurn({
           The tap opens the provider setup HERE, not a settings page the user
           then has to search: a demo reply is the moment they most want the
           fix, and it used to cost them a trip through Settings with no key
-          control in sight. */}
-      {!msg.streaming && msg.demo && shown && (
+          control in sight. Gated on the CURRENT connection: an old demo bubble
+          must never nag a user whose key is connected now. */}
+      {!msg.streaming && msg.demo && shown && connection !== 'online' && (
         <p className="mt-2 text-small text-[var(--fg-muted)]">
           Demo reply — no AI connected.{' '}
           <button

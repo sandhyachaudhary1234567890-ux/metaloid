@@ -150,9 +150,16 @@ export function pickCandidates(models, task, max = 4, preferredModel = '') {
   const push = (m) => {
     if (m && !out.some((x) => x.id === m.id)) out.push(m);
   };
+  // Strictly free: this is the shared free-tier path, so an override that is
+  // not a :free slug is refused rather than billed. Paid models stay reachable
+  // only through a user's own connected provider key (their choice, their key).
   if (ENV_MODEL) {
-    const envModel = models.find((m) => m.id === ENV_MODEL) || { id: ENV_MODEL, name: ENV_MODEL, tier: task };
-    push(envModel);
+    if (!ENV_MODEL.endsWith(':free')) {
+      console.warn(`[gateway] ignoring non-free OPENROUTER_MODEL override: ${ENV_MODEL}`);
+    } else {
+      const envModel = models.find((m) => m.id === ENV_MODEL) || { id: ENV_MODEL, name: ENV_MODEL, tier: task };
+      push(envModel);
+    }
   }
   // A signed-in user's saved model is an explicit choice, so honour it before
   // task-tier ordering when it is still present in the live free catalogue.

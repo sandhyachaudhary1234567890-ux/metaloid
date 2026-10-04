@@ -82,6 +82,9 @@ export function SetupChecklist() {
       <p className="text-small font-semibold tracking-[0.14em] text-[var(--fg-muted)]">
         GET LIVE IN {steps.length} STEPS
       </p>
+      <p className="mt-1 text-small text-[var(--fg-muted)]">
+        One key activates everything — OpenRouter, Groq, Gemini, OpenAI and more. Extra keys are your choice for more power.
+      </p>
       <ol className="mt-2.5 flex flex-col gap-2">
         {steps.map((s) => (
           <li key={s.n} className="flex items-center gap-3">
