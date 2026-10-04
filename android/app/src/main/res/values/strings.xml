@@ -1,0 +1,36 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+  App-level strings and accessibility labels.
+
+  Feature copy lives next to the state that produces it (in Kotlin), because
+  every user-visible sentence in this app is the output of a typed error or
+  state mapping that is unit-tested. These are the strings the platform needs:
+  the application label, the launcher alias and the content descriptions of
+  controls whose meaning is not in their icon.
+-->
+<resources>
+    <string name="app_name">MetaIoid</string>
+
+    <!-- Content descriptions: icon-only controls. -->
+    <string name="cd_send">Send message</string>
+    <string name="cd_stop">Stop generating</string>
+    <string name="cd_attach">Add attachment</string>
+    <string name="cd_mic">Start voice input</string>
+    <string name="cd_new_chat">New conversation</string>
+    <string name="cd_back">Back</string>
+    <string name="cd_menu">More options</string>
+    <string name="cd_copy">Copy</string>
+    <string name="cd_share">Share</string>
+    <string name="cd_close">Close</string>
+    <string name="cd_settings">Settings</string>
+    <string name="cd_send_stop_switch">Send or stop</string>
+
+    <!-- Brand status line (Section 8.11). Never claims LIVE on its own: the
+         text is chosen in Kotlin from the last real capability check. -->
+
+    <!--
+      Decorative brand art is hidden from accessibility; the status line beside
+      it carries the meaning, so screen readers announce one thing, not two.
+    -->
+    <string name="cd_brand_mark">MetaIoid</string>
+</resources>

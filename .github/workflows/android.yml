@@ -1,0 +1,169 @@
+name: android
+
+# Builds, lints and tests the MetaIoid Android client, then publishes the APKs.
+#
+# Why this runs on GitHub-hosted runners: the APK must be produced from the
+# committed sources by a clean, reproducible toolchain. The workflow is the
+# single source of truth for "the app compiles and its tests pass".
+#
+#   push to any branch  -> build + unit tests + lint (fast feedback)
+#   push a tag apk-*    -> the same build, plus a GitHub Release with the APKs
+#   manual run          -> build; tick "publish" to also cut a release
+#
+# Signing: a release APK is signed with the repository's *debug* key unless a
+# real keystore is supplied through secrets (ANDROID_KEYSTORE_BASE64,
+# ANDROID_KEYSTORE_PASSWORD, ANDROID_KEY_ALIAS, ANDROID_KEY_PASSWORD). That is
+# a deliberate, documented choice for a personal build — see docs/android/RELEASE.md.
+
+on:
+  push:
+    branches: ['**']
+    tags: ['apk-*']
+    paths:
+      - 'android/**'
+      - '.github/workflows/android.yml'
+  pull_request:
+    paths:
+      - 'android/**'
+      - '.github/workflows/android.yml'
+  workflow_dispatch:
+    inputs:
+      publish:
+        description: 'Also create a GitHub Release with the APKs'
+        type: boolean
+        default: false
+
+permissions:
+  contents: write
+
+concurrency:
+  group: android-${{ github.ref }}
+  cancel-in-progress: false
+
+jobs:
+  build:
+    name: Build, test, lint
+    runs-on: ubuntu-latest
+    timeout-minutes: 60
+    defaults:
+      run:
+        working-directory: android
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up JDK 17
+        uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '17'
+
+      - name: Set up Gradle
+        uses: gradle/actions/setup-gradle@v4
+        with:
+          gradle-version: '8.9'
+          cache-read-only: false
+
+      - name: Show toolchain
+        run: |
+          java -version
+          gradle --version
+          echo "ANDROID_HOME=$ANDROID_HOME"
+          ls "$ANDROID_HOME/platforms" || true
+
+      - name: Unit tests + lint + debug APK
+        run: |
+          gradle --no-daemon --stacktrace \
+            :app:testDebugUnitTest \
+            :app:assembleDebug
+
+      - name: Lint (debug + release)
+        run: gradle --no-daemon --stacktrace :app:lintDebug
+
+      - name: Release APK (minified)
+        env:
+          ANDROID_KEYSTORE_BASE64: ${{ secrets.ANDROID_KEYSTORE_BASE64 }}
+          ANDROID_KEYSTORE_PASSWORD: ${{ secrets.ANDROID_KEYSTORE_PASSWORD }}
+          ANDROID_KEY_ALIAS: ${{ secrets.ANDROID_KEY_ALIAS }}
+          ANDROID_KEY_PASSWORD: ${{ secrets.ANDROID_KEY_PASSWORD }}
+        run: |
+          if [ -n "$ANDROID_KEYSTORE_BASE64" ]; then
+            echo "$ANDROID_KEYSTORE_BASE64" | base64 -d > "$RUNNER_TEMP/release.jks"
+            echo "METALOID_KEYSTORE=$RUNNER_TEMP/release.jks" >> "$GITHUB_ENV"
+          fi
+          gradle --no-daemon --stacktrace :app:assembleRelease
+
+      - name: Test reports
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: test-reports
+          path: |
+            android/app/build/reports/tests/**
+            android/app/build/reports/lint-results-*.html
+          if-no-files-found: ignore
+          retention-days: 14
+
+      - name: Collect APKs
+        run: |
+          mkdir -p "$RUNNER_TEMP/apk"
+          # A stable, human-readable name: the download link never changes shape.
+          cp app/build/outputs/apk/debug/app-debug.apk "$RUNNER_TEMP/apk/metaloid-debug.apk" 2>/dev/null || true
+          cp app/build/outputs/apk/release/app-release.apk "$RUNNER_TEMP/apk/metaloid-release.apk" 2>/dev/null || true
+          ls -l "$RUNNER_TEMP/apk"
+          # Fail loudly rather than publish an empty release.
+          test -f "$RUNNER_TEMP/apk/metaloid-debug.apk"
+
+      - name: Upload APKs
+        uses: actions/upload-artifact@v4
+        with:
+          name: metaloid-apk
+          path: ${{ runner.temp }}/apk/*.apk
+          if-no-files-found: error
+          retention-days: 90
+
+  release:
+    name: Publish release
+    needs: build
+    if: >-
+      startsWith(github.ref, 'refs/tags/apk-') ||
+      (github.event_name == 'workflow_dispatch' && inputs.publish)
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Download APKs
+        uses: actions/download-artifact@v4
+        with:
+          name: metaloid-apk
+          path: apk
+
+      - name: Checksums
+        run: |
+          cd apk
+          sha256sum *.apk > SHA256SUMS.txt
+          cat SHA256SUMS.txt
+
+      - name: Publish
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: ${{ startsWith(github.ref, 'refs/tags/') && github.ref_name || format('apk-{0}', github.run_number) }}
+          name: MetaIoid Android ${{ startsWith(github.ref, 'refs/tags/') && github.ref_name || format('build {0}', github.run_number) }}
+          generate_release_notes: true
+          files: |
+            apk/*.apk
+            apk/SHA256SUMS.txt
+          body: |
+            ## MetaIoid for Android
+
+            Install **`metaloid-debug.apk`** (or `metaloid-release.apk`, minified) on an
+            Android 8.0+ device, then point it at your MetaIoid gateway on first run.
+
+            * `metaloid-release.apk` is minified and shrunk. It is signed with the
+              repository's debug key unless a production keystore was configured —
+              see `docs/android/RELEASE.md` before publishing to a store.
+            * Both APKs contain **no** service-role key, JWT secret, encryption key or
+              provider API key. The only values baked in are public identifiers.
+            * Source, build instructions and the API contract this client speaks:
+              `docs/android/`.

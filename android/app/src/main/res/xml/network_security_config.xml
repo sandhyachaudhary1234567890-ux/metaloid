@@ -1,0 +1,24 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+  Release network policy: HTTPS only.
+
+  * cleartextTrafficPermitted="false" — a MetaIoid gateway is reached over TLS,
+    always. The session token in the Authorization header must never travel in
+    the clear.
+  * No user-installed CAs are trusted. Trusting them would let anything on the
+    device MITM a session; the debugging benefit is not worth it.
+  * No certificate pinning. Pinning a gateway that the user configures
+    themselves (and can move between hosts) would brick the app on a host
+    change or a certificate rotation, and the project has no pin-rotation
+    story to make that safe. Documented in docs/android/DECISIONS.md.
+
+  The debug variant replaces this file (src/debug/res/xml/) so a developer can
+  point the app at http://10.0.2.2:8787 or a laptop on the LAN.
+-->
+<network-security-config>
+    <base-config cleartextTrafficPermitted="false">
+        <trust-anchors>
+            <certificates src="system" />
+        </trust-anchors>
+    </base-config>
+</network-security-config>

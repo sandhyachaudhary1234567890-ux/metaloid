@@ -54,3 +54,15 @@ scripts/setup-production.mjs
 server/check-schema.mjs
 # supabase CLI stub
 supabase/.temp/
+
+# Android client (android/) — build output and machine-local configuration
+android/.gradle/
+android/build/
+android/app/build/
+android/local.properties
+android/.kotlin/
+android/captures/
+android/**/*.apk
+android/**/*.aab
+android/**/*.jks
+android/**/*.keystore

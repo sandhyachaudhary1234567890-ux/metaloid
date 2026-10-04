@@ -1,0 +1,20 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+  Brand colours for the *platform* layer only.
+
+  Compose draws the whole app and owns the real design tokens
+  (core/designsystem/Tokens.kt, generated from src/design/tokens.ts in the web
+  client so both clients cannot drift). These values exist so the frames before
+  Compose draws — the window background, the Android 12+ splash — are already
+  MetaIoid rather than white.
+-->
+<resources>
+    <!-- Warm Obsidian: the dark page. Never pure black. -->
+    <color name="brand_obsidian">#0E0E0D</color>
+    <!-- Warm Paper: the light page. Never pure white. -->
+    <color name="brand_paper">#FAF8F4</color>
+    <!-- MetaIoid Jade: the single accent. -->
+    <color name="brand_jade">#5CC79A</color>
+    <!-- The adaptive-icon background sits a step below the page. -->
+    <color name="brand_icon_background">#111110</color>
+</resources>
