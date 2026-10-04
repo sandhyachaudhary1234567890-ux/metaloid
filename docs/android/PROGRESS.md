@@ -4,7 +4,8 @@
 committed *and* CI has compiled it *and* its tests pass. Until then it is
 "written, unverified". No phase is ever marked done because it looks finished.
 
-Last updated: this commit.
+Last updated: 2026-10-04, at commit `3ad76ea` — the commit whose CI run
+(`37193950163`) is green and which the published release was built from.
 
 ## Status at a glance
 
@@ -18,11 +19,18 @@ Last updated: this commit.
 | Chat, conversations, memory, missions, research, activity, usage, settings, diagnostics | written; CI-compiled |
 | Share intake | written; CI-compiled |
 | Docs (`docs/android/*`) | written |
-| Web client regression (`npm run check`, tests, build) | run locally; results in TESTING.md |
+| Web client regression (`npm run check`, tests, build) | run in this repository; exact output in TESTING.md §4 |
+| Whole-project CI (unit tests + lint + debug APK + minified release APK + APK secret scan) | **green**: run `37193950163` (branch) and `37194219682` (tag) |
+| Published APK | **yes** — GitHub Release `apk-v1`, built from `3ad76ea` |
 
-**Not verified anywhere yet:** anything that needs a running gateway or a
-device — the app has never been executed. `docs/android/TESTING.md` lists
-exactly what is proven (unit tests, lint, assembly) and what is not.
+**What that green run does and does not prove.** It proves the project compiles
+with no errors, the nine JVM test classes pass, `lintDebug` reports no errors
+with `abortOnError = true`, both APKs assemble (release minified and shrunk), and
+neither APK contains a privileged-secret pattern.
+
+It does **not** prove the app runs: nothing here has executed on a device or
+against a live gateway. `docs/android/TESTING.md` §5 lists precisely what
+remains unverified, and no claim in these documents goes beyond that.
 
 ## Phase log
 
@@ -44,7 +52,7 @@ exactly what is proven (unit tests, lint, assembly) and what is not.
 | 13 — Voice | **Not shipped in this build.** The gateway reports `voice: false`; the client shows voice as unavailable rather than offering a control that cannot work. The on-device recogniser path is the first item of the next increment (see DECISIONS.md § Voice). | deliberately not implemented |
 | 14 — Settings & diagnostics | Theme, accent, reduced motion, server address, sign-out (device and everywhere), capabilities report, redacted log export. | done |
 | 15 — Hardening | No secrets in the app or the build; release checklist; R8 rules; cleartext refused outside debug; link handling restricted to http(s) without embedded credentials. | done |
-| 16 — Tests | JVM unit tests for the pure logic (parser, reducer, redaction, error map, time, markdown, routes, attachment size/draft store where pure) + CI assembly and lint. | done |
+| 16 — Tests | JVM unit tests for the pure logic (parser, reducer, redaction, error map, time, markdown, routes, attachment size/draft store where pure) + CI assembly and lint. CI run `37193950163` passed all of it; the two defects CI's first red runs found (SSE comment buffering, Markdown list depth) are fixed by tests, not by weakening them. | done |
 | 17 — Report | This file plus `TESTING.md`. | done |
 
 ## What is deliberately absent

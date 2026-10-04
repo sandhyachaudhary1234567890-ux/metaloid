@@ -11,11 +11,15 @@ What is proven, how, and — just as important — what is not.
 | Debug APK | `./gradlew :app:assembleDebug` | GitHub Actions |
 | Release APK (minified + shrunk) | `./gradlew :app:assembleRelease` | GitHub Actions |
 | Instrumented UI tests | `./gradlew :app:connectedDebugAndroidTest` | **not run in CI** (no device) — see §5 |
+| APK secret scan | workflow step *Secret scan of the APKs* | GitHub Actions |
 
 CI is the compiler. There is no local Android SDK in the environment these
 commits were authored in, so *nothing here was compiled locally*: the first
 build of every file happens on the runner, and a red build is treated as a
-defect in the code, never as a flaky step.
+defect in the code, never as a flaky step. That is not a limitation of the
+process so much as the point of it — the artifact a user installs is the one CI
+built from the committed source, and the run that built it is public and
+permanent.
 
 ## 2. Unit tests (JVM, no device)
 
@@ -85,17 +89,40 @@ The server suite (78/78) is the one that actually matters for this project's
 rule that **no server change is required**: it passes unchanged because no server
 file is modified by this branch.
 
-## 5. What is *not* verified
+## 5. What CI proves, and what is *not* verified
+
+Green run `37193950163` (branch) / `37194219682` (tag `apk-v1`), built from
+commit `3ad76ea`:
+
+* `:app:testDebugUnitTest` — all nine test classes pass (the failure-report step
+  was written precisely so that a failing assertion is readable without the log
+  artifact, and it is how the two real defects below were found);
+* `:app:lintDebug` — no errors, `abortOnError = true`, no baseline;
+* `:app:assembleDebug` and `:app:assembleRelease` — both APKs build, the release
+  one minified and shrunk;
+* **Secret scan of the APKs** — no service-role key, provider key, JWT secret or
+  private-key pattern in any `*.dex` or in `resources.arsc`.
+
+Two defects were found by these runs and fixed in the code, not by weakening a
+test: `SseParser` emitted a heartbeat comment as its own frame when a later
+`data:` line belonged to it, and `MarkdownParser` measured list depth on an
+already-trimmed line so every nested item rendered at depth 0. A third red run
+was a genuinely wrong test (a 2026 timestamp compared against a January 2026
+"now"); its assertion was kept and its input corrected.
+
+What is still not verified:
 
 * **No instrumented tests were executed.** They are not part of CI (no emulator
   in the workflow) and no device was available while writing this. The
   `androidTest` dependencies are in the build so that running them locally is a
   one-command operation.
-* **The app has never been run against a live gateway.** Every behaviour in
-  `CONTRACT_MAP.md` is derived from the server source and the API document, then
-  encoded in unit tests — but "derived and unit-tested" is not "observed
-  working". The first person to install the APK is exercising it for the first
-  time.
+* **The app has never been run against a live gateway, and has never been run at
+  all.** Every behaviour in `CONTRACT_MAP.md` is derived from the server source
+  and the API document, then encoded in unit tests — but "derived and
+  unit-tested" is not "observed working". The first person to install the APK
+  (Release `apk-v1`) is exercising it for the first time. A compile and a unit
+  test cannot see a wrong URL join, a missing capability gate or a crash on a
+  real device.
 * **No performance numbers.** Startup time, frame timing during streaming and
   memory use are unmeasured claims until someone measures them.
 * **Accessibility was designed, not audited.** Content descriptions exist for

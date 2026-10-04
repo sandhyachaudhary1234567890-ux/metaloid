@@ -1,5 +1,18 @@
 # MetaIoid Android — building and releasing
 
+## 0. The published build
+
+| | |
+| --- | --- |
+| Release | [`apk-v1`](https://github.com/sandhyachaudhary1234567890-ux/metaloid/releases/tag/apk-v1) |
+| Built from | commit `3ad76ea` (CI run `37193950163` on the branch, `37194219682` on the tag — both green) |
+| Install | [`metaloid-debug.apk`](https://github.com/sandhyachaudhary1234567890-ux/metaloid/releases/download/apk-v1/metaloid-debug.apk) (11.1 MB) · [`metaloid-release.apk`](https://github.com/sandhyachaudhary1234567890-ux/metaloid/releases/download/apk-v1/metaloid-release.apk) (1.7 MB, minified) |
+| Checksums | [`SHA256SUMS.txt`](https://github.com/sandhyachaudhary1234567890-ux/metaloid/releases/download/apk-v1/SHA256SUMS.txt) |
+
+The debug APK is the one to install first: it is the same code with
+`isMinifyEnabled = false`, so a stack trace from it is readable. Neither APK has
+ever been run on a device — see `TESTING.md` §5.
+
 ## 1. Where the APK comes from
 
 The APK is built by GitHub Actions, not by hand:
@@ -57,10 +70,14 @@ it.
 
 1. Is `main` (or the branch you are releasing) green on the `android` workflow —
    tests, lint, and **both** APKs?
-2. Does the APK contain no secret? The workflow's build has no secret to bake in,
-   but verify anyway:
+2. Does the APK contain no secret? This is now *enforced*: the workflow step
+   **Secret scan of the APKs** runs exactly this check over every `*.dex` and
+   `resources.arsc` in both APKs and fails the build if it finds a
+   service-role key, provider key, JWT secret or private key. To re-run it by
+   hand:
    ```bash
-   unzip -p metaloid-release.apk classes.dex | strings | grep -iE 'service_role|sk-or-|sk-ant-|BEGIN PRIVATE KEY' || echo clean
+   unzip -p metaloid-release.apk '*.dex' resources.arsc | strings -n 8 \
+     | grep -iE 'service_role|sk-or-v1|sk-ant-|sk-proj-|BEGIN [A-Z ]*PRIVATE KEY|jwt_secret|encryption_key' || echo clean
    ```
    Also check `res/` and `assets/` for a stray `.env`, `.json` or `.pem`.
 3. Does `BUILD_TYPE_NAME` in the diagnostics screen match the artifact
