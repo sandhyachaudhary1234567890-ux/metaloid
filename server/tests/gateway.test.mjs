@@ -239,6 +239,21 @@ test('a saved key the server cannot decrypt: health says so, chat names the fix'
   } finally { second.stop(); }
 });
 
+test('a malformed encryption keyring cannot take health down', async () => {
+  // A deployment with a broken keyring must still answer /api/health with an
+  // explanation — an unresolved health route is indistinguishable from a dead
+  // gateway, which is the worst possible way to learn about a bad env var.
+  const g = await boot({ key: '', scenario: 'ok', extraEnv: { METALOID_ENCRYPTION_KEYS: 'k1:tooshort' } });
+  try {
+    const res = await fetch(`http://127.0.0.1:${g.gatewayPort}/api/health`);
+    assert.equal(res.status, 200);
+    const health = await res.json();
+    assert.equal(health.ok, true);
+    assert.equal(health.encryption.configured, false);
+    assert.match(String(health.encryption.error), /32 bytes/);
+  } finally { g.stop(); }
+});
+
 test('no key configured: streams a no_provider error naming the fix, never a silent demo', async () => {
   const g = await boot({ key: '', scenario: 'ok' });
   try {

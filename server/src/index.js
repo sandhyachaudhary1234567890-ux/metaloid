@@ -33,6 +33,7 @@ import { mountV1 } from './api/v1.js';
 import { authConfigured, authMode } from './auth.js';
 import { requireIdentity } from './identity.js';
 import { ping as dbPing, storagePing, driverInfo } from './data/index.js';
+import { encryptionInfo } from './crypto.js';
 import { streamNvidia, NVIDIA_SMART } from './nvidia.js';
 // Provider Platform imports
 import { listProviders, getProvider, getProviderModels, updateProvider } from './core/providerRegistry.js';
@@ -416,7 +417,23 @@ app.get('/api/health', async (req, res) => {
   // ai = "a reply can plausibly be produced": a key exists AND the provider
   // answered our catalogue call. A key with no network is degraded, not online.
   const ai = providerSet && cat.ok && live > 0;
-  const info = driverInfo();
+  // Health must answer even when the deployment is misconfigured: a throw
+  // here (a malformed METALOID_ENCRYPTION_KEYS is the common one) left the
+  // request rejected and the client waiting with nothing to display.
+  let info;
+  try {
+    info = driverInfo();
+  } catch (e) {
+    const detail = String((e && e.message) || e).slice(0, 200);
+    console.error('[gateway] driver info unavailable:', detail);
+    info = {
+      driver: 'unknown', production: false, durable: false,
+      supabase_configured: false, supabase_url_set: false,
+      storage: 'unconfigured', data_dir: null,
+      encryption: { configured: false, activeKeyId: null, keyIds: [], error: detail },
+      note: 'Driver info unavailable.',
+    };
+  }
   const databaseReady = Boolean(db && db.ok);
   const storageReady = Boolean(storage && storage.ok);
   // "reachable" means tokens can actually be verified right now: auth is
@@ -465,7 +482,9 @@ app.get('/api/health', async (req, res) => {
     byokError: byok ? byok.error : null,
     storage: { ready: storageReady, driver: (storage && storage.driver) || info.storage, buckets: (storage && storage.buckets) || null },
     data: { driver: info.driver, supabase_configured: info.supabase_configured, url_set: info.supabase_url_set },
-    encryption: { configured: info.encryption.configured, active_key: info.encryption.activeKeyId },
+    // `error` is the operator's only in-band clue when the keyring itself is
+    // malformed, which otherwise manifests as every stored key failing.
+    encryption: { configured: info.encryption.configured, active_key: info.encryption.activeKeyId, error: info.encryption.error ?? null },
     // "free models" is only a number once a provider key can actually reach
     // them; without a key the catalogue is a plan, not availability.
     models: {
@@ -1633,7 +1652,14 @@ app.post('/api/providers/credentials', requireAuth, rateLimit(10, 60000), async 
     // stored key silently becomes undecryptable on the next boot — the user
     // did everything right and the credential still dies. The UI surfaces this
     // instead of letting it be discovered later as "it worked yesterday".
-    const stableKey = driverInfo().encryption.configured || vaultHealth().masterKeyConfigured;
+    // Reporting must never turn a successful save into a failure: compute the
+    // durability verdict defensively.
+    let stableKey = false;
+    try {
+      stableKey = driverInfo().encryption.configured || vaultHealth().masterKeyConfigured;
+    } catch (e) {
+      console.error('[gateway] credential durability check failed:', String((e && e.message) || e).slice(0, 160));
+    }
     res.status(201).json({ ...result, credential_key: stableKey ? 'stable' : 'ephemeral' });
   } catch (error) {
     res.status(400).json({ error: error.message });
@@ -1973,10 +1999,32 @@ for (const sig of ['SIGTERM', 'SIGINT']) {
   });
 }
 
+// A broken keyring or master key is loud at boot. These are the exact knobs
+// that decide whether a stored provider key still works after a restart, and
+// silently degraded encryption is what makes "it worked yesterday" possible.
+function warnAboutEncryption() {
+  // encryptionInfo() throws by contract on a malformed keyring (see
+  // server/tests/crypto.test.mjs) — here is where that becomes readable.
+  let info = { configured: false };
+  try {
+    info = encryptionInfo();
+  } catch (e) {
+    console.error(`[gateway] METALOID_ENCRYPTION_KEYS is malformed — stored credentials cannot be written or read: ${String((e && e.message) || e).slice(0, 200)}`);
+    return;
+  }
+  if (!info.configured) {
+    console.warn('[gateway] METALOID_ENCRYPTION_KEYS is not set — account-stored credentials are unavailable on this deployment.');
+  }
+  if (!process.env.METALOID_CREDENTIAL_KEY) {
+    console.warn('[gateway] METALOID_CREDENTIAL_KEY is not set — keys saved to the legacy vault will not survive a restart.');
+  }
+}
+
 if (!SERVERLESS) serve.listen(PORT, BIND_HOST, () => {
   console.log(`metaloid-gateway ${tlsOn ? 'https' : 'http'}://${
     BIND_HOST === '0.0.0.0' ? '<lan-ip>' : BIND_HOST
   }:${PORT} (openrouter:${OR_KEY ? 'set' : 'missing'} nvidia:${NV_ON && NV_KEY ? 'enabled' : 'off'})`);
+  warnAboutEncryption();
   if (BIND_HOST === '0.0.0.0') {
     console.log('WARNING: gateway is reachable on your LAN. Same-WiFi only; never expose this port to the internet (it fronts paid API keys).');
   }
