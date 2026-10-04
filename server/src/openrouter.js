@@ -259,8 +259,17 @@ export function humanizeProviderError(e) {
 export function classifyTask(message) {
   const t = message.toLowerCase();
   if (/code|debug|function|regex|python|javascript|typescript|sql|error|stack trace/.test(t)) return 'coding';
-  if (/(seeing|showing|image|photo|camera|look at|vision)/.test(t)) return 'vision';
-  if (message.length < 120 && /^(hi|hello|hey|thanks|ok|bye|namaste|ram ram)\b/.test(t.trim())) return 'fast';
+  // "camera" alone is usually a gadget question, not a vision request — only
+  // treat it as vision with a live-input cue (my/this/live camera).
+  if (/(seeing|showing|image|photo|picture|webcam|look at|vision)/.test(t)
+    || /camera/.test(t) && /(my|this|live|feed)/.test(t)) return 'vision';
+  // Explicit deep-work signals stay on smart models regardless of length.
+  if (/think (hard|deeply|step by step)|explain in detail|in (detail|depth)|analy[sz]e|compare|pros and cons|trade-?offs|research|essay|report|strategy|architect|proof|derive|theorem/.test(t)) return 'smart';
+  // Fast by default for everyday chat: greetings, small talk and short
+  // questions answer just as well on a fast model, in a fraction of the time.
+  if (message.length < 120 && /^(hi|hello|hey|thanks|thank you|ok|okay|bye|namaste|ram ram|good (morning|evening|night)|how are you)\b/.test(t.trim())) return 'fast';
+  if (message.length < 160) return 'fast';
+  // Long messages usually carry real complexity — spend the smart budget there.
   return 'smart';
 }
 
