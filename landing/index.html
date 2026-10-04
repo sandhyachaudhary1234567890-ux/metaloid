@@ -5,7 +5,8 @@
 <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover" />
 <title>MetaIoid — Your private personal AI system</title>
 <meta name="description" content="MetaIoid is a private personal AI system: conversation, voice, vision, research, coding, memory and agentic missions in one surface. Your gateway holds the keys; your browser never sees them." />
-<meta name="theme-color" content="#0E0E0D" />
+<meta name="theme-color" media="(prefers-color-scheme: light)" content="#FAF8F4" />
+<meta name="theme-color" media="(prefers-color-scheme: dark)" content="#0E0E0D" />
 <meta property="og:title" content="MetaIoid — Your private personal AI system" />
 <meta property="og:description" content="One system for chat, voice, vision, research, memory and verified agentic work — on infrastructure you own." />
 <meta property="og:type" content="website" />
@@ -36,7 +37,10 @@
     --ink-line: rgba(28,27,24,.14);
     --radius: 10px;
     --radius-lg: 14px;
-    color-scheme: dark;
+    /* Both schemes declared: the page follows the OS setting.
+       Dark (default) = warm obsidian; light = warm paper, designed as
+       light rather than inverted dark. Unsupported browsers keep obsidian. */
+    color-scheme: light dark;
   }
   * { box-sizing: border-box; }
   html { scroll-behavior: smooth; }
@@ -72,7 +76,10 @@
   }
   .nav-inner { height: 60px; display: flex; align-items: center; gap: 26px; }
   .brand { display: flex; align-items: center; gap: 10px; font-weight: 700; letter-spacing: .14em; font-size: 13px; }
-  .brand img { width: 22px; height: 22px; }
+  /* The canonical mark is dark-on-transparent (the app renders it with
+     dark:invert). On obsidian it needs inverting; on paper it stays as-is. */
+  .brand img { width: 22px; height: 22px; filter: invert(1); }
+  .foot-brand img { filter: invert(1); }
   .nav-links { display: flex; gap: 22px; margin-left: auto; font-size: 13.5px; color: var(--fg-2); }
   .nav-links a { padding: 6px 2px; }
   .nav-links a:hover { color: var(--fg); }
@@ -228,9 +235,11 @@
     margin: 0; padding: 16px; overflow-x: auto;
     font-size: 12.8px; line-height: 1.8;
     border: 1px solid var(--border); border-radius: var(--radius); background: #0B0B0A;
+    color: #E9E5DB;
   }
   code { font-family: ui-monospace, 'SF Mono', Menlo, Consolas, monospace; }
-  .c-dim { color: var(--fg-3); } .c-acc { color: var(--jade); }
+  /* Fixed editor tones: the code block stays dark in both schemes. */
+  .c-dim { color: #948D7F; } .c-acc { color: #5CC79A; }
 
   /* closing */
   .closing { text-align: left; padding: 96px 0; }
@@ -267,6 +276,41 @@
   }
   @media (prefers-reduced-motion: reduce) {
     html { scroll-behavior: auto; }
+  }
+
+  /* ---------- system light scheme: warm paper ----------
+     Same roles as obsidian, rebuilt for paper — the product's light mode
+     is designed as light, not inverted dark. Accent text goes deep jade
+     (#0B6E52, the product's light-mode accent) to hold contrast on ivory.
+     The How-it-works band flips to obsidian so the page keeps its rhythm. */
+  @media (prefers-color-scheme: light) {
+    :root {
+      --bg: #FAF8F4;
+      --bg-2: #F3EFE7;
+      --surface: #FFFFFF;
+      --surface-2: #F1ECE2;
+      --border: rgba(28,27,24,.12);
+      --border-2: rgba(28,27,24,.24);
+      --fg: #1C1B18;
+      --fg-2: #57534A;
+      --fg-3: #6E675C;
+      --jade: #0B6E52;
+      --jade-solid: #146B4E;
+      --jade-on-solid: #F2FFF9;
+      --jade-wash: rgba(11,110,82,.08);
+      --jade-line: rgba(11,110,82,.32);
+    }
+    header.nav { background: rgba(250,248,244,.9); }
+    .brand img, .foot-brand img { filter: none; }
+    .btn:hover { background: #E9E3D6; border-color: rgba(28,27,24,.34); }
+    pre { background: #161511; border-color: rgba(28,27,24,.16); }
+    section.paper { background: #0E0E0D; color: #F2EFE8; border-bottom-color: rgba(242,239,232,.09); }
+    section.paper .sec-head p { color: #B9B3A7; }
+    section.paper .kicker { color: #5CC79A; }
+    section.paper .step { background: #161614; border-color: rgba(242,239,232,.09); }
+    section.paper .step::before { color: #5CC79A; }
+    section.paper .step h3 { color: #F2EFE8; }
+    section.paper .step p { color: #B9B3A7; }
   }
 </style>
 </head>
