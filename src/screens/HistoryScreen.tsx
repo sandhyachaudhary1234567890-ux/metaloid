@@ -1,10 +1,14 @@
-import { useMemo, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import { motion } from 'framer-motion';
-import { Search, Pin, Pencil, Trash2, Plus, X } from 'lucide-react';
+import { Search, Pin, Pencil, Trash2, Plus, X, Archive, Upload } from 'lucide-react';
 import { useApp } from '../lib/store';
 import { groupConversations, timeAgo, cn } from '../lib/cn';
 import { useAuth } from '../lib/auth';
 import { EmptyState } from '../components/ui/EmptyState';
+import {
+  buildSnapshot, currentOwner, downloadBytes, mergeSnapshot, packSnapshot,
+  parseSnapshot, runVaultSweepOnce,
+} from '../lib/historyVault';
 
 // HISTORY — conversations only: title · preview · time.
 // Open · rename · delete. Semantic tokens throughout.
@@ -23,11 +27,63 @@ function highlight(title: string, q: string) {
 }
 
 export function HistoryScreen() {
-  const { conversations, selectConversation, deleteConversation, pinConversation, renameConversation, openModal, newConversation, setView } = useApp();
+  const { conversations, selectConversation, deleteConversation, pinConversation, renameConversation, openModal, newConversation, setView, mergeConversations, settings, toast } = useApp();
   const auth = useAuth();
   const [q, setQ] = useState('');
   const [editingId, setEditingId] = useState<string | null>(null);
   const [editVal, setEditVal] = useState('');
+  const [vaultBusy, setVaultBusy] = useState(false);
+  const fileRef = useRef<HTMLInputElement | null>(null);
+
+  // Auto-archive runs once per boot from every screen that can host it.
+  useEffect(() => {
+    void (async () => {
+      const owner = await currentOwner(auth.user?.id ?? null);
+      await runVaultSweepOnce({
+        conversations, deleteConversation,
+        backendUrl: settings.backendUrl, owner,
+        toast: (t) => toast(t),
+      });
+    })();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
+  const exportVaultNow = async () => {
+    if (!conversations.length || vaultBusy) return;
+    setVaultBusy(true);
+    try {
+      const owner = await currentOwner(auth.user?.id ?? null);
+      const snap = await buildSnapshot(conversations, owner, 'manual');
+      const { bytes, fileName } = packSnapshot(snap);
+      downloadBytes(bytes, fileName);
+      toast({ title: `Exported ${conversations.length} chats to ${fileName}` });
+    } catch (e) {
+      toast({ title: e instanceof Error ? e.message : 'Export failed.', tone: 'error' });
+    } finally {
+      setVaultBusy(false);
+    }
+  };
+
+  const restoreVaultFile = async (f: File) => {
+    setVaultBusy(true);
+    try {
+      const bytes = new Uint8Array(await f.arrayBuffer());
+      const snap = parseSnapshot(bytes);
+      const owner = await currentOwner(auth.user?.id ?? null);
+      const { merged, restored, skippedOwnerMismatch } = mergeSnapshot(conversations, snap, owner);
+      if (skippedOwnerMismatch) {
+        toast({ title: 'That vault belongs to a different account.', desc: 'Sign in as its owner to restore it.', tone: 'error' });
+        return;
+      }
+      mergeConversations(merged.filter((c) => !conversations.some((e) => e.id === c.id && e.updatedAt >= c.updatedAt)));
+      toast({ title: restored ? `Restored ${restored} chat${restored === 1 ? '' : 's'} — timer restarted.` : 'Nothing new — history already has these.' });
+    } catch (e) {
+      toast({ title: e instanceof Error ? e.message : 'Restore failed.', tone: 'error' });
+    } finally {
+      setVaultBusy(false);
+      if (fileRef.current) fileRef.current.value = '';
+    }
+  };
 
   const filtered = useMemo(() => {
     const list = [...conversations].sort((a, b) => b.updatedAt - a.updatedAt);
@@ -58,6 +114,43 @@ export function HistoryScreen() {
         <button onClick={() => { newConversation(); setView('chat'); }} className="btn-primary h-10 px-3.5 text-ui ml-auto min-h-[40px]">
           <Plus size={15} /> New chat
         </button>
+      </div>
+
+      <div className="mt-5 rounded-2xl border border-[var(--border)] bg-[var(--surface)] px-4 py-3.5">
+        <p className="flex items-center gap-2 text-ui font-semibold text-[var(--fg)]">
+          <Archive size={14} className="text-[var(--accent)] shrink-0" />
+          History Vault
+        </p>
+        <p className="mt-1 text-small text-[var(--fg-muted)] text-pretty">
+          Chats untouched for 3+ days auto-archive into a vault zip (downloaded for you) before they are deleted. Pinned chats are kept. Bring a vault file back anytime — its chats return with a fresh 3-day timer.
+        </p>
+        <div className="mt-2.5 flex flex-wrap gap-2">
+          <button
+            onClick={() => void exportVaultNow()}
+            disabled={vaultBusy || conversations.length === 0}
+            className="h-9 px-3.5 rounded-xl border border-[var(--border)] bg-[var(--surface-elevated)] text-small font-medium text-[var(--fg)] disabled:opacity-50 hover:border-[var(--accent)] transition-colors"
+          >
+            {vaultBusy ? 'Working…' : 'Export vault now'}
+          </button>
+          <button
+            onClick={() => fileRef.current?.click()}
+            disabled={vaultBusy}
+            className="h-9 px-3.5 rounded-xl border border-[var(--border)] bg-[var(--surface-elevated)] text-small font-medium text-[var(--fg)] disabled:opacity-50 hover:border-[var(--accent)] transition-colors flex items-center gap-1.5"
+          >
+            <Upload size={13} /> Restore vault file
+          </button>
+          <input
+            ref={fileRef}
+            type="file"
+            accept=".zip,application/zip"
+            className="hidden"
+            aria-label="Restore history vault file"
+            onChange={(e) => {
+              const f = e.target.files?.[0];
+              if (f) void restoreVaultFile(f);
+            }}
+          />
+        </div>
       </div>
 
       <div className="mt-5 flex items-center gap-2.5 input-shell px-3.5 h-10">

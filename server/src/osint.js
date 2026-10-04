@@ -9,7 +9,8 @@ const jobs = new Map(); // id -> investigation
 let seq = 0;
 const MAX_JOBS = 50;
 const COLLECTOR_TIMEOUT = 9000;
-const MAX_CONCURRENT = 3;
+const MAX_CONCURRENT = Number(process.env.METALOID_OSINT_CONCURRENCY || 6);
+const COLLECTOR_TIMEOUT_MS = Number(process.env.METALOID_COLLECTOR_TIMEOUT_MS || 20000);
 let running = 0;
 
 const GH_HEADERS = () => ({
@@ -206,26 +207,55 @@ function log(job, event, detail = '') {
 
 async function runLimited(job, fns) {
   const results = [];
-  const queue = [...fns];
+  const queue = fns.map((fn, i) => ({ fn, i }));
+  // One hung source must never stall the batch: each collector gets its own
+  // deadline, and a miss is recorded as a failure, not a hang.
+  const withDeadline = ({ fn, i }) => async () => {
+    const label = (job.collectors[i] && job.collectors[i].id) || `collector-${i}`;
+    let timer;
+    try {
+      return await Promise.race([
+        fn(),
+        new Promise((_, rej) => {
+          timer = setTimeout(() => rej(new Error(`${label} timed out after ${COLLECTOR_TIMEOUT_MS}ms`)), COLLECTOR_TIMEOUT_MS);
+        }),
+      ]);
+    } finally {
+      clearTimeout(timer);
+    }
+  };
+  const timed = queue.map(withDeadline);
   async function worker() {
-    while (queue.length) {
-      const fn = queue.shift();
+    while (timed.length) {
+      const fn = timed.shift();
       if (running >= MAX_CONCURRENT) {
         await new Promise((r) => setTimeout(r, 200));
-        queue.unshift(fn);
+        timed.unshift(fn);
         continue;
       }
       running += 1;
       try {
         results.push(await fn());
       } catch (e) {
-        results.push({ error: String(e.message || e) });
+        results.push({ error: String((e && e.message) || e) });
       } finally {
         running -= 1;
       }
     }
   }
-  await Promise.all([worker(), worker(), worker()]);
+  // Collectors are I/O-bound: run the whole set side by side (up to the
+  // global cap) instead of three at a time.
+  const workers = Math.max(1, Math.min(queue.length, MAX_CONCURRENT));
+  await Promise.all(Array.from({ length: workers }, worker));
+  // Safety net: anything still marked running neither completed nor failed
+  // cleanly — close it out so progress can reach 100%.
+  let touched = false;
+  for (const c of job.collectors) {
+    if (c.state === 'running') { c.state = 'failed'; touched = true; }
+  }
+  if (touched) {
+    job.progress = Math.round((job.collectors.filter((x) => x.state === 'done' || x.state === 'failed' || x.state === 'skipped').length / job.collectors.length) * 100);
+  }
   return results;
 }
 

@@ -1,8 +1,9 @@
-import { useMemo, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import { AnimatePresence, motion } from 'framer-motion';
 import { Square, MoreHorizontal, Pencil, Trash2, Plus, Telescope, Hammer, ChartNoAxesColumn, Sparkles } from 'lucide-react';
 import { useApp } from '../lib/store';
 import { useAuth } from '../lib/auth';
+import { currentOwner, runVaultSweepOnce } from '../lib/historyVault';
 import { ChatWindow } from '../components/ChatWindow';
 import { SetupChecklist } from '../components/SetupChecklist';
 import { CommandBar, COMPOSER_MODES, type ComposerMode } from '../components/CommandBar';
@@ -111,9 +112,23 @@ export function ChatScreen() {
   const {
     activeConv, isGenerating, stopGenerating, newConversation, openModal,
     renameConversation, setView, connection, status, statusText,
+    conversations, deleteConversation, settings, toast,
   } = useApp();
   const auth = useAuth();
   const messages = activeConv?.messages ?? [];
+
+  // Auto-archive runs once per boot from every screen that can host it.
+  useEffect(() => {
+    void (async () => {
+      const owner = await currentOwner(auth.user?.id ?? null);
+      await runVaultSweepOnce({
+        conversations, deleteConversation,
+        backendUrl: settings.backendUrl, owner,
+        toast: (t) => toast(t),
+      });
+    })();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
 
   const [moreOpen, setMoreOpen] = useState(false);
   const [mode, setMode] = useState<ComposerMode>(COMPOSER_MODES.ask);

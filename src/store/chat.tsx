@@ -63,6 +63,8 @@ interface ChatValue {
   ) => { promise: Promise<string>; abort: () => void };
   stopSpeculative: () => void;
   commitSpeculativeTurn: (transcript: string, full: string) => void;
+  /** Upsert full conversation objects (vault restore): incoming wins. */
+  mergeConversations: (list: Conversation[]) => void;
   /** Merge conversations fetched from the account API (deduped by id). */
   importConversations: (rows: {
     id: string; title: string; createdAt: number; updatedAt: number;
@@ -1206,10 +1208,26 @@ function titleFrom(text: string): string {
     [conversations, activeId]
   );
 
+  /**
+   * Vault restore entry point: upsert whole conversations by id, incoming
+   * wins. Persistence flows through the same subscription as every other
+   * mutation, so nothing else has to learn about it.
+   */
+  const mergeConversations = useCallback((list: Conversation[]) => {
+    if (!list.length) return;
+    setConversations((prev) => {
+      const byId = new Map(prev.map((c) => [c.id, c]));
+      for (const c of list) byId.set(c.id, c);
+      return [...byId.values()].sort((a, b) => b.updatedAt - a.updatedAt);
+    });
+  }, []);
+
   return (
-    <Ctx.Provider value={{
+    <Ctx.Provider
+    value={{
       conversations, activeId, activeConv, detectedLang, isGenerating,
       newConversation, selectConversation, deleteConversation, pinConversation,
+      mergeConversations,
       renameConversation, sendMessage, regenerate, speakMessage, stopGenerating,
       runVoiceTurn, stopVoiceTurn, speculativeTurn, stopSpeculative, commitSpeculativeTurn,
       setFeedback, setVersionIndex, editAndResend, retryFailed,
