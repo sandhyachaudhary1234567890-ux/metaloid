@@ -16,14 +16,15 @@
     "preflight": "node tools/preflight.mjs"
   },
   "dependencies": {
+    "@supabase/supabase-js": "^2.117.2",
     "bcrypt": "^6.0.0",
     "cors": "^2.8.5",
     "express": "^4.21.2",
+    "jose": "^6.2.12",
     "jsonwebtoken": "^9.0.3",
-    "pg": "^8.23.1",
-    "selfsigned": "^5.5.0",
-    "@supabase/supabase-js": "^2.117.2",
-    "jose": "^6.2.12"
+    "selfsigned": "^5.5.0"
   },
-  "devDependencies": {}
+  "devDependencies": {
+    "pg": "^8.23.1"
+  }
 }

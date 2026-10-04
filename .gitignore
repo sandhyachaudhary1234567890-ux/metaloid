@@ -46,3 +46,11 @@ tsconfig.tsbuildinfo
 .tsbuild-temp/
 # the dog still image is a workspace deliverable, not a repo asset (6.7 MB)
 /dog.png
+
+# local operator scripts with hardcoded live credentials (DB password, API
+# keys) — must NEVER be committed. Use env vars / Vercel dashboard instead.
+scripts/check-schema.mjs
+scripts/setup-production.mjs
+server/check-schema.mjs
+# supabase CLI stub
+supabase/.temp/
