@@ -1,0 +1,108 @@
+# MetaIoid Android — testing
+
+What is proven, how, and — just as important — what is not.
+
+## 1. How the app is verified
+
+| Layer | Command | Where it runs |
+| --- | --- | --- |
+| JVM unit tests | `./gradlew :app:testDebugUnitTest` | GitHub Actions |
+| Android lint (errors fail the build) | `./gradlew :app:lintDebug` | GitHub Actions |
+| Debug APK | `./gradlew :app:assembleDebug` | GitHub Actions |
+| Release APK (minified + shrunk) | `./gradlew :app:assembleRelease` | GitHub Actions |
+| Instrumented UI tests | `./gradlew :app:connectedDebugAndroidTest` | **not run in CI** (no device) — see §5 |
+
+CI is the compiler. There is no local Android SDK in the environment these
+commits were authored in, so *nothing here was compiled locally*: the first
+build of every file happens on the runner, and a red build is treated as a
+defect in the code, never as a flaky step.
+
+## 2. Unit tests (JVM, no device)
+
+| Test | What it pins down |
+| --- | --- |
+| `SseParserTest` | Incremental framing: partial lines across chunks, CRLF/bare-CR endings, multi-line `data:`, comments, `retry:`/`id:` fields, `finish()` flush, and the order of cumulative token frames. |
+| `StreamEventParserTest` | Every documented `/api/chat` key → one typed event: `token`, `done` (including `done:false`), `meta` (model/tier/provider/demo/byok/notice), `error` (code + message), `retry`, unknown keys, non-JSON, and `[DONE]`. |
+| `StreamReducerTest` | Cumulative replacement, the shrink anomaly, retry discarding the previous attempt, `done` with no text, terminal phases ignoring late frames, close-mid-stream vs close-before-first-token, user stop, transport loss. |
+| `RedactTest` | Bearer tokens, JWTs, provider key shapes, `key=value` secrets, emails, URLs, long-message truncation. Logs and diagnostics exports are the only way a token could leave the device. |
+| `ErrorMapperTest` | Every gateway code, every Supabase `error_code`, every status-only fallback, every stream code, and the transport kinds — plus a check that no user-facing message or technical detail leaks a key. |
+| `BackendAddressTest` | Address validation: rejects `file://`, `javascript:`, userinfo, and cleartext in a release build; normalises the trailing slash. |
+| `TimeFormatTest` | Relative time, absent timestamps as `—`, clock skew, durations, byte counts. |
+| `MarkdownParserTest` | Headings, lists (with depth), quotes, rules, fenced code — including an **unterminated fence**, which is what a streamed code block looks like mid-flight — and inline spans including an unclosed emphasis marker. |
+| `RouteCodecTest` | The persisted navigation stack round-trips; unknown segments are dropped rather than guessed; `research` vs `researchDetail` do not collide. |
+
+The tests are written against behaviour a user can observe, not against
+implementation details: they would still pass if the internals were rewritten,
+and they fail if a documented wire behaviour changes.
+
+## 3. What lint is configured to do
+
+`lint { abortOnError = true }`, with **no baseline file** — a baseline would hide
+exactly the defects it is convenient to hide. Warnings do not fail the build;
+errors do.
+
+## 4. Web-client regression
+
+The Android client must not require any server change, so the server's own suite
+is run before every push that touches it (results recorded here at the time of
+the push):
+
+```
+npm run check
+npm run test:unit
+npm --prefix server test
+npm run build
+```
+
+Recorded results for this commit: `TODO_AT_PUSH` — see the commit message and
+the CI run for the exact output. If any of these fail, the Android change is not
+finished.
+
+## 5. What is *not* verified
+
+* **No instrumented tests were executed.** They are not part of CI (no emulator
+  in the workflow) and no device was available while writing this. The
+  `androidTest` dependencies are in the build so that running them locally is a
+  one-command operation.
+* **The app has never been run against a live gateway.** Every behaviour in
+  `CONTRACT_MAP.md` is derived from the server source and the API document, then
+  encoded in unit tests — but "derived and unit-tested" is not "observed
+  working". The first person to install the APK is exercising it for the first
+  time.
+* **No performance numbers.** Startup time, frame timing during streaming and
+  memory use are unmeasured claims until someone measures them.
+* **Accessibility was designed, not audited.** Content descriptions exist for
+  icon-only controls and every state has a text label beside its colour, but no
+  TalkBack pass has been run.
+
+## 6. How to run the tests locally
+
+```bash
+cd android
+./gradlew :app:testDebugUnitTest          # JVM unit tests
+./gradlew :app:lintDebug                  # lint (errors fail)
+./gradlew :app:assembleDebug              # installable debug APK
+./gradlew :app:connectedDebugAndroidTest  # instrumented tests (needs a device/emulator)
+```
+
+A single test:
+
+```bash
+./gradlew :app:testDebugUnitTest --tests 'com.metaloid.core.streaming.SseParserTest'
+```
+
+## 7. Manual smoke test (what a reviewer should try first)
+
+1. Install the APK, open the app: the boot screen must leave as soon as the
+   health check returns, and its status line must match the server's own
+   `/api/health`.
+2. Point it at the gateway if it is not baked in; sign in.
+3. Send a message and watch: the user bubble is `Sending…` only until the server
+   returns the row; the answer streams; the model name under the message is the
+   one the server reported.
+4. Press stop mid-answer: the partial text stays, labelled `Stopped`, and
+   re-opening the conversation shows the same text from the server.
+5. Kill the app mid-answer and re-open: the turn appears as interrupted, closed
+   by the server's `recover`, with its partial text intact.
+6. Turn off the network while browsing: the app says offline; previously loaded
+   conversations still open, labelled as cached.

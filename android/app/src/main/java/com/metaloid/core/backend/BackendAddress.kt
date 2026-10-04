@@ -78,17 +78,3 @@ sealed interface BackendValidation {
     data class Invalid(val message: String) : BackendValidation
     data object Empty : BackendValidation
 }
-
-/**
- * The deployment's identity provider, when it has one.
- *
- * Resolution order matches the web client: the build's public value first (no
- * fetch needed), then `/api/config`, which serves exactly the same two public
- * values so an unconfigured build still connects.
- */
-data class SupabaseDeployment(
-    val url: String,
-    val anonKey: String,
-) {
-    fun isValid(): Boolean = url.startsWith("http") && anonKey.isNotBlank()
-}

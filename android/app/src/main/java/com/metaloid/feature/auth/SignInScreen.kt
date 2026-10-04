@@ -100,6 +100,7 @@ fun SignInScreen(container: AppContainer, appViewModel: AppViewModel) {
                 when (val validation = appViewModel.setGatewayUrl(raw)) {
                     is com.metaloid.core.backend.BackendValidation.Ok -> null
                     is com.metaloid.core.backend.BackendValidation.Invalid -> validation.message
+                    is com.metaloid.core.backend.BackendValidation.Empty -> "Enter the address of your MetaIoid server."
                 }
             },
         )

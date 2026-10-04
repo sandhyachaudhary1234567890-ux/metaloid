@@ -173,6 +173,7 @@ fun SettingsScreen(container: AppContainer, appViewModel: AppViewModel) {
                 when (val result = appViewModel.setGatewayUrl(raw)) {
                     is BackendValidation.Ok -> null
                     is BackendValidation.Invalid -> result.message
+                    is BackendValidation.Empty -> "Enter the address of your MetaIoid server."
                 }
             },
         )

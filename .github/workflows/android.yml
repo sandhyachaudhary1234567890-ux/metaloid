@@ -21,10 +21,12 @@ on:
     tags: ['apk-*']
     paths:
       - 'android/**'
+      - 'docs/android/**'
       - '.github/workflows/android.yml'
   pull_request:
     paths:
       - 'android/**'
+      - 'docs/android/**'
       - '.github/workflows/android.yml'
   workflow_dispatch:
     inputs:
