@@ -4,9 +4,10 @@
 committed *and* CI has compiled it *and* its tests pass. Until then it is
 "written, unverified". No phase is ever marked done because it looks finished.
 
-Last updated: 2026-10-04, at commit `e1bb05a` — the commit whose CI run
-(`37195121775`) is green and which the published release `apk-v2` was built
-from. (`apk-v1`, from `3ad76ea`, is the earlier build of the same project.)
+Last updated: 2026-10-04, at commit `2185498` — the commit whose CI run
+(`37196373156` on the branch, `37196994498` on the tag) is green and which the
+published release `apk-v3` was built from. `apk-v2` (`e1bb05a`) and `apk-v1`
+(`3ad76ea`) are earlier builds of the same project.
 
 ## Status at a glance
 
@@ -21,8 +22,9 @@ from. (`apk-v1`, from `3ad76ea`, is the earlier build of the same project.)
 | Share intake | written; CI-compiled |
 | Docs (`docs/android/*`) | written |
 | Web client regression (`npm run check`, tests, build) | run in this repository; exact output in TESTING.md §4 |
-| Whole-project CI (unit tests + lint + debug APK + minified release APK + APK secret scan) | **green**: `37193950163` and `37195121775` (branch), `37194219682` and `37195469014` (tags) |
-| Published APK | **yes** — GitHub Release `apk-v2` (latest), built from `e1bb05a`; `apk-v1` from `3ad76ea` is the earlier build |
+| Whole-project CI (unit tests + lint + debug APK + minified release APK + APK secret scan + "the baked default gateway is really in the APK") | **green**: `37193950163`, `37195121775`, `37196373156` (branch), `37194219682`, `37195469014`, `37196994498` (tags) |
+| Default gateway baked in | `https://metaloid.vercel.app` — a fresh install connects to the live backend and only asks for a sign-in |
+| Published APK | **yes** — GitHub Release `apk-v3` (latest), built from `2185498` |
 
 **What that green run does and does not prove.** It proves the project compiles
 with no errors, the nine JVM test classes pass, `lintDebug` reports no errors
@@ -54,6 +56,38 @@ entry behind it:
    normal path *and* again in `finally`; when the first assistant-row insert had
    failed, that second write created a second row — the same answer twice in the
    transcript. D6's "exactly once" is now enforced by a flag.
+
+## What changed after `apk-v2`
+
+Read the second time against two questions: "does the logo look like MetaIoid?"
+and "can a person who has never seen this app use it?" Five more defects, in
+`e375381` and `2185498`:
+
+5. **The logo was invisible in two places.** The brand asset is black ink on
+   transparency. The launcher icon put it on the near-black page colour (a black
+   mark on a black square, in the launcher, the task switcher and the Android 12
+   splash) and the in-app boot/sign-in marks were drawn untinted on the obsidian
+   page. The plate is now white — the brand's original pairing — and `BrandMark`
+   tints the painter with the theme's foreground, which is what the web client's
+   `dark:invert` does (D23).
+6. **The app did not know where the backend was.** A fresh install asked the user
+   to type a server address. The deployment URL is now baked into the APK as a
+   public build value, and CI fails if that string is not inside both artifacts
+   (RELEASE.md §3).
+7. **A new user on a Supabase-backed deployment could not sign in.** The sign-in
+   screen read the identity-provider configuration once, before `/api/config` had
+   answered, and then offered the handle-and-passcode tab and nothing else — a
+   form that cannot work on a deployment whose accounts live in Supabase. The
+   config is now observed and the default is decided by `AuthModePreference`,
+   with tests, without ever overriding a tab the user picked (D24).
+8. **The back button closed the app from every screen.** `back()` existed with no
+   caller; a `BackHandler` now walks the app's own route stack and is disabled at
+   the root (D25).
+9. **The R8 keeps named the wrong package.** `proguard-rules.pro` kept
+   `com.metaloid.app.MetaIoidApplication` / `MainActivity`, which is the
+   `BuildConfig`/`R` namespace rather than where those classes live; the share
+   receiver had no rule at all. All three manifest components are now kept by
+   their real names.
 
 ## Phase log
 

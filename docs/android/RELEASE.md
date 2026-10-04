@@ -4,11 +4,13 @@
 
 | | |
 | --- | --- |
-| Release (latest) | [`apk-v2`](https://github.com/sandhyachaudhary1234567890-ux/metaloid/releases/tag/apk-v2) |
-| Built from | commit `e1bb05a` — CI run `37195121775` on the branch and `37195469014` on the tag, both green |
-| Install | [`metaloid-debug.apk`](https://github.com/sandhyachaudhary1234567890-ux/metaloid/releases/download/apk-v2/metaloid-debug.apk) · [`metaloid-release.apk`](https://github.com/sandhyachaudhary1234567890-ux/metaloid/releases/download/apk-v2/metaloid-release.apk) |
-| Checksums | [`SHA256SUMS.txt`](https://github.com/sandhyachaudhary1234567890-ux/metaloid/releases/download/apk-v2/SHA256SUMS.txt) |
-| Previous | [`apk-v1`](https://github.com/sandhyachaudhary1234567890-ux/metaloid/releases/tag/apk-v1), built from `3ad76ea` — same assets, without the four runtime fixes listed in PROGRESS.md |
+| Release (latest) | [`apk-v3`](https://github.com/sandhyachaudhary1234567890-ux/metaloid/releases/tag/apk-v3) |
+| Built from | commit `2185498` — CI run `37196373156` on the branch and `37196994498` on the tag, both green |
+| Install | [`metaloid-debug.apk`](https://github.com/sandhyachaudhary1234567890-ux/metaloid/releases/download/apk-v3/metaloid-debug.apk) · [`metaloid-release.apk`](https://github.com/sandhyachaudhary1234567890-ux/metaloid/releases/download/apk-v3/metaloid-release.apk) |
+| Checksums | [`SHA256SUMS.txt`](https://github.com/sandhyachaudhary1234567890-ux/metaloid/releases/download/apk-v3/SHA256SUMS.txt) |
+| Default gateway | `https://metaloid.vercel.app` — baked in, so the app connects on first launch and only asks for a sign-in |
+| Version | `1.0.1` (versionCode 2) — installs over an earlier build |
+| Previous | [`apk-v2`](https://github.com/sandhyachaudhary1234567890-ux/metaloid/releases/tag/apk-v2) (`e1bb05a`), [`apk-v1`](https://github.com/sandhyachaudhary1234567890-ux/metaloid/releases/tag/apk-v1) (`3ad76ea`) |
 
 The debug APK is the one to install first: it is the same code with
 `isMinifyEnabled = false`, so a stack trace from it is readable. Neither APK has
