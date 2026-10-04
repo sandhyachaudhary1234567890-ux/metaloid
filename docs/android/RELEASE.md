@@ -16,6 +16,9 @@ The debug APK is the one to install first: it is the same code with
 `isMinifyEnabled = false`, so a stack trace from it is readable. Neither APK has
 ever been run on a device — see `TESTING.md` §5.
 
+![The launcher icon: the black mark on its white plate, as a legacy square, a
+masked round icon, and the full adaptive canvas.](launcher-icon-preview.png)
+
 ## 1. Where the APK comes from
 
 The APK is built by GitHub Actions, not by hand:
