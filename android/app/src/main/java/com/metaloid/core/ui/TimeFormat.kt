@@ -5,6 +5,7 @@ import java.time.LocalDate
 import java.time.ZoneId
 import java.time.format.DateTimeFormatter
 import java.time.temporal.ChronoUnit
+import java.util.Locale
 
 /**
  * Time, as a person reads it.
@@ -72,7 +73,7 @@ object TimeFormat {
         if (ms == null || ms < 0) return "—"
         return when {
             ms < 1_000 -> "$ms ms"
-            ms < 60_000 -> String.format("%.1f s", ms / 1000.0)
+            ms < 60_000 -> String.format(Locale.ROOT, "%.1f s", ms / 1000.0)
             else -> "${ms / 60_000} min ${(ms % 60_000) / 1000} s"
         }
     }
@@ -87,6 +88,6 @@ object TimeFormat {
             value /= 1024
             unit += 1
         }
-        return if (unit == 0) "${count} B" else String.format("%.1f %s", value, units[unit])
+        return if (unit == 0) "${count} B" else String.format(Locale.ROOT, "%.1f %s", value, units[unit])
     }
 }

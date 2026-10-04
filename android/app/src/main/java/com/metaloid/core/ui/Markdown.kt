@@ -125,14 +125,14 @@ object MarkdownParser {
                     flushParagraph()
                     blocks += MarkdownBlock.Quote(trimmed.removePrefix(">").trim())
                 }
-                bulletPrefix(trimmed) != null -> {
+                bulletPrefix(line) != null -> {
                     flushParagraph()
-                    val (depth, text) = bulletPrefix(trimmed)!!
+                    val (depth, text) = bulletPrefix(line)!!
                     blocks += MarkdownBlock.BulletItem(depth, text)
                 }
-                numberedPrefix(trimmed) != null -> {
+                numberedPrefix(line) != null -> {
                     flushParagraph()
-                    val (depth, number, text) = numberedPrefix(trimmed)!!
+                    val (depth, number, text) = numberedPrefix(line)!!
                     blocks += MarkdownBlock.NumberedItem(depth, number, text)
                 }
                 else -> {
@@ -156,8 +156,9 @@ object MarkdownParser {
     }
 
     private fun bulletPrefix(line: String): Pair<Int, String>? {
-        val depth = (line.length - line.trimStart(' ', '\t').length) / 2
         val body = line.trimStart()
+        // Depth is the indentation of the *original* line: two spaces per level.
+        val depth = (line.length - body.length) / 2
         for (marker in listOf("- ", "* ", "+ ")) {
             if (body.startsWith(marker)) return depth to body.removePrefix(marker)
         }
@@ -165,8 +166,8 @@ object MarkdownParser {
     }
 
     private fun numberedPrefix(line: String): Triple<Int, String, String>? {
-        val depth = (line.length - line.trimStart(' ', '\t').length) / 2
         val body = line.trimStart()
+        val depth = (line.length - body.length) / 2
         val dot = body.indexOf(". ")
         if (dot in 1..3) {
             val number = body.substring(0, dot)
