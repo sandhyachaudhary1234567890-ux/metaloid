@@ -71,21 +71,28 @@ export function SettingsRow({
 
 /** A segmented control. The selected segment is raised, not accent-filled —
  *  six accent-filled pills on one page is how a settings screen starts to
- *  look like a form wizard. */
+ *  look like a form wizard. Single-row by default; `wrap` lets long option
+ *  lists (provider pickers) flow onto their own lines instead of crushing
+ *  the row's label column. */
 export function Seg<T extends string>({
   options,
   value,
   onPick,
   label,
+  wrap = false,
 }: {
   options: readonly T[] | T[];
   value: T;
   onPick: (v: T) => void;
   label?: string;
+  wrap?: boolean;
 }) {
   return (
     <div
-      className="flex gap-0.5 rounded-[var(--radius-md)] border border-[var(--border-subtle)] bg-[var(--surface-sunken)] p-0.5"
+      className={cn(
+        'flex gap-0.5 rounded-[var(--radius-md)] border border-[var(--border-subtle)] bg-[var(--surface-sunken)] p-0.5',
+        wrap && 'flex-wrap gap-1 border-0 bg-transparent p-0',
+      )}
       role="radiogroup"
       aria-label={label}
     >
@@ -103,6 +110,8 @@ export function Seg<T extends string>({
               selected
                 ? 'bg-[var(--surface-elevated)] text-[var(--fg)] shadow-raised'
                 : 'text-[var(--fg-muted)] hover:text-[var(--fg)]',
+              wrap && 'border border-[var(--border)]',
+              wrap && selected && 'border-[var(--border-strong)]',
             )}
           >
             {o}
@@ -157,12 +166,14 @@ export function Select<T extends string>({
   options,
   label,
   className,
+  disabled = false,
 }: {
   value: T;
   onChange: (v: T) => void;
   options: { value: T; label: string }[];
   label: string;
   className?: string;
+  disabled?: boolean;
 }) {
   return (
     <div className={cn('relative inline-flex items-center', className)}>
@@ -170,12 +181,14 @@ export function Select<T extends string>({
         value={value}
         onChange={(e) => onChange(e.target.value as T)}
         aria-label={label}
+        disabled={disabled}
         className={cn(
           'h-9 w-full cursor-pointer appearance-none rounded-[var(--radius-md)]',
           'border border-[var(--border)] bg-[var(--surface-elevated)]',
           'pl-3 pr-8 text-ui text-[var(--fg)]',
           'transition-colors duration-small ease-out hover:border-[var(--border-strong)]',
           'focus:border-[var(--accent)] focus:outline-none focus:ring-[3px] focus:ring-[var(--accent-subtle)]',
+          disabled && 'cursor-not-allowed opacity-60 hover:border-[var(--border)]',
         )}
       >
         {options.map((o) => (

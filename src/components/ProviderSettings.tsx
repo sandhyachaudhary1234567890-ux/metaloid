@@ -315,8 +315,10 @@ export function ProviderSettings() {
       <SettingsRow
         label="Routing"
         hint="Auto uses your default, then fallbacks, then any healthy provider"
+        stacked
         control={
           <Seg
+            wrap
             options={['auto', ...ordered.map((p) => p.providerId)] as unknown as string[]}
             value={(routing?.defaultProvider || 'auto') as string}
             onPick={(v) => setDefault(v === 'auto' ? null : v)}

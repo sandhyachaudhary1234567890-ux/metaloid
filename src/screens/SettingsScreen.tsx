@@ -32,6 +32,49 @@ const SECTIONS = [
   { id: 'advanced', label: 'Advanced' },
 ];
 
+/**
+ * Voice picker that never renders an empty dropdown. When the OS exposes no
+ * voice for the language (common for Hindi on desktop browsers without a
+ * language pack), it shows a disabled explanatory option instead of a blank
+ * box, plus a hint row pointing at the OS language settings.
+ */
+function VoiceSelect({
+  value,
+  onChange,
+  voices,
+  label,
+  emptyHint,
+}: {
+  value: string;
+  onChange: (v: string) => void;
+  voices: string[];
+  label: string;
+  emptyHint: string;
+}) {
+  if (!voices.length) {
+    return (
+      <Select
+        value=""
+        onChange={() => {}}
+        options={[{ value: '', label: emptyHint }]}
+        label={label}
+        className="w-[240px]"
+        disabled
+      />
+    );
+  }
+  const safe = voices.includes(value) ? value : voices[0];
+  return (
+    <Select
+      value={safe}
+      onChange={onChange}
+      options={voices.map((v) => ({ value: v, label: v }))}
+      label={label}
+      className="w-[240px]"
+    />
+  );
+}
+
 export function SettingsScreen() {
   const { settings, updateSettings, toast, openModal, setView, setSkillForgeOpen } = useApp();
   const saved = (msg: string) => toast({ title: msg });
@@ -390,27 +433,28 @@ export function SettingsScreen() {
           <SettingsRow
             label="English voice"
             control={
-              <Select
+              <VoiceSelect
                 value={settings.englishVoice}
                 onChange={(v) => updateSettings({ englishVoice: v })}
-                options={voices.filter((v) => v.lang === 'en').map((v) => ({ value: v.label, label: v.label }))}
+                voices={voices.filter((v) => v.lang === 'en').map((v) => v.label)}
                 label="English voice"
-                className="w-[240px]"
+                emptyHint="No English voices on this device"
               />
             }
           />
 
           <SettingsRow
             label="Hindi voice"
+            hint={voices.some((v) => v.lang === 'hi') ? undefined : 'No Hindi voice is installed on this device — add one in the OS language settings to enable it.'}
             control={
-              <Select
+              <VoiceSelect
                 value={settings.hindiVoice}
                 onChange={(v) => updateSettings({ hindiVoice: v })}
-                options={voices
+                voices={voices
                   .filter((v) => v.lang === 'hi')
-                  .map((v) => ({ value: v.label.split(' — ')[0], label: v.label.split(' — ')[0] }))}
+                  .map((v) => v.label.split(' — ')[0])}
                 label="Hindi voice"
-                className="w-[240px]"
+                emptyHint="No Hindi voice on this device"
               />
             }
           />
