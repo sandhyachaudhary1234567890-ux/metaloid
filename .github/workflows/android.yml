@@ -74,12 +74,11 @@ jobs:
 
       - name: Unit tests + lint + debug APK
         run: |
+          set -o pipefail
           gradle --no-daemon --stacktrace \
             :app:testDebugUnitTest \
-            :app:assembleDebug
-
-      - name: Lint (debug + release)
-        run: gradle --no-daemon --stacktrace :app:lintDebug
+            :app:assembleDebug 2>&1 | tee "$RUNNER_TEMP/ci-build.log"
+          gradle --no-daemon --stacktrace :app:lintDebug 2>&1 | tee -a "$RUNNER_TEMP/ci-build.log"
 
       - name: Release APK (minified)
         env:
@@ -88,11 +87,40 @@ jobs:
           ANDROID_KEY_ALIAS: ${{ secrets.ANDROID_KEY_ALIAS }}
           ANDROID_KEY_PASSWORD: ${{ secrets.ANDROID_KEY_PASSWORD }}
         run: |
+          set -o pipefail
           if [ -n "$ANDROID_KEYSTORE_BASE64" ]; then
             echo "$ANDROID_KEYSTORE_BASE64" | base64 -d > "$RUNNER_TEMP/release.jks"
             echo "METALOID_KEYSTORE=$RUNNER_TEMP/release.jks" >> "$GITHUB_ENV"
           fi
-          gradle --no-daemon --stacktrace :app:assembleRelease
+          gradle --no-daemon --stacktrace :app:assembleRelease 2>&1 | tee -a "$RUNNER_TEMP/ci-build.log"
+
+      # The build log is not always reachable (artifact hosts are blocked in some
+      # environments, and a red build publishes no APK). Reporting the compiler's
+      # own message as a commit comment makes a failure readable from anywhere
+      # `gh api` works — and permanently attached to the commit it belongs to.
+      - name: Report build failure on the commit
+        if: failure()
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          if [ ! -f "$RUNNER_TEMP/ci-build.log" ]; then
+            echo "no captured log; the failure happened before the build step"
+            exit 0
+          fi
+          {
+            echo "CI: \`:app:testDebugUnitTest\`, \`:app:assembleDebug\` or \`:app:lintDebug\` failed for \`${GITHUB_SHA:0:7}\`."
+            echo
+            echo '```'
+            grep -E '^(e: |w: file.*warning)|^FAILURE|error:|Execution failed|What went wrong|> Task .* FAILED|^Caused by|^BUILD ' "$RUNNER_TEMP/ci-build.log" | head -80 || true
+            echo
+            echo '--- last 40 lines ---'
+            tail -40 "$RUNNER_TEMP/ci-build.log"
+            echo '```'
+          } > "$RUNNER_TEMP/comment.md"
+          gh api --method POST \
+            "repos/${{ github.repository }}/commits/${{ github.sha }}/comments" \
+            -F body=@"$RUNNER_TEMP/comment.md" \
+            && echo "failure reported as a commit comment"
 
       - name: Test reports
         if: always()
