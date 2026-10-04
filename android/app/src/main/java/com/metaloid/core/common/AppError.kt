@@ -75,8 +75,9 @@ sealed interface AppError {
     }
 
     /** Credentials were rejected by the identity provider. */
-    data class BadCredentials(override val message: String?, override val technicalDetail: String? = null) : AppError {
-        override val userMessage: String get() = message?.takeIf { it.isNotBlank() } ?: "That email or password isn't right."
+    data class BadCredentials(val serverMessage: String?, override val technicalDetail: String? = null) : AppError {
+        override val userMessage: String
+            get() = serverMessage?.takeIf { it.isNotBlank() } ?: "That email or password isn't right."
     }
 
     /** Sign-up refused because the account already exists. */
@@ -105,8 +106,9 @@ sealed interface AppError {
         override val userMessage: String get() = "That isn't here any more."
     }
 
-    data class InvalidInput(override val message: String?, override val technicalDetail: String? = null) : AppError {
-        override val userMessage: String get() = message?.takeIf { it.isNotBlank() } ?: "That request wasn't valid."
+    data class InvalidInput(val serverMessage: String?, override val technicalDetail: String? = null) : AppError {
+        override val userMessage: String
+            get() = serverMessage?.takeIf { it.isNotBlank() } ?: "That request wasn't valid."
     }
 
     /** The gateway's data service is down (`db_error`). */

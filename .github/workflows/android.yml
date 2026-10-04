@@ -111,10 +111,15 @@ jobs:
             echo "CI: \`:app:testDebugUnitTest\`, \`:app:assembleDebug\` or \`:app:lintDebug\` failed for \`${GITHUB_SHA:0:7}\`."
             echo
             echo '```'
-            grep -E '^(e: |w: file.*warning)|^FAILURE|error:|Execution failed|What went wrong|> Task .* FAILED|^Caused by|^BUILD ' "$RUNNER_TEMP/ci-build.log" | head -80 || true
-            echo
-            echo '--- last 40 lines ---'
-            tail -40 "$RUNNER_TEMP/ci-build.log"
+            # Compiler messages first: they are the only actionable part.
+            if grep -qE '^(e: |FAILURE: |error: )' "$RUNNER_TEMP/ci-build.log"; then
+              grep -E '^(e: |FAILURE: |error: |Execution failed|What went wrong|> Task .* FAILED|Caused by: )' "$RUNNER_TEMP/ci-build.log" | head -250
+            else
+              grep -E 'FAILURE|Execution failed|What went wrong|> Task .* FAILED|Caused by: ' "$RUNNER_TEMP/ci-build.log" | head -40
+              echo
+              echo '--- last 60 lines ---'
+              tail -60 "$RUNNER_TEMP/ci-build.log"
+            fi
             echo '```'
           } > "$RUNNER_TEMP/comment.md"
           gh api --method POST \

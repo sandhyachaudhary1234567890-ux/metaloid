@@ -55,7 +55,7 @@ import com.metaloid.feature.missions.StatusPill
  * Research: investigations and the findings they produced.
  *
  * This is the one feature the gateway reports availability for separately
- * (`/api/osint/*`), and the app treats a "not available on this deployment"
+ * (`/api/osint/…`), and the app treats a "not available on this deployment"
  * answer as information rather than an error — the server's own words are shown
  * (Section 6).
  */

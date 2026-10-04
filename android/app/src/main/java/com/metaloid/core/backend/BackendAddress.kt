@@ -41,20 +41,20 @@ class BackendAddress(initial: String? = null, private val allowCleartext: Boolea
             return BackendValidation.Empty
         }
         return when (val parsed = parse(trimmed)) {
-            is Result.Success -> {
+            is ParseResult.Success -> {
                 _url.value = parsed.value
                 BackendValidation.Ok(parsed.value)
             }
-            is Result.Failure -> BackendValidation.Invalid(parsed.message)
+            is ParseResult.Failure -> BackendValidation.Invalid(parsed.message)
         }
     }
 
-    private sealed interface Result {
-        data class Success(val value: HttpUrl) : Result
-        data class Failure(val message: String) : Result
+    private sealed interface ParseResult {
+        data class Success(val value: HttpUrl) : ParseResult
+        data class Failure(val message: String) : ParseResult
     }
 
-    private fun parse(raw: String): Result {
+    private fun parse(raw: String): ParseResult {
         val withScheme = if (raw.startsWith("http://") || raw.startsWith("https://")) raw else "https://$raw"
         val url = withScheme.trimEnd('/').toHttpUrlOrNull()
             ?: return Result.Failure("That doesn't look like a web address.")

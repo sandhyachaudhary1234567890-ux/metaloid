@@ -29,6 +29,8 @@ import kotlinx.coroutines.launch
 class MainActivity : ComponentActivity() {
 
     companion object {
+        private const val TAG = "activity"
+
         /** Opens the conversation list; sent by the share receiver. */
         const val EXTRA_OPEN_CONVERSATIONS = "com.metaloid.extra.OPEN_CONVERSATIONS"
 
@@ -75,9 +77,5 @@ class MainActivity : ComponentActivity() {
             intent?.getBooleanExtra(EXTRA_OPEN_CONVERSATIONS, false) == true ->
                 appViewModel.resetTo(Route.Conversations)
         }
-    }
-
-    private companion object {
-        const val TAG = "activity"
     }
 }

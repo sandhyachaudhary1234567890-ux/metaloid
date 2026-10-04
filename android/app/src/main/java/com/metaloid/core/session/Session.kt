@@ -10,7 +10,7 @@ import kotlinx.serialization.Serializable
  * recorded origin, because the difference changes exactly one thing: whether
  * the Supabase Storage upload path is available (it needs a Supabase token).
  *
- *   GATEWAY   self-hosted / local gateway accounts (`/api/auth/*`,
+ *   GATEWAY   self-hosted / local gateway accounts (`/api/auth/…`,
  *             handle + passcode). Available on any deployment that has local
  *             accounts, and the only path on a server with no Supabase project.
  *   SUPABASE  email + password through the project's identity provider. This is

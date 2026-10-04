@@ -136,12 +136,11 @@ class ApiClient(
     ): ApiResult<T> = request("DELETE", path, emptyMap(), body, serializer)
 
     /** For endpoints whose body the app ignores entirely. */
-    suspend fun postDiscardingBody(path: String, body: JsonElement? = null): ApiResult<Unit> =
-        execute(
-            build("POST", path, emptyMap(), body) ?: return ApiResult.Err(AppError.Unreachable("no base url")),
-            decode = { },
-            allowRefreshRetry = true,
-        )
+    suspend fun postDiscardingBody(path: String, body: JsonElement? = null): ApiResult<Unit> {
+        val request = build("POST", path, emptyMap(), body)
+            ?: return ApiResult.Err(AppError.Unreachable("no base url"))
+        return execute(request, decode = { }, allowRefreshRetry = true)
+    }
 
     /**
      * Sends a JSON POST to an absolute base URL with explicit headers.

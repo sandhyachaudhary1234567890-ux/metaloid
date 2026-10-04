@@ -6,7 +6,7 @@ import kotlinx.serialization.Serializable
 import kotlinx.serialization.json.JsonElement
 
 /**
- * The gateway's account endpoints (`/api/auth/*`), declared as an interface.
+ * The gateway's account endpoints (`/api/auth/…`), declared as an interface.
  *
  * The session manager depends on this rather than on the concrete API class so
  * that every authentication rule in it — one refresh, no refresh storms, a
@@ -14,7 +14,7 @@ import kotlinx.serialization.json.JsonElement
  * network, a server or a clock.
  *
  * Shapes are confirmed from `server/src/core/users.js` (`createSession`,
- * `refreshSession`) and `server/src/index.js` (`/api/auth/*`).
+ * `refreshSession`) and `server/src/index.js` (`/api/auth/…`).
  */
 interface GatewayAuthApi {
     suspend fun signUp(handle: String, displayName: String, passcode: String, deviceName: String): ApiResult<GatewaySessionResponse>

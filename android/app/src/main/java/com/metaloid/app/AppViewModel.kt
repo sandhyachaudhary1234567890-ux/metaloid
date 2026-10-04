@@ -25,6 +25,7 @@ import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.launch
 import okhttp3.HttpUrl
+import okhttp3.HttpUrl.Companion.toHttpUrl
 
 /**
  * What the app is, as the shell around every screen sees it.
@@ -148,7 +149,7 @@ class AppViewModel(
                         val url = config.value.supabaseUrl
                         val anon = config.value.supabaseAnonKey
                         if (!url.isNullOrBlank() && !anon.isNullOrBlank()) {
-                            val parsed: HttpUrl? = runCatching { okhttp3.HttpUrl.Companion.toHttpUrl(url) }.getOrNull()
+                            val parsed: HttpUrl? = runCatching { url.toHttpUrl() }.getOrNull()
                             if (parsed != null) container.setSupabaseConfig(SupabaseConfig(parsed, anon))
                         }
                     }
