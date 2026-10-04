@@ -94,13 +94,14 @@ jobs:
           target: google_apis
           arch: x86_64
           profile: pixel_2
+          emulator-boot-timeout: 900
+          working-directory: android
           disable-animations: true
           emulator-options: -no-window -gpu swiftshader_indirect -noaudio -no-boot-anim -no-snapshot-save
           script: |
-            bash -o pipefail <<'BASH'
-            cd "$GITHUB_WORKSPACE/android" || { echo "::error::Android project directory not found under $GITHUB_WORKSPACE"; exit 1; }
-            echo "Emulator Gradle working directory: $PWD"
+            set -o pipefail
             set +e
+            echo "Emulator Gradle working directory: $PWD"
             gradle --no-daemon --stacktrace :app:connectedDebugAndroidTest 2>&1 | tee "$RUNNER_TEMP/ci-emulator.log"
             result=$?
             if [ "$result" -ne 0 ]; then
@@ -122,7 +123,6 @@ jobs:
               } | tee -a "$RUNNER_TEMP/ci-emulator.log"
             fi
             exit "$result"
-            BASH
 
       - name: Release APK (minified)
         env:

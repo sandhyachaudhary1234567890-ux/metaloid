@@ -2,19 +2,25 @@
 
 What is proven, how, and — just as important — what is not.
 
-## Current V4 status (last completed CI: 2026-10-04, run `37213055749`)
+## Current V4 status (last completed CI: 2026-10-04, run `37213918933`)
 
 V4 is **not ready to publish**. In run
 [37211404025](https://github.com/sandhyachaudhary1234567890-ux/metaloid/actions/runs/37211404025),
-unit tests, lint, and the debug APK build passed, but the API 34 emulator test
-ran and did not observe "Sign in to continue" within 45 seconds. A follow-up,
-[37213055749](https://github.com/sandhyachaudhary1234567890-ux/metaloid/actions/runs/37213055749),
-again passed unit tests/lint/debug assembly, but the smoke-test Gradle command
-was launched from the repository root and failed before any instrumentation
-ran. The workflow now uses the absolute Android project path and captures the
-UI hierarchy/app logcat on the next attempt; the app-side cause remains unknown.
-Release APK build, APK secret scan, and APK upload have not completed. No V4
-release or successful downloadable V4 artifact exists.
+unit tests, lint, and debug APK assembly passed, but the API 34 emulator test
+did not observe "Sign in to continue" within 45 seconds. Runs
+[37213055749](https://github.com/sandhyachaudhary1234567890-ux/metaloid/actions/runs/37213055749)
+and
+[37213710373](https://github.com/sandhyachaudhary1234567890-ux/metaloid/actions/runs/37213710373)
+passed those build steps but launched the smoke-test Gradle command from the
+repository root, before any instrumentation ran. Run
+[37213918933](https://github.com/sandhyachaudhary1234567890-ux/metaloid/actions/runs/37213918933)
+again passed unit tests/lint/debug assembly, but the emulator action timed out
+waiting for API 34 to boot; its script and instrumentation never started. The
+next workflow revision uses the action's `working-directory: android` input,
+raises the emulator boot allowance to 900 seconds, and retains UI hierarchy and
+app-log capture for an actual instrumentation failure. The app-side cause from
+37211404025 remains unknown. Release APK build, APK secret scan, and APK upload
+have not completed. No V4 release or successful downloadable V4 artifact exists.
 
 This environment has no Java/Gradle Android toolchain, so the Android build
 results are from GitHub Actions only. Fresh checks against this tree on
@@ -43,11 +49,11 @@ continuity, or behavior on a physical device.
 
 CI is the compiler. There is no local Android SDK in the environment these
 commits were authored in, so *nothing here was compiled locally*: the first
-build of every file happens on the runner, and a red build is treated as a
-defect in the code, never as a flaky step. That is not a limitation of the
-process so much as the point of it — the artifact a user installs is the one CI
-built from the committed source, and the run that built it is public and
-permanent.
+build of every file happens on the runner. A code/test failure is treated as a
+defect to investigate and fix; an infrastructure failure (such as the emulator
+not booting) is not counted as a pass and must be resolved by a valid rerun.
+The artifact a user installs should be the one CI built from the committed
+source, with its public run retained as evidence.
 
 ## 2. Unit tests (JVM, no device)
 
@@ -148,11 +154,12 @@ was a genuinely wrong test (a 2026 timestamp compared against a January 2026
 
 What is still not verified:
 
-* The cold-launch instrumentation test has run on an API 34 emulator, but its
-  latest run did **not** reach the signed-out screen. Until the window/logcat
-  diagnostics identify and resolve that failure, Activity bootstrap and
-  signed-out behavior are not verified. Even a passing startup smoke test would
-  not cover chat, provider setup, keyboard/insets, TalkBack, or network recovery.
+* The only app-side cold-launch test so far, run `37211404025`, did **not**
+  reach the signed-out screen. The latest run (`37213918933`) timed out while
+  booting the emulator, before the test or its UI/logcat diagnostics could run.
+  Activity bootstrap and signed-out behavior therefore remain unverified. Even
+  a passing startup smoke test would not cover chat, provider setup,
+  keyboard/insets, TalkBack, or network recovery.
 * **The app has not been verified against the live gateway or on a physical
   device.** The emulator test did not establish that sign-in can proceed. Every
   behavior in `CONTRACT_MAP.md` is derived from server source/API documentation

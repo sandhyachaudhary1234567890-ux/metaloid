@@ -58,14 +58,17 @@ unverified. Production backend compatibility is therefore a release blocker
 until the deployment is updated and those routes are verified. No deployment
 was attempted here.
 
-Android CI run `37211404025` passed JVM unit tests, lint, and the debug APK
-build; its API 34 startup instrumentation test failed to reach the expected
-signed-out screen. Follow-up run `37213055749` passed those same build steps but
-failed before instrumentation because the Gradle command ran from the repository
-root. The next workflow revision uses an absolute path and will emit the UI
-hierarchy/app logcat; the actual startup cause remains unknown. The release APK
-build and secret scan have not passed. V4 has not been installed on a physical
-device; V3/V4 signing continuity and performance/accessibility audits are also
+Android CI runs `37211404025`, `37213055749`, `37213710373`, and `37213918933`
+all passed JVM unit tests, lint, and debug APK assembly. Run `37211404025` did
+not reach the signed-out screen. Runs `37213055749` and `37213710373` failed
+before instrumentation because Gradle ran from the repository root. Run
+`37213918933` timed out waiting for the API 34 emulator to boot, before the
+workflow's test/diagnostic script started. The next workflow uses the action's
+explicit `working-directory: android` input and a 900-second boot timeout; UI
+hierarchy and app-log capture are retained for instrumentation failures. The
+app-side cause from `37211404025` remains unknown. The release APK build and
+secret scan have not passed. V4 has not been installed on a physical device;
+V3/V4 signing continuity and performance/accessibility audits are also
 outstanding. Do not use `METAIOID V4 — MARKET READY` or publish an APK release
 until the CI, deployed backend, signing, and device release gates are actually
 satisfied.

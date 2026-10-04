@@ -6,25 +6,29 @@ committed *and* CI has compiled it *and* its tests pass. Until then it is
 
 Historical baseline: the published V3 release is `apk-v3` (see
 `docs/android/RELEASE.md`). V4 is committed to the Arena working branch, but it
-is **not ready to publish**: the latest Android CI run built the debug APK and
-passed JVM tests/lint, then failed before instrumentation because Gradle was
-run from the repository root. The prior run did reach the emulator test, but it
-could not observe the signed-out screen; the corrected absolute-path workflow
-and UI/logcat diagnostics are being rerun.
+is **not ready to publish**: latest run `37213918933` built the debug APK and
+passed JVM tests/lint, then timed out before instrumentation because the API 34
+emulator did not boot. Earlier runs either launched Gradle from the wrong
+working directory (`37213055749`, `37213710373`) or ran the app-side smoke test
+but failed to observe the signed-out screen (`37211404025`). The workflow now
+uses the emulator action's explicit Android working directory, allows 900
+seconds for boot, and captures UI/logcat diagnostics once the test starts.
 
 ## Current V4 increment — compiled, partially verified; not release-ready
 
 Changes include backend-backed first-run provider setup and readiness gating,
 Smart Connect plus server-catalog model selection, route persistence, chat
 retry/finalization metadata fixes, and related regression coverage. GitHub
-Actions compiled the app and passed JVM tests, lint, and the debug APK build.
+Actions compiled the app and passed JVM tests, lint, and debug APK assembly.
 Run `37211404025` executed the instrumented test but could not observe the
-signed-out screen; follow-up run `37213055749` failed before instrumentation
-because its Gradle command used the repository root. The release APK build, APK
-secret scan, and artifact upload have not passed. No V4 release or successful
-downloadable V4 artifact exists. See
-`TESTING.md` for the verification limits and `BACKEND_CHANGES.md` for the
-additive server contract changes.
+signed-out screen; runs `37213055749` and `37213710373` failed before
+instrumentation because Gradle ran from the repository root; run `37213918933`
+failed earlier because the API 34 emulator did not boot before the action's
+timeout. The next workflow uses the action's explicit `working-directory`
+input and a 900-second boot allowance. The release APK build, APK secret scan,
+and artifact upload have not passed. No V4 release or successful downloadable
+V4 artifact exists. See `TESTING.md` for verification limits and
+`BACKEND_CHANGES.md` for the additive server contract changes.
 
 ## Status at a glance
 
@@ -39,7 +43,7 @@ additive server contract changes.
 | Share intake | written; CI-compiled |
 | Docs (`docs/android/*`) | written |
 | Web client regression (`npm run check`, tests, build) | run in this repository; exact output in TESTING.md §4 |
-| Whole-project CI (unit tests + lint + debug APK + emulator smoke + minified release APK + APK secret scan) | Historical V1/V2/V3 runs are green; V4 run `37211404025` reached but failed the emulator test, and follow-up `37213055749` failed before instrumentation. Release APK, secret scan, and artifact upload remain unverified |
+| Whole-project CI (unit tests + lint + debug APK + emulator smoke + minified release APK + APK secret scan) | Historical V1/V2/V3 runs are green; V4 JVM tests/lint/debug assembly pass, but `37211404025` failed its app-side smoke assertion, `37213055749`/`37213710373` failed on the working directory, and `37213918933` timed out waiting for emulator boot. Release APK, secret scan, and artifact upload remain unverified |
 | Published APK | **yes — V3 only**: GitHub Release `apk-v3`; there is no V4 artifact yet |
 
 **Historical runs below are baseline evidence only.** V4 has its own CI run,
@@ -89,7 +93,7 @@ entry behind it:
 | 13 — Voice | **Not shipped in this build.** The gateway reports `voice: false`; the client shows voice as unavailable rather than offering a control that cannot work. The on-device recogniser path is the first item of the next increment (see DECISIONS.md § Voice). | deliberately not implemented |
 | 14 — Settings & diagnostics | Theme, accent, reduced motion, server address, sign-out (device and everywhere), capabilities report, redacted log export. | done |
 | 15 — Hardening | No secrets in the app or the build; release checklist; R8 rules; cleartext refused outside debug; link handling restricted to http(s) without embedded credentials. | done |
-| 16 — Tests | JVM unit tests for the pure logic (parser, reducer, redaction, error map, time, markdown, routes, attachment size/draft store where pure) + CI assembly, lint, and API 34 emulator startup. Historical CI run `37193950163` passed the then-current suite; V4 run `37211404025` passed JVM tests/lint/debug assembly but the instrumented startup test failed, and `37213055749` failed before instrumentation due a workflow working-directory error. This phase remains in progress. | in progress |
+| 16 — Tests | JVM unit tests for the pure logic (parser, reducer, redaction, error map, time, markdown, routes, attachment size/draft store where pure) + CI assembly, lint, and API 34 emulator startup. Historical CI run `37193950163` passed the then-current suite; V4 JVM tests/lint/debug assembly pass, but `37211404025` failed the signed-out smoke assertion, `37213055749`/`37213710373` failed on the working directory, and `37213918933` timed out before emulator boot. This phase remains in progress. | in progress |
 | 17 — Report | This file plus `TESTING.md`. | done |
 
 ## What is deliberately absent
