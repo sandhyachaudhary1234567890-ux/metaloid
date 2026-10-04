@@ -1,7 +1,6 @@
 package com.metaloid.feature.boot
 
 import androidx.compose.animation.core.animateFloatAsState
-import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
@@ -23,12 +22,11 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.alpha
 import androidx.compose.ui.draw.scale
-import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
-import com.metaloid.app.R
 import com.metaloid.app.SystemSnapshot
 import com.metaloid.core.designsystem.BrandStatusLine
+import com.metaloid.core.designsystem.BrandMark
 import com.metaloid.core.designsystem.MetaIoidTheme
 import com.metaloid.core.designsystem.MetaLabel
 import com.metaloid.core.designsystem.MetaType
@@ -66,9 +64,9 @@ fun BootScreen(snapshot: SystemSnapshot, modifier: Modifier = Modifier) {
             horizontalAlignment = Alignment.CenterHorizontally,
             verticalArrangement = Arrangement.Center,
         ) {
-            Image(
-                painter = painterResource(R.drawable.metaloid_mark),
-                contentDescription = null,
+            // Tinted with the theme's foreground: the asset is black ink, so on
+            // the dark page an untinted mark is invisible (see Brand.kt).
+            BrandMark(
                 modifier = Modifier
                     .size(72.dp)
                     .alpha(progress)

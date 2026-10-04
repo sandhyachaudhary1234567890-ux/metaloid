@@ -15,6 +15,12 @@
     <color name="brand_paper">#FAF8F4</color>
     <!-- MetaIoid Jade: the single accent. -->
     <color name="brand_jade">#5CC79A</color>
-    <!-- The adaptive-icon background sits a step below the page. -->
-    <color name="brand_icon_background">#111110</color>
+    <!--
+      The adaptive-icon plate. White, because the mark is black ink: the brand
+      asset (public/brand/metaloid-mark.png) is a black glyph on transparency,
+      so any dark plate makes the launcher icon a black shape on a black square.
+      This is the original pairing — black mark, white ground — and the only one
+      that stays legible on a light or a dark launcher.
+    -->
+    <color name="brand_icon_background">#FFFFFF</color>
 </resources>

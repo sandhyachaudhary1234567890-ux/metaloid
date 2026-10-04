@@ -47,13 +47,17 @@ environment variable → `local.properties` → empty.
 
 | Value | Flag / env | What it is |
 | --- | --- | --- |
-| Gateway URL | `metaloid.gatewayUrl` / `METALOID_GATEWAY_URL` | e.g. `https://metaloid.example.com` |
+| Gateway URL | `metaloid.gatewayUrl` / `METALOID_GATEWAY_URL` | e.g. `https://metaloid.example.com`. **The release workflow sets this** to the project's own deployment (`https://metaloid.vercel.app`) unless the repository variable `METALOID_GATEWAY_URL` overrides it, so an installed APK connects straight to the backend and only asks for a sign-in. |
 | Supabase URL | `metaloid.supabaseUrl` / `METALOID_SUPABASE_URL` | the project URL from the dashboard |
 | Supabase anon key | `metaloid.supabaseAnonKey` / `METALOID_SUPABASE_ANON_KEY` | the **public** anon key |
 
 All three are public by design; they ship in every web client too. Nothing else is
 acceptable in `local.properties`, and the release checklist below exists to prove
 it.
+
+The Supabase pair may also be left empty on purpose: the app reads them at runtime
+from `GET /api/config`, which is how an APK built with no Supabase values still
+offers email sign-in against a Supabase-backed gateway (see DECISIONS.md D24).
 
 ## 4. Signing
 

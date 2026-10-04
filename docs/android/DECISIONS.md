@@ -223,3 +223,42 @@ config that trusts only the system CAs. A debug build gets an explicit config
 that allows cleartext (for a laptop gateway on the LAN) and nothing else. The
 address validator refuses `http://` in a release build at entry time, so the
 failure is a sentence the user can act on instead of a TLS error later.
+
+## D23 — The mark is drawn in the theme's foreground colour, not as-is
+
+`public/brand/metaloid-mark.png` is **black ink on transparency** — the mark as
+it appears on paper. Drawn as-is on the warm-obsidian page it is a black glyph on
+a near-black background: invisible. The web client handles exactly this with
+`dark:invert` on the `<img>` (`src/components/brand/MetaIoidMark.tsx`), and this
+app does the same thing in one place, `core/designsystem/Brand.kt`: `BrandMark`
+tints the painter with `colors.fg`, so the glyph is near-black on paper and
+near-white on obsidian. Every screen that shows the mark uses it, and a new
+screen cannot accidentally draw an invisible logo.
+
+The launcher icon has no such filter, so the colour is chosen when the file is
+written: `tools/generate-icons.mjs` renders the mark on a **white** plate — the
+original pairing — and `brand_icon_background` is `#FFFFFF`. The first version
+used the dark page colour as the plate, which produced a black mark on near-black
+in the launcher, the task switcher and (on Android 12+) the splash screen.
+
+## D24 — The sign-in default is the deployment's own preference, and it is reactive
+
+Whose accounts a deployment holds decides which sign-in form is useful:
+
+* a **Supabase-backed** deployment (the production shape: `auth.mode` = `jwks`,
+  data in Postgres) keeps its accounts in the identity provider. Its local user
+  file, if it has one, lives on a filesystem a serverless host does not keep;
+* a **self-hosted** deployment with no identity provider has local accounts
+  (handle + passcode), and they are the only way in.
+
+So the tab list is the preference — the head of the list is the default — and the
+rule for choosing lives in `core/session/AuthModePreference.kt` with tests behind
+it (`AuthModePreferenceTest`). Two properties matter:
+
+1. the list is **observed**, not read once. The Supabase identifiers come from
+   `/api/config`, a network round-trip that is usually still in flight when the
+   sign-in screen first composes. Reading the config once is how a first-run user
+   on a Supabase deployment was shown the handle-and-passcode tab and nothing
+   else — a form that cannot work there;
+2. a late-arriving list never moves a user who has already tapped a tab
+   (`userChoseMode`).

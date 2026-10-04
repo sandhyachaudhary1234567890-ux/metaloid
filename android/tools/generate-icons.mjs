@@ -3,9 +3,14 @@
  * Launcher-icon generator (maintainer tool, not part of the build).
  *
  * The Android client must wear the *existing* MetaIoid mark, not a redrawn
- * lookalike. This script takes the brand asset that ships with the web client
- * (public/brand/metaloid-mark.png, white mark on transparent) and renders the
- * densities Android wants:
+ * lookalike. The brand asset (public/brand/metaloid-mark.png) is **black ink on
+ * transparency** — the mark as it appears on paper. So the platform icon is the
+ * original pairing: the black mark on a **white** plate.
+ *
+ * The first version of this script used the dark page colour as the plate, which
+ * produced a black mark on near-black: an invisible icon. The web client does the
+ * same thing correctly with `dark:invert` on the `<img>`; a launcher icon has no
+ * such filter, so the colour has to be chosen when the file is written.
  *
  *   mipmap-<density>/ic_launcher.png             legacy square icon
  *   mipmap-<density>/ic_launcher_round.png       legacy round icon
@@ -34,7 +39,11 @@ const LEGACY = { mdpi: 48, hdpi: 72, xhdpi: 96, xxhdpi: 144, xxxhdpi: 192 };
 /** Adaptive foreground canvas: 108dp, with the mark inside the 66dp safe zone. */
 const ADAPTIVE = { mdpi: 108, hdpi: 162, xhdpi: 216, xxhdpi: 324, xxxhdpi: 432 };
 
-const BG = { r: 0x11, g: 0x11, b: 0x10, alpha: 1 };
+/**
+ * The plate. White, because the mark is black ink — the original pairing, and the
+ * only one where the glyph is legible on any launcher wallpaper.
+ */
+const BG = { r: 0xff, g: 0xff, b: 0xff, alpha: 1 };
 
 async function main() {
   await readFile(MARK); // fail loudly if the brand asset moved

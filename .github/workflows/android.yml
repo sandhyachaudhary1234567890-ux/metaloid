@@ -73,6 +73,13 @@ jobs:
           ls "$ANDROID_HOME/platforms" || true
 
       - name: Unit tests + lint + debug APK
+        env:
+          # The deployment the APK talks to by default. Baked in as a *public*
+          # value (BuildConfig.GATEWAY_URL), so a freshly installed app connects
+          # to the real backend and only asks for a sign-in — no server address
+          # to type. A repository variable of the same name overrides it without
+          # touching this file; see docs/android/RELEASE.md §3.
+          METALOID_GATEWAY_URL: ${{ vars.METALOID_GATEWAY_URL || 'https://metaloid.vercel.app' }}
         run: |
           set -o pipefail
           gradle --no-daemon --stacktrace \
@@ -82,6 +89,7 @@ jobs:
 
       - name: Release APK (minified)
         env:
+          METALOID_GATEWAY_URL: ${{ vars.METALOID_GATEWAY_URL || 'https://metaloid.vercel.app' }}
           ANDROID_KEYSTORE_BASE64: ${{ secrets.ANDROID_KEYSTORE_BASE64 }}
           ANDROID_KEYSTORE_PASSWORD: ${{ secrets.ANDROID_KEYSTORE_PASSWORD }}
           ANDROID_KEY_ALIAS: ${{ secrets.ANDROID_KEY_ALIAS }}
@@ -115,6 +123,19 @@ jobs:
           done
           if [ "$fail" -ne 0 ]; then exit 1; fi
           echo "no privileged secret pattern found in either APK"
+
+          # ... and prove the baked default gateway is really in there: a public
+          # URL is not a secret, but "the APK connects out of the box" is a claim
+          # worth checking on the artifact rather than in a document.
+          for apk in app/build/outputs/apk/debug/app-debug.apk app/build/outputs/apk/release/app-release.apk; do
+            [ -f "$apk" ] || continue
+            if unzip -p "$apk" '*.dex' | strings -n 8 | grep -q 'metaloid.vercel.app'; then
+              echo "$apk carries the default gateway"
+            else
+              echo "::error::$apk does not carry the expected default gateway"
+              exit 1
+            fi
+          done
 
       # The build log is not always reachable (artifact hosts are blocked in some
       # environments, and a red build publishes no APK). Reporting the compiler's

@@ -1,6 +1,5 @@
 package com.metaloid.feature.auth
 
-import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
@@ -21,7 +20,7 @@ import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
-import androidx.compose.runtime.DisposableEffect
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
@@ -29,7 +28,6 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
-import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.text.input.ImeAction
 import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.text.input.PasswordVisualTransformation
@@ -39,9 +37,9 @@ import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.lifecycle.viewmodel.compose.viewModel
 import androidx.lifecycle.viewmodel.initializer
 import androidx.lifecycle.viewmodel.viewModelFactory
-import com.metaloid.app.R
 import com.metaloid.app.AppViewModel
 import com.metaloid.core.designsystem.BannerTone
+import com.metaloid.core.designsystem.BrandMark
 import com.metaloid.core.designsystem.MetaBanner
 import com.metaloid.core.designsystem.MetaButton
 import com.metaloid.core.designsystem.MetaButtonVariant
@@ -78,16 +76,21 @@ fun SignInScreen(container: AppContainer, appViewModel: AppViewModel) {
     val system by appViewModel.system.collectAsStateWithLifecycle()
     val colors = MetaIoidTheme.colors
 
-    // The tab list follows the deployment: this reads the container's resolved
-    // Supabase configuration, which was filled from build values or /api/config.
-    DisposableEffect(container) {
-        val modes = buildList {
-            if (container.supabaseConfig.value != null) add(AuthMode.SUPABASE)
+    // The tab list follows the deployment — and it has to *keep* following it.
+    // The Supabase identifiers arrive from `/api/config`, which is a network
+    // round-trip that is usually still in flight when this screen first composes.
+    // Reading them once here is how a new user on a Supabase-backed deployment
+    // was shown the handle-and-passcode tab and only that: a password that
+    // cannot work. So the config is observed, and the list is rebuilt when it
+    // lands.
+    val supabaseConfig by container.supabaseConfig.collectAsStateWithLifecycle()
+    val modes = remember(supabaseConfig) {
+        buildList {
+            if (supabaseConfig != null) add(AuthMode.SUPABASE)
             add(AuthMode.GATEWAY)
         }
-        authViewModel.setAvailableModes(modes)
-        onDispose { }
     }
+    LaunchedEffect(modes) { authViewModel.setAvailableModes(modes) }
 
     var signingUp by remember { mutableStateOf(false) }
     var showGatewayEditor by remember { mutableStateOf(false) }
@@ -115,11 +118,9 @@ fun SignInScreen(container: AppContainer, appViewModel: AppViewModel) {
             .padding(top = Space.massive, bottom = Space.xxl),
         horizontalAlignment = Alignment.CenterHorizontally,
     ) {
-        Image(
-            painter = painterResource(R.drawable.metaloid_mark),
-            contentDescription = null,
-            modifier = Modifier.size(48.dp),
-        )
+        // Tinted with the theme's foreground: the asset is black ink, so on the
+        // dark page an untinted mark is invisible (see Brand.kt).
+        BrandMark(modifier = Modifier.size(48.dp))
         Spacer(Modifier.height(Space.lg))
         Text("MetaIoid", style = MetaType.display, color = colors.fg)
         Spacer(Modifier.height(Space.xs))

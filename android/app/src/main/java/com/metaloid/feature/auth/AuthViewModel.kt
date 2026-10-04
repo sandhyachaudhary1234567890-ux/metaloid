@@ -5,6 +5,7 @@ import androidx.lifecycle.viewModelScope
 import com.metaloid.core.common.AppError
 import com.metaloid.core.common.MetaLog
 import com.metaloid.core.session.AuthMode
+import com.metaloid.core.session.AuthModePreference
 import com.metaloid.core.session.SignUpResult
 import com.metaloid.di.AppContainer
 import kotlinx.coroutines.flow.MutableStateFlow
@@ -43,6 +44,8 @@ class AuthViewModel(private val container: AppContainer) : ViewModel() {
         val busy: Boolean = false,
         val error: AppError? = null,
         val notice: String? = null,
+        /** True once the user tapped a tab, so a late mode list cannot move them. */
+        val userChoseMode: Boolean = false,
     ) {
         val isSignUp: Boolean get() = false
         val canSubmit: Boolean
@@ -67,12 +70,16 @@ class AuthViewModel(private val container: AppContainer) : ViewModel() {
         val current = _state.value
         _state.value = current.copy(
             available = effective,
-            mode = if (current.mode in effective) current.mode else effective.first(),
+            // The head of the list is the deployment's own preference (Supabase
+            // where an identity provider exists, local accounts otherwise), and
+            // `AuthModePreference` is what keeps a late-arriving list from
+            // moving a user who has already tapped a tab.
+            mode = AuthModePreference.resolve(effective, current.mode, current.userChoseMode),
         )
     }
 
     fun selectMode(mode: AuthMode) {
-        _state.value = _state.value.copy(mode = mode, error = null, notice = null)
+        _state.value = _state.value.copy(mode = mode, userChoseMode = true, error = null, notice = null)
     }
 
     fun onEmail(value: String) {

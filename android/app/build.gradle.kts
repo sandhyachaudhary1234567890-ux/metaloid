@@ -49,8 +49,11 @@ android {
         applicationId = "com.metaloid.app"
         minSdk = 26
         targetSdk = 34
-        versionCode = 1
-        versionName = "1.0.0"
+        // Bumped for every published APK: Android installs an update only when
+        // versionCode increases, and "the fix did not arrive" is the classic
+        // result of forgetting it. apk-v1/apk-v2 were 1/"1.0.0".
+        versionCode = 2
+        versionName = "1.0.1"
 
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
         vectorDrawables { useSupportLibrary = true }
