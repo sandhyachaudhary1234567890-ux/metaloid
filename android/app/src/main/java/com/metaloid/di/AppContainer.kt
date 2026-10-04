@@ -16,6 +16,7 @@ import com.metaloid.core.session.SessionStore
 import com.metaloid.core.session.SupabaseAuthApi
 import com.metaloid.core.storage.KeystoreSecretBox
 import com.metaloid.core.storage.PreferencesStore
+import com.metaloid.core.system.ConnectivityMonitor
 import com.metaloid.core.storage.SecretFileVault
 import com.metaloid.core.streaming.OkHttpStreamTransport
 import com.metaloid.core.streaming.StreamTransport
@@ -46,6 +47,13 @@ class AppContainer(context: Context) {
     private val appContext = context.applicationContext
 
     val preferences = PreferencesStore(appContext)
+
+    /**
+     * The device's own connectivity. One instance for the process: it is a thin
+     * wrapper over the system service, and three copies would mean three
+     * registrations of the same callback.
+     */
+    val connectivity = ConnectivityMonitor(appContext)
 
     /**
      * Where the gateway is. A build-time default may be baked in for a specific
@@ -81,6 +89,7 @@ class AppContainer(context: Context) {
         baseUrlProvider = { backendAddress.current() },
         tokenProvider = { sessionManagerRef?.accessToken() },
         sessionExpired = { sessionManagerRef?.noteRejectedByServer() },
+        online = { connectivity.currentlyOnline() },
     )
 
     val apiClient = ApiClient(
@@ -121,6 +130,7 @@ class AppContainer(context: Context) {
         clients = httpClients,
         io = SystemDispatchersHolder.dispatchers.io,
         verbose = BuildConfig.DEBUG,
+        online = { connectivity.currentlyOnline() },
     )
 
     val conversations = ConversationsRepository(

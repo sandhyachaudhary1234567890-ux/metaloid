@@ -51,6 +51,13 @@ class NetworkContext(
     private val baseUrlProvider: () -> HttpUrl?,
     private val tokenProvider: () -> String?,
     private val sessionExpired: suspend () -> Unit,
+    /**
+     * Whether the *device* has a network. Used only to tell "you're offline"
+     * from "the gateway is unreachable" when a connection fails; it is never
+     * treated as evidence that the gateway is up (that would be the
+     * captive-portal bug D18 exists to prevent).
+     */
+    private val online: () -> Boolean = { true },
 ) {
     fun baseUrlOrNull(): HttpUrl? = baseUrlProvider()
 
@@ -62,6 +69,8 @@ class NetworkContext(
      * One place, so "signed out everywhere" cannot mean three different things.
      */
     suspend fun onSessionRejected() = sessionExpired()
+
+    fun isOnline(): Boolean = online()
 }
 
 /**
@@ -272,7 +281,7 @@ class ApiClient(
         } catch (e: CancellationException) {
             throw e
         } catch (e: IOException) {
-            val kind = classifyTransportError(e)
+            val kind = classifyTransportError(e, context.isOnline())
             MetaLog.w(TAG, "%s %s transport failure: %s", request.method, Redact.url(request.url.toString()), kind.name)
             ApiResult.Err(ErrorMapper.fromTransport(kind, e.javaClass.simpleName))
         } catch (e: Exception) {

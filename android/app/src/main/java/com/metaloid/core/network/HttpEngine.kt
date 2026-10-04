@@ -6,10 +6,11 @@ import kotlin.coroutines.resume
 import kotlin.coroutines.resumeWithException
 import kotlinx.coroutines.suspendCancellableCoroutine
 import java.io.IOException
+import java.net.ConnectException
+import java.net.SocketException
 import java.net.SocketTimeoutException
 import java.net.UnknownHostException
 import java.util.concurrent.TimeUnit
-import javax.net.ssl.SSLException
 import okhttp3.Call
 import okhttp3.Callback
 import okhttp3.ConnectionPool
@@ -149,16 +150,21 @@ internal suspend fun Call.awaitResponse(): Response = suspendCancellableCoroutin
 }
 
 /**
- * Classifies a transport exception into the three cases the UI distinguishes.
+ * Classifies a transport exception into the cases the UI distinguishes.
  *
- * `UnknownHostException`/`ConnectException` mean the gateway could not be
- * reached; `SocketTimeoutException` means it was reached and did not answer in
- * time. Those lead to different sentences and different user actions, so the
- * difference is made here rather than guessed at in a ViewModel.
+ * `SocketTimeoutException` means the server was reached and did not answer in
+ * time. `UnknownHostException`/`ConnectException` mean it could not be reached —
+ * but *why* matters to the user: with the radio off, the honest sentence is
+ * "you're offline", not "the gateway is down". So the caller passes what
+ * connectivity the device actually has, and only a failure to connect while the
+ * device believes it is online is reported as unreachable.
+ *
+ * A timeout stays a timeout either way: the request was already in flight, so
+ * connectivity flipping afterwards does not change what happened.
  */
-internal fun classifyTransportError(e: IOException): TransportFailureKind = when (e) {
-    is SocketTimeoutException -> TransportFailureKind.Timeout
-    is UnknownHostException -> TransportFailureKind.Unreachable
-    is SSLException -> TransportFailureKind.Unreachable
+internal fun classifyTransportError(e: IOException, online: Boolean = true): TransportFailureKind = when {
+    e is SocketTimeoutException -> TransportFailureKind.Timeout
+    !online && (e is UnknownHostException || e is ConnectException || e is SocketException) ->
+        TransportFailureKind.NoNetwork
     else -> TransportFailureKind.Unreachable
 }

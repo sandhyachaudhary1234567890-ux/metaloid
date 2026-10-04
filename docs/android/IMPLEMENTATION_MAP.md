@@ -123,5 +123,5 @@ com.metaloid
 `android/app/src/test/java/com/metaloid/…` — JVM tests, mirroring the package
 they test: `core/streaming/{SseParserTest,StreamEventParserTest}`,
 `feature/chat/domain/StreamReducerTest`, `core/common/RedactTest`,
-`core/network/ErrorMapperTest`, `core/backend/BackendAddressTest`,
+`core/network/{ErrorMapperTest,TransportKindTest}`, `core/backend/BackendAddressTest`,
 `core/ui/{TimeFormatTest,MarkdownParserTest}`, `app/RouteCodecTest`.

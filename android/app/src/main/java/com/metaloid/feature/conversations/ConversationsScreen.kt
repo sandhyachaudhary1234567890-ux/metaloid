@@ -81,8 +81,13 @@ fun ConversationsScreen(
 
     // A shared text has no conversation yet: create a real one and open it. The
     // text itself is claimed later, by the chat screen's composer.
-    androidx.compose.runtime.LaunchedEffect(Unit) {
-        viewModel.createForPendingShare(onCreated = onOpenConversation)
+    //
+    // The key is the pending text, not `Unit`: a share that arrives while this
+    // screen is already composed must still be placed, and `createForPendingShare`
+    // refuses to create a second conversation for a share that already has one.
+    val waitingShare by com.metaloid.core.share.PendingShare.waiting.collectAsStateWithLifecycle()
+    androidx.compose.runtime.LaunchedEffect(waitingShare) {
+        if (!waitingShare.isNullOrBlank()) viewModel.createForPendingShare(onCreated = onOpenConversation)
     }
 
     Column(Modifier.fillMaxSize()) {
@@ -104,7 +109,14 @@ fun ConversationsScreen(
             state.error != null && state.conversations.isEmpty() -> Box(Modifier.fillMaxSize()) {
                 MetaErrorState(
                     error = state.error!!,
-                    onRetry = { viewModel.load(force = true) },
+                    onRetry = {
+                        viewModel.load(force = true)
+                        // A share that could not be placed is retried by the
+                        // same button: it is one of the things that failed.
+                        if (com.metaloid.core.share.PendingShare.needsConversation) {
+                            viewModel.createForPendingShare(onCreated = onOpenConversation)
+                        }
+                    },
                     onSecondary = { appViewModel.navigate(com.metaloid.app.Route.Diagnostics) },
                     secondaryLabel = "Diagnostics",
                 )

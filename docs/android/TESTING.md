@@ -30,6 +30,7 @@ permanent.
 | `StreamReducerTest` | Cumulative replacement, the shrink anomaly, retry discarding the previous attempt, `done` with no text, terminal phases ignoring late frames, close-mid-stream vs close-before-first-token, user stop, transport loss. |
 | `RedactTest` | Bearer tokens, JWTs, provider key shapes, `key=value` secrets, emails, URLs, long-message truncation. Logs and diagnostics exports are the only way a token could leave the device. |
 | `ErrorMapperTest` | Every gateway code, every Supabase `error_code`, every status-only fallback, every stream code, and the transport kinds — plus a check that no user-facing message or technical detail leaks a key. |
+| `TransportKindTest` | Offline versus unreachable: the same `UnknownHostException` is "offline" with no network and "unreachable" with one; a timeout stays a timeout either way; a TLS failure is never reported as offline. |
 | `BackendAddressTest` | Address validation: rejects `file://`, `javascript:`, userinfo, and cleartext in a release build; normalises the trailing slash. |
 | `TimeFormatTest` | Relative time, absent timestamps as `—`, clock skew, durations, byte counts. |
 | `MarkdownParserTest` | Headings, lists (with depth), quotes, rules, fenced code — including an **unterminated fence**, which is what a streamed code block looks like mid-flight — and inline spans including an unclosed emphasis marker. |

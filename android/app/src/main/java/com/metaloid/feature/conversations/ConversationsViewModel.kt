@@ -127,6 +127,7 @@ class ConversationsViewModel(private val container: AppContainer) : ViewModel() 
      * twice: [PendingShare.assign] is a no-op once the text has been claimed.
      */
     fun createForPendingShare(onCreated: (String) -> Unit) {
+        if (!com.metaloid.core.share.PendingShare.needsConversation) return
         val title = com.metaloid.core.share.PendingShare.title() ?: return
         viewModelScope.launch {
             when (val result = container.conversations.create(title = title, model = null, provider = null)) {
@@ -135,7 +136,12 @@ class ConversationsViewModel(private val container: AppContainer) : ViewModel() 
                     _state.value = _state.value.copy(conversations = listOf(result.value) + _state.value.conversations)
                     onCreated(result.value.id)
                 }
-                is ApiResult.Err -> MetaLog.w(TAG, "could not place the shared text: %s", result.error.javaClass.simpleName)
+                is ApiResult.Err -> {
+                    // Visible, not silent: the text is still held, and the
+                    // screen's retry places it once the gateway answers again.
+                    MetaLog.w(TAG, "could not place the shared text: %s", result.error.javaClass.simpleName)
+                    _state.value = _state.value.copy(error = result.error)
+                }
             }
         }
     }

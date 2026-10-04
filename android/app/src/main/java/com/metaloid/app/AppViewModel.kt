@@ -68,7 +68,7 @@ class AppViewModel(
     private val _bootstrapComplete = MutableStateFlow(false)
     val bootstrapComplete: StateFlow<Boolean> = _bootstrapComplete.asStateFlow()
 
-    private val connectivity = com.metaloid.core.system.ConnectivityMonitor(application)
+    private val connectivity = container.connectivity
     private var healthJob: Job? = null
     private var monitorJob: Job? = null
 

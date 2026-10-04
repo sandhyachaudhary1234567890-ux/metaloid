@@ -67,6 +67,8 @@ class OkHttpStreamTransport(
     private val io: CoroutineDispatcher,
     private val verbose: Boolean,
     private val inactivityTimeoutMs: Long = INACTIVITY_TIMEOUT_MS,
+    /** Device connectivity, for the offline-versus-unreachable distinction. */
+    private val online: () -> Boolean = { true },
 ) : StreamTransport {
 
     companion object {
@@ -142,7 +144,7 @@ class OkHttpStreamTransport(
                                 MetaLog.w(TAG, "stream read failed: %s", e.javaClass.simpleName)
                                 emit(
                                     StreamEvent.Failed(
-                                        ErrorMapper.fromTransport(classifyTransportError(e), e.javaClass.simpleName)
+                                        ErrorMapper.fromTransport(classifyTransportError(e, online()), e.javaClass.simpleName)
                                     )
                                 )
                                 return@use
@@ -167,7 +169,7 @@ class OkHttpStreamTransport(
         } catch (e: IOException) {
             if (!coroutineContext.isActive) return@flow
             MetaLog.w(TAG, "stream failed: %s", e.javaClass.simpleName)
-            emit(StreamEvent.Failed(ErrorMapper.fromTransport(classifyTransportError(e), e.javaClass.simpleName)))
+            emit(StreamEvent.Failed(ErrorMapper.fromTransport(classifyTransportError(e, online()), e.javaClass.simpleName)))
         } finally {
             cancellation?.dispose()
         }

@@ -72,6 +72,15 @@ a scope cancellation therefore still writes the terminal status. Any other desig
 leaves rows stuck in `streaming` — the failure mode that makes a transcript lie
 about a turn that is over.
 
+"Exactly once" is enforced, not assumed: the runner carries a `finalised` flag,
+and the `finally` block returns early when the normal path already wrote the
+ending. Without that flag the happy path finalises and the `finally` finalises
+again — and in the case where the assistant row had to be created during
+finalisation, the second write **creates a second row**, i.e. the same answer
+twice in the transcript. A write that failed to reach the server is not retried
+here either: the row stays `streaming` and the gateway's `…/messages/recover`
+closes it on the next launch.
+
 ## D7 — No automatic retry of a turn
 
 A retry is a user decision. An automatic retry after a partial answer can double
@@ -178,6 +187,12 @@ sandbox) and each is computed from a real observation: the last `/api/health`
 result, the device's connectivity, and the `demo` flag the server sent for the
 answer in flight. There is no timer that flips anything to "connected", and no
 retry that hides a failure.
+
+The same rule applies to a single failed request: a connection error while the
+device has no network is reported as **offline**, not "the gateway is
+unreachable" — the classifier takes the connectivity signal (`TransportKindTest`)
+and never uses it in the other direction, so a connected phone is never told the
+gateway is fine.
 
 ## D19 — Colours never carry meaning alone
 

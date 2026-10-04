@@ -131,6 +131,12 @@ class ChatTurnRunner(
         var serverError: AppError? = null
         var rowId: String? = null
         var rowJob: Deferred<String?>? = null
+        // The terminal write happens **once**. Without this flag the `finally`
+        // below would write a second time on the happy path — and when the
+        // assistant row could not be created at the first attempt, that second
+        // write creates a second row, i.e. the same answer twice in the
+        // transcript.
+        var finalised = false
 
         // The whole turn runs inside a `coroutineScope`, and the *finalisation*
         // runs in a `finally` under NonCancellable. That is what makes a user
@@ -194,11 +200,16 @@ class ChatTurnRunner(
                 provider = provider,
                 latencyMs = if (done) latency else null,
             )
+            finalised = true
             MetaLog.i(TAG, "turn finished: status=%s chars=%d demo=%s latency=%dms", status, text.length, demoSandbox, latency)
             emit(Update.Finished(text, status, latency, serverError))
         } finally {
             // Reached on cancellation too: nothing may be left "in flight".
+            // When the turn already wrote its own ending, this is a no-op — a
+            // failed write is left to the gateway's `…/messages/recover`, the
+            // same path that closes a row after the process died.
             withContext(NonCancellable) {
+                if (finalised) return@withContext
                 if (!done && rowJob != null && rowId == null) {
                     rowId = runCatching { rowJob?.await() }.getOrNull() ?: rowId
                 }
@@ -218,6 +229,7 @@ class ChatTurnRunner(
                     latencyMs = null,
                     skipWhenBlank = true,
                 )
+                finalised = true
             }
         }
     }
