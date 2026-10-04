@@ -98,8 +98,8 @@ function stateOf(h: ServiceHealth): ConnectionState {
 
 async function probeHealth(base: string): Promise<ServiceHealth | null> {
   try {
-    const res = await fetchTimeout(`${base}/api/health`, 5000);
-    if (!res.ok) return null;
+    const res = await probeWithColdRetry(`${base}/api/health`);
+    if (!res || !res.ok) return null;
     const h = (await res.json()) as Partial<ServiceHealth>;
     return {
       server: !!h.server, ai: !!h.ai, voice: !!h.voice,
@@ -120,6 +120,31 @@ async function fetchTimeout(url: string, ms: number, init?: RequestInit): Promis
     return await fetch(url, { ...init, signal: c.signal });
   } finally {
     window.clearTimeout(id);
+  }
+}
+
+/**
+ * Health probe that survives a serverless cold start.
+ *
+ * First attempt is fast (4s): a warm gateway answers in milliseconds, and a
+ * truly dead network fails even faster (refused/DNS — never retried). Only a
+ * TIMEOUT earns one long second chance, because that signature means "the
+ * server exists but is still booting" — Vercel cold boots of this gateway
+ * take several seconds, and mistaking them for offline is exactly how users
+ * ended up with demo replies while online.
+ */
+async function probeWithColdRetry(url: string, init?: RequestInit): Promise<Response | null> {
+  try {
+    return await fetchTimeout(url, 4000, init);
+  } catch (e) {
+    if (e instanceof DOMException && e.name === 'AbortError') {
+      try {
+        return await fetchTimeout(url, 15000, init);
+      } catch {
+        return null;
+      }
+    }
+    return null;
   }
 }
 
@@ -204,20 +229,16 @@ export async function streamChat(
   const base = baseOf(opts.configuredUrl);
 
   let reachableBase: string | null = null;
-  try {
-    const h = await fetchTimeout(`${base}/api/health`, 4000);
-    if (h.ok) reachableBase = base;
-  } catch { /* try alt below */ }
+  const h = await probeWithColdRetry(`${base}/api/health`);
+  if (h && h.ok) reachableBase = base;
   if (!reachableBase) {
     const alt = altOf(base);
     if (alt) {
-      try {
-        const h = await fetchTimeout(`${alt}/api/health`, 4000);
-        if (h.ok) {
-          reachableBase = alt;
-          resolved = alt;
-        }
-      } catch { /* demo path */ }
+      const h2 = await probeWithColdRetry(`${alt}/api/health`);
+      if (h2 && h2.ok) {
+        reachableBase = alt;
+        resolved = alt;
+      }
     }
   }
 
