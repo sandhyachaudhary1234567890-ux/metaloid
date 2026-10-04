@@ -104,6 +104,20 @@ const AssistantTurn = memo(function AssistantTurn({
         <Activity label="Composing" />
       ) : null}
 
+      {/* Demo replies say so, with the one tap that fixes it. Live replies
+          show nothing — the absence of this line IS the live indicator. */}
+      {!msg.streaming && msg.demo && shown && (
+        <p className="mt-2 text-small text-[var(--fg-muted)]">
+          Demo reply — no AI connected.{' '}
+          <button
+            onClick={() => setView('settings')}
+            className="text-[var(--accent)] underline underline-offset-2 hover:brightness-110"
+          >
+            Connect a key to go live
+          </button>
+        </p>
+      )}
+
       {/* Streaming cursor — a soft bar, not a blinking block. */}
       {msg.streaming && shown && (
         <motion.span

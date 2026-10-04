@@ -353,7 +353,7 @@ function titleFrom(text: string): string {
       emitActivity(voiceTaskId, 'voice', 'FINALIZE', 'done', 'Done');
       setConversations((prev) => prev.map((c) =>
         c.id === convId
-          ? { ...c, updatedAt: Date.now(), messages: c.messages.map((m) => (m.id === assistantId ? { ...m, content: behavioral.displayText, streaming: false, detectedLang: behavioral.detectedLang, toolActivity: (m.toolActivity ?? []).map((t) => ({ ...t, state: 'done' as const })) } : m)) }
+          ? { ...c, updatedAt: Date.now(), messages: c.messages.map((m) => (m.id === assistantId ? { ...m, content: behavioral.displayText, streaming: false, demo: out.demo === true, detectedLang: behavioral.detectedLang, toolActivity: (m.toolActivity ?? []).map((t) => ({ ...t, state: 'done' as const })) } : m)) }
           : c
       ));
       cbs.onDone(behavioral.spokenText);
@@ -376,7 +376,7 @@ function titleFrom(text: string): string {
       const fallbackReply = planResponse(clean).response || 'I heard you, but the model gateway was momentarily busy. Please try again.';
       setConversations((prev) => prev.map((c) =>
         c.id === convId
-          ? { ...c, messages: c.messages.map((m) => (m.id === assistantId ? { ...m, streaming: false, content: fallbackReply } : m)) }
+          ? { ...c, messages: c.messages.map((m) => (m.id === assistantId ? { ...m, streaming: false, content: fallbackReply, demo: true } : m)) }
           : c
       ));
       emitActivity(voiceTaskId, 'voice', 'FINALIZE', 'done', 'Fallback response delivered');
@@ -990,7 +990,7 @@ function titleFrom(text: string): string {
       const behavioral = HumanBehaviorPipeline.processTurn(clean, result.text, { isVoiceTurn: false });
       setConversations((prev) => prev.map((c) =>
         c.id === convId
-          ? { ...c, updatedAt: Date.now(), messages: c.messages.map((m) => (m.id === assistantId ? { ...m, content: behavioral.displayText, streaming: false, detectedLang: behavioral.detectedLang, toolActivity: (m.toolActivity ?? []).map((t) => ({ ...t, state: 'done' as const })) } : m)) }
+          ? { ...c, updatedAt: Date.now(), messages: c.messages.map((m) => (m.id === assistantId ? { ...m, content: behavioral.displayText, streaming: false, demo: result.demo === true, detectedLang: behavioral.detectedLang, toolActivity: (m.toolActivity ?? []).map((t) => ({ ...t, state: 'done' as const })) } : m)) }
           : c
       ));
 
