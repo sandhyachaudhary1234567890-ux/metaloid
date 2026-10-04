@@ -95,9 +95,11 @@ jobs:
           arch: x86_64
           profile: pixel_2
           disable-animations: true
+          emulator-options: -no-window -gpu swiftshader_indirect -noaudio -no-boot-anim -no-snapshot-save
           script: |
+            set -o pipefail
             cd android
-            gradle --no-daemon --stacktrace :app:connectedDebugAndroidTest
+            gradle --no-daemon --stacktrace :app:connectedDebugAndroidTest 2>&1 | tee "$RUNNER_TEMP/ci-emulator.log"
 
       - name: Release APK (minified)
         env:
@@ -195,6 +197,20 @@ jobs:
                 | cut -c1-600 | head -80 || true
               echo '```'
             fi
+            if [ -f "$RUNNER_TEMP/ci-emulator.log" ]; then
+              echo
+              echo '**Emulator smoke-test failure (last 120 lines)**'
+              echo '```'
+              tail -120 "$RUNNER_TEMP/ci-emulator.log"
+              echo '```'
+            fi
+            if compgen -G "app/build/outputs/androidTest-results/connected/debug/*.xml" > /dev/null; then
+              echo
+              echo '**Instrumented test failures**'
+              echo '```'
+              grep -ho '<failure[^>]*>[^<]*' app/build/outputs/androidTest-results/connected/debug/*.xml | head -40 || true
+              echo '```'
+            fi
           } > "$RUNNER_TEMP/comment.md"
           gh api --method POST \
             "repos/${{ github.repository }}/commits/${{ github.sha }}/comments" \
@@ -209,6 +225,8 @@ jobs:
           path: |
             android/app/build/reports/tests/**
             android/app/build/reports/lint-results-*.html
+            android/app/build/outputs/androidTest-results/**
+            ${{ runner.temp }}/ci-emulator.log
           if-no-files-found: ignore
           retention-days: 14
 
