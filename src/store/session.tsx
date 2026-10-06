@@ -11,6 +11,9 @@ import {
   getSession, setSession as saveSession, clearSession, onSessionChange,
   type AuthUser,
 } from '../lib/auth';
+import { GlobalStopController } from '../lib/ready/globalStop';
+import { InitiativeEngine } from '../lib/agent/initiativeEngine';
+import { autonomyToPolicy } from '../lib/control';
 import { saveSbSession, sbAccessToken, sbRefreshToken, sbSignOut } from '../lib/supabaseAuth';
 import { authSignup as apiSignup, authLogin as apiLogin, authLogout as apiLogout, fetchMe as apiMe } from '../lib/transport';
 
@@ -64,6 +67,13 @@ interface SessionValue {
   setSkillsOpen: (b: boolean) => void;
   liveTaskId: string | null;
   setLiveTaskId: (id: string | null) => void;
+  /** Hold everything MetaIoid is doing. Completed work is preserved. */
+  pauseMetaIoid: () => void;
+  /** Release the hold and let work continue. */
+  resumeMetaIoid: () => void;
+  /** Text dropped into the composer from elsewhere (home, pulse, palette). */
+  composerDraft: string;
+  setComposerDraft: (s: string) => void;
   clearAllData: () => void;
   // ---- identity (multi-user) ----
   authUser: AuthUser | null;
@@ -110,6 +120,7 @@ export function SessionProvider({ children }: { children: React.ReactNode }) {
   const [skillForgeOpen, setSkillForgeOpen] = useState(false);
   const [skillsOpen, setSkillsOpen] = useState(false);
   const [liveTaskId, setLiveTaskId] = useState<string | null>(null);
+  const [composerDraft, setComposerDraft] = useState('');
 
   // ---- identity: session → namespaced stores → full context switch ----
   const [authUser, setAuthUser] = useState<AuthUser | null>(() => getSession()?.user || null);
@@ -230,6 +241,12 @@ export function SessionProvider({ children }: { children: React.ReactNode }) {
 
   useEffect(() => storage.saveSettings(settings), [settings]);
 
+  // The initiative engine obeys the level the user chose, and a paused
+  // MetaIoid obeys "ask first" no matter what the level says.
+  useEffect(() => {
+    InitiativeEngine.setUserAutonomy(autonomyToPolicy(settings.autonomy, settings.paused));
+  }, [settings.autonomy, settings.paused]);
+
   // One place applies the design tokens, including following the OS when the
   // theme is set to `system`.
   useEffect(() => watchTheme(settings), [settings]);
@@ -290,6 +307,22 @@ export function SessionProvider({ children }: { children: React.ReactNode }) {
   }, []);
   const openModal = useCallback((kind: string, payload?: unknown) => setModal({ kind, payload }), []);
   const closeModal = useCallback(() => setModal({ kind: null }), []);
+  // Pausing is a real hold, not a UI flag: speech stops, in-flight work is
+  // checkpointed, and the initiative policy drops to "ask first" until the
+  // user releases it. Resuming never invents progress — it just lets the
+  // preserved checkpoints continue.
+  const pauseMetaIoid = useCallback(() => {
+    GlobalStopController.stopAll();
+    updateSettings({ paused: true });
+    toast({ title: 'MetaIoid paused', desc: 'Everything in flight is held. Completed work is saved.' });
+  }, [updateSettings, toast]);
+
+  const resumeMetaIoid = useCallback(() => {
+    GlobalStopController.clearHalt();
+    updateSettings({ paused: false });
+    toast({ title: 'MetaIoid resumed' });
+  }, [updateSettings, toast]);
+
   const clearAllData = useCallback(() => {
     storage.clearAll();
     // slices rehydrate from storage on boot — reload for a clean slate
@@ -312,6 +345,8 @@ export function SessionProvider({ children }: { children: React.ReactNode }) {
     skillForgeOpen, setSkillForgeOpen,
     skillsOpen, setSkillsOpen,
     liveTaskId, setLiveTaskId,
+    pauseMetaIoid, resumeMetaIoid,
+    composerDraft, setComposerDraft,
     clearAllData,
     authUser, authReady, onboardingDone, signup, login, loginWithSupabase, logout, refreshAuth,
   };

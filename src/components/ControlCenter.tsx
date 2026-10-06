@@ -194,7 +194,7 @@ export function ControlCenter() {
         <p className="text-small font-medium text-[var(--fg-muted)] mb-1">Paired devices ({devices.length})</p>
         {devices.map((d) => (
           <div key={d.id} className="flex items-center gap-2 py-1">
-            <span className="h-1.5 w-1.5 rounded-full bg-success/10" />
+            <span className="h-1.5 w-1.5 rounded-full bg-[var(--success)]" />
             <span className="text-ui text-[var(--fg)] flex-1">{d.name}</span>
             <button
               onClick={async () => {
@@ -213,7 +213,7 @@ export function ControlCenter() {
         )}
         {pairCode ? (
           <p className="text-small text-[var(--fg-muted)] mt-1">
-            Pairing code: <span className="font-mono text-read font-bold text-[var(--fg)] tracking-[0.2em]">{pairCode}</span>
+            Pairing code: <span className="font-mono text-read font-semibold text-[var(--fg)] tracking-[0.2em]">{pairCode}</span>
             <span className="block text-micro text-[var(--fg-faint)]">Enter it on the new device within 10 minutes.</span>
           </p>
         ) : (
@@ -304,7 +304,7 @@ export function ControlCenter() {
                     toast({ title: e instanceof Error ? e.message : 'Deletion failed.', tone: 'error' });
                   }
                 }}
-                className="h-9 px-4 rounded-lg bg-danger/10 text-white text-ui font-semibold flex-1"
+                className="h-9 px-4 rounded-lg bg-[var(--danger)] text-white text-ui font-semibold flex-1"
               >
                 Yes, delete everything
               </button>

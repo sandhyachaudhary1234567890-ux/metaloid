@@ -43,8 +43,8 @@ export function ResearchWorkspace({ research, onClose }: ResearchWorkspaceProps)
       {/* Body: Synthesis + Evidence Cards + Sources */}
       <div className="flex-1 overflow-y-auto p-6 space-y-6 bg-[var(--bg)]">
         {/* Executive Synthesis */}
-        <div className="p-5 rounded-2xl border border-[var(--border)] bg-[var(--surface)] shadow-sm">
-          <h4 className="text-xs font-bold uppercase tracking-wider text-[var(--accent)] mb-2">
+        <div className="p-5 rounded-[var(--radius-lg)] border border-[var(--border)] bg-[var(--surface)]">
+          <h4 className="text-micro font-semibold uppercase tracking-wider text-[var(--accent)] mb-2">
             Executive Synthesis
           </h4>
           <p className="text-sm leading-relaxed text-[var(--fg)]">{research.synthesis}</p>
@@ -52,13 +52,13 @@ export function ResearchWorkspace({ research, onClose }: ResearchWorkspaceProps)
 
         {/* Key Verified Findings */}
         <div>
-          <h4 className="text-xs font-bold uppercase tracking-wider text-[var(--fg-muted)] mb-3 px-1">
+          <h4 className="text-micro font-semibold uppercase tracking-wider text-[var(--fg-muted)] mb-3 px-1">
             Key Verified Findings ({research.findings.length})
           </h4>
           <div className="grid gap-3">
             {research.findings.map((f, i) => (
               <div key={i} className="p-4 rounded-xl border border-[var(--border)] bg-[var(--surface)]">
-                <p className="text-xs leading-relaxed text-[var(--fg)] font-medium mb-2">{f.point}</p>
+                <p className="text-micro leading-relaxed text-[var(--fg)] font-medium mb-2">{f.point}</p>
                 <div className="flex items-center justify-between text-micro text-[var(--fg-muted)]">
                   <span className="inline-flex items-center gap-1 text-success font-semibold">
                     <CheckCircle2 size={12} /> {f.confidence}
@@ -72,7 +72,7 @@ export function ResearchWorkspace({ research, onClose }: ResearchWorkspaceProps)
 
         {/* Source Bibliography */}
         <div>
-          <h4 className="text-xs font-bold uppercase tracking-wider text-[var(--fg-muted)] mb-3 px-1">
+          <h4 className="text-micro font-semibold uppercase tracking-wider text-[var(--fg-muted)] mb-3 px-1">
             Verified Sources & Citations
           </h4>
           <div className="divide-y divide-[var(--border-subtle)] border border-[var(--border)] rounded-xl bg-[var(--surface)] overflow-hidden">
@@ -82,7 +82,7 @@ export function ResearchWorkspace({ research, onClose }: ResearchWorkspaceProps)
                 href={s.url}
                 target="_blank"
                 rel="noreferrer"
-                className="p-3 flex items-center justify-between text-xs hover:bg-[var(--surface-hover)] transition-colors group"
+                className="p-3 flex items-center justify-between text-micro hover:bg-[var(--surface-hover)] transition-colors group"
               >
                 <div className="min-w-0 pr-4">
                   <p className="font-medium text-[var(--fg)] group-hover:text-[var(--accent)] transition-colors truncate">

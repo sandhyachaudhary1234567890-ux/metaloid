@@ -106,15 +106,12 @@ describe('app shell', () => {
 describe('chat loop', () => {
   it('sends a message and renders the streamed reply', async () => {
     mount();
-    // navigate to chat
-    const chatButtons = screen.getAllByText('Chat');
-    fireEvent.click(chatButtons[0]);
+    // The shell renders once the auth bootstrap settles (unconfigured here).
+    // Wait for it rather than assuming the first paint already has chrome.
+    await waitFor(() => expect(screen.getByLabelText('Message MetaIoid')).toBeTruthy(), { timeout: 4000 });
 
-    const composer = await waitFor(() => {
-      const el = document.querySelector('textarea, input[type="text"]');
-      if (!el) throw new Error('composer not found');
-      return el as HTMLTextAreaElement;
-    });
+    const composer = document.querySelector('textarea') as HTMLTextAreaElement;
+    expect(composer).toBeTruthy();
 
     fireEvent.change(composer, { target: { value: 'hello there' } });
     fireEvent.keyDown(composer, { key: 'Enter', code: 'Enter', shiftKey: false });

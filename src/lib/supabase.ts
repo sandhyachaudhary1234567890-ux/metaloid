@@ -64,34 +64,46 @@ export function supabaseUrl(): string {
   return runtime?.url || BUILD_URL;
 }
 
-/** Resolve the client once. Returns null when the app is unconfigured. */
+/** Resolve the client once. Returns null when the app is unconfigured.
+ *
+ *  Never rejects: the caller (auth bootstrap) awaits this to decide whether a
+ *  login is possible, and a rejected promise here would leave the whole app
+ *  stuck on "restoring your session" forever. Every failure path — including
+ *  the dynamic import — resolves to null instead. */
 export function getSupabase(): Promise<SupabaseClient | null> {
   if (client) return Promise.resolve(client);
   if (!loading) {
     loading = (async () => {
-      let url = BUILD_URL;
-      let anon = BUILD_ANON;
-      if (!url || !anon) {
-        const rt = await runtimeConfig();
-        if (rt) {
-          url = rt.url;
-          anon = rt.anon;
+      try {
+        let url = BUILD_URL;
+        let anon = BUILD_ANON;
+        if (!url || !anon) {
+          const rt = await runtimeConfig();
+          if (rt) {
+            url = rt.url;
+            anon = rt.anon;
+          }
         }
+        if (!url || !anon) return null;
+        const mod = await import('@supabase/supabase-js');
+        const createClient = mod.createClient;
+        const key = `${url}|${anon.slice(-12)}`;
+        if (client && clientKey === key) return client;
+        client = createClient(url, anon, {
+          auth: {
+            persistSession: true,      // session survives a reload
+            autoRefreshToken: true,    // and refreshes itself before expiry
+            detectSessionInUrl: true,  // email confirmation + recovery links
+            flowType: 'pkce',
+          },
+        });
+        clientKey = key;
+        return client;
+      } catch {
+        // Unconfigured, unreachable, or a failed module load — all the same
+        // outcome for the caller: no auth service, run the local build.
+        return null;
       }
-      if (!url || !anon) return null;
-      const { createClient } = await import('@supabase/supabase-js');
-      const key = `${url}|${anon.slice(-12)}`;
-      if (client && clientKey === key) return client;
-      client = createClient(url, anon, {
-        auth: {
-          persistSession: true,      // session survives a reload
-          autoRefreshToken: true,    // and refreshes itself before expiry
-          detectSessionInUrl: true,  // email confirmation + recovery links
-          flowType: 'pkce',
-        },
-      });
-      clientKey = key;
-      return client;
     })();
   }
   return loading;

@@ -222,7 +222,7 @@ export function MetaIoidBoot({ onDone }: { onDone: () => void }) {
           {/* Top Skip Button */}
           <button
             onClick={finishBoot}
-            className="absolute top-6 right-6 z-20 text-micro font-medium tracking-wider uppercase text-[var(--fg-muted)] hover:text-[var(--fg)] bg-white/[0.03] hover:bg-white/[0.08] border border-white/10 px-3 py-1.5 rounded-full transition-all"
+            className="absolute top-6 right-6 z-20 text-micro font-medium tracking-wider uppercase text-[var(--fg-muted)] hover:text-[var(--fg)] bg-[var(--surface-hover)] hover:bg-[var(--surface-hover)] border border-[var(--border)] px-3 py-1.5 rounded-full transition-all"
             aria-label="Skip startup animation"
           >
             Skip
@@ -313,7 +313,7 @@ export function MetaIoidBoot({ onDone }: { onDone: () => void }) {
                   <span className="inline-flex items-center gap-1.5 text-white">
                     <span
                       className={`w-2 h-2 rounded-full ${
-                        stage === 'DEGRADED' ? 'bg-warning/10' : 'bg-success/10'
+                        stage === 'DEGRADED' ? 'bg-[var(--warning)]' : 'bg-[var(--success)]'
                       }`}
                       style={{
                         animation: 'metaIoidBreathe 2.4s ease-in-out infinite',

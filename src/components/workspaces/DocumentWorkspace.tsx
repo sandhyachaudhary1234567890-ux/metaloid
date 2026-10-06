@@ -46,14 +46,14 @@ export function DocumentWorkspace({ doc, onClose }: DocumentWorkspaceProps) {
         <div className="flex items-center gap-1.5 shrink-0">
           <button
             onClick={handleCopy}
-            className="btn-ghost h-8 px-2.5 text-xs rounded-lg inline-flex items-center gap-1.5 text-[var(--fg-muted)] hover:text-[var(--fg)]"
+            className="btn-ghost h-8 px-2.5 text-micro rounded-lg inline-flex items-center gap-1.5 text-[var(--fg-muted)] hover:text-[var(--fg)]"
           >
             {copied ? <Check size={13} className="text-success" /> : <Copy size={13} />}
             {copied ? 'Copied' : 'Copy'}
           </button>
           <button
             onClick={handleDownload}
-            className="btn-primary h-8 px-3 text-xs rounded-lg inline-flex items-center gap-1.5"
+            className="btn-primary h-8 px-3 text-micro rounded-lg inline-flex items-center gap-1.5"
           >
             <Download size={13} /> Export .md
           </button>
@@ -76,14 +76,14 @@ export function DocumentWorkspace({ doc, onClose }: DocumentWorkspaceProps) {
       <div className="flex-1 flex overflow-hidden">
         {/* Table of Contents Column */}
         <div className="hidden md:block w-48 sm:w-56 border-r border-[var(--border)] overflow-y-auto p-3 space-y-1 bg-[color-mix(in_srgb,var(--surface-sunken)_40%,transparent)] shrink-0">
-          <div className="text-micro font-bold uppercase tracking-wider text-[var(--fg-muted)] px-2 mb-2">
+          <div className="text-micro font-semibold uppercase tracking-wider text-[var(--fg-muted)] px-2 mb-2">
             Contents
           </div>
           {doc.sections.map((sec) => (
             <button
               key={sec.id}
               onClick={() => setActiveSectionId(sec.id)}
-              className={`w-full text-left px-2.5 py-1.5 rounded-lg text-xs transition-colors block truncate ${
+              className={`w-full text-left px-2.5 py-1.5 rounded-lg text-micro transition-colors block truncate ${
                 sec.id === activeSectionId
                   ? 'bg-[var(--accent-subtle)] text-[var(--accent)] font-medium'
                   : 'text-[var(--fg-secondary)] hover:bg-[var(--surface-hover)]'
@@ -96,7 +96,7 @@ export function DocumentWorkspace({ doc, onClose }: DocumentWorkspaceProps) {
 
         {/* Document Reading Pane */}
         <div className="flex-1 overflow-y-auto p-3 sm:p-6 md:p-10 bg-[var(--bg)]">
-          <div className="max-w-[680px] mx-auto bg-[var(--surface)] border border-[var(--border)] rounded-2xl p-5 sm:p-8 md:p-12 shadow-sm">
+          <div className="max-w-[680px] mx-auto bg-[var(--surface)] border border-[var(--border)] rounded-[var(--radius-lg)] p-5 sm:p-8 md:p-12">
             <Markdown text={doc.markdown} />
           </div>
         </div>

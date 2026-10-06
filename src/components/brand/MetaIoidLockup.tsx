@@ -37,7 +37,7 @@ export const MetaIoidLockup: React.FC<MetaIoidLockupProps> = ({
     return (
       <div
         className={cn(
-          'inline-flex items-center gap-2 px-3 py-1.5 rounded-full border border-[var(--border)] bg-[color-mix(in_srgb,var(--surface-elevated)_80%,transparent)] backdrop-blur-md shadow-sm',
+          'inline-flex items-center gap-2 px-3 py-1.5 rounded-full border border-[var(--border)] bg-[color-mix(in_srgb,var(--surface-elevated)_80%,transparent)] backdrop-blur-md',
           className
         )}
         {...props}
@@ -52,7 +52,7 @@ export const MetaIoidLockup: React.FC<MetaIoidLockupProps> = ({
     return (
       <div
         className={cn(
-          'inline-flex items-center gap-2.5 px-3.5 py-1.5 rounded-full border border-[var(--border)] bg-[color-mix(in_srgb,var(--surface-elevated)_80%,transparent)] backdrop-blur-md shadow-sm',
+          'inline-flex items-center gap-2.5 px-3.5 py-1.5 rounded-full border border-[var(--border)] bg-[color-mix(in_srgb,var(--surface-elevated)_80%,transparent)] backdrop-blur-md',
           className
         )}
         {...props}
@@ -61,7 +61,7 @@ export const MetaIoidLockup: React.FC<MetaIoidLockupProps> = ({
         <MetaIoidWordmark height={size === 'sm' ? 13 : 16} />
         <span className="text-[var(--border-strong)] mx-0.5">|</span>
         <span className="inline-flex items-center gap-1.5 text-micro font-semibold tracking-wider text-success">
-          <span className={cn('w-1.5 h-1.5 rounded-full bg-success/10', isLive && 'animate-pulse')} />
+          <span className={cn('w-1.5 h-1.5 rounded-full bg-[var(--success)]', isLive && 'animate-pulse-soft')} />
           {statusText}
         </span>
       </div>

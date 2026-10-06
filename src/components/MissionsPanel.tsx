@@ -117,11 +117,11 @@ export function MissionsPanel({ open, onClose, initialObjective = '' }: {
           >
             <div className="px-6 pt-5 pb-4 border-b border-[var(--border-subtle)]">
               <div className="flex items-center gap-3">
-                <span className="w-10 h-10 rounded-2xl bg-info/10 border border-info/25 flex items-center justify-center">
-                  <Rocket size={18} className="text-info" />
+                <span className="w-10 h-10 rounded-[var(--radius-lg)] bg-[var(--accent-subtle)] border border-[color-mix(in_srgb,var(--accent)_25%,transparent)] flex items-center justify-center">
+                  <Rocket size={18} className="text-[var(--accent)]" />
                 </span>
                 <div className="flex-1">
-                  <h3 className="text-title font-bold tracking-tight">Mission Control</h3>
+                  <h3 className="t-title">Mission Control</h3>
                   <p className="text-small text-[var(--fg-muted)]">Plan → execute → verify · resumable</p>
                 </div>
                 <button onClick={onClose} className="icon-btn w-9 h-9" aria-label="Close missions"><X size={17} /></button>
@@ -131,7 +131,7 @@ export function MissionsPanel({ open, onClose, initialObjective = '' }: {
                   value={draft} onChange={(e) => setDraft(e.target.value)}
                   onKeyDown={(e) => { if (e.key === 'Enter') launch(true); }}
                   placeholder="Mission objective — e.g. Profile example.com footprint"
-                  className="flex-1 h-12 rounded-2xl bg-[var(--surface-sunken)] border border-[var(--border)] px-4 text-body outline-none focus:border-[var(--accent)] placeholder:text-[var(--fg-subtle)] min-w-0"
+                  className="flex-1 h-12 rounded-[var(--radius-lg)] bg-[var(--surface-sunken)] border border-[var(--border)] px-4 text-body outline-none focus:border-[var(--accent)] placeholder:text-[var(--fg-subtle)] min-w-0"
                   aria-label="Mission objective"
                 />
                 <button onClick={() => launch(true)} disabled={busy} className="btn-primary h-12 px-4 text-ui shrink-0 disabled:opacity-50 min-w-[44px]" title="Run with model synthesis">
@@ -151,9 +151,9 @@ export function MissionsPanel({ open, onClose, initialObjective = '' }: {
                 const expanded = active?.id === m.id;
                 const done = m.tasks.filter((t) => t.status === 'COMPLETED').length;
                 return (
-                  <div key={m.id} className="rounded-2xl border border-[var(--border-subtle)] bg-[var(--surface-sunken)] overflow-hidden">
+                  <div key={m.id} className="rounded-[var(--radius-lg)] border border-[var(--border-subtle)] bg-[var(--surface-sunken)] overflow-hidden">
                     <button onClick={() => setActiveId(expanded ? null : m.id)} className="w-full flex items-center gap-3 p-4 text-left min-h-[56px]">
-                      <span className={cn('text-micro font-bold tracking-[0.1em] rounded-full px-2.5 py-1 border shrink-0', STATUS_STYLE[m.status] ?? STATUS_STYLE.QUEUED)}>
+                      <span className={cn('text-micro font-semibold tracking-[0.1em] rounded-full px-2.5 py-1 border shrink-0', STATUS_STYLE[m.status] ?? STATUS_STYLE.QUEUED)}>
                         {m.status}
                       </span>
                       <span className="flex-1 min-w-0">
@@ -163,8 +163,8 @@ export function MissionsPanel({ open, onClose, initialObjective = '' }: {
                     </button>
                     {expanded && (
                       <div className="px-4 pb-4">
-                        <div className="h-1 rounded-full bg-white/10 overflow-hidden mb-3">
-                          <div className="h-full rounded-full bg-gradient-to-r from-violet-300 to-cyan-200 transition-all" style={{ width: `${m.tasks.length ? (done / m.tasks.length) * 100 : 0}%` }} />
+                        <div className="h-1 rounded-full bg-[var(--surface-active)] overflow-hidden mb-3">
+                          <div className="h-full rounded-full bg-[var(--accent)] transition-all" style={{ width: `${m.tasks.length ? (done / m.tasks.length) * 100 : 0}%` }} />
                         </div>
                         <div className="space-y-1.5">
                           {m.tasks.map((t) => (
@@ -217,8 +217,8 @@ export function MissionsPanel({ open, onClose, initialObjective = '' }: {
 function TaskDot({ status }: { status: string }) {
   return (
     <span className={cn('w-2 h-2 rounded-full shrink-0',
-      status === 'COMPLETED' ? 'bg-success/10' : status === 'RUNNING' ? 'bg-info/10 animate-pulse'
-      : status === 'FAILED' ? 'bg-danger/10' : status === 'BLOCKED' ? 'bg-warning/10' : 'bg-[var(--fg-subtle)]')} />
+      status === 'COMPLETED' ? 'bg-[var(--success)]' : status === 'RUNNING' ? 'bg-[var(--accent)] animate-pulse-soft'
+      : status === 'FAILED' ? 'bg-[var(--danger)]' : status === 'BLOCKED' ? 'bg-[var(--warning)]' : 'bg-[var(--fg-subtle)]')} />
   );
 }
 

@@ -143,11 +143,11 @@ export function OsintPanel() {
             {/* header */}
             <div className="px-6 pt-5 pb-4 border-b border-[var(--border-subtle)]">
               <div className="flex items-center gap-3">
-                <span className="w-10 h-10 rounded-2xl bg-[var(--accent-subtle)] border border-[color-mix(in_srgb,var(--accent)_25%,transparent)] flex items-center justify-center">
+                <span className="w-10 h-10 rounded-[var(--radius-lg)] bg-[var(--accent-subtle)] border border-[color-mix(in_srgb,var(--accent)_25%,transparent)] flex items-center justify-center">
                   <Radar size={18} className="text-[var(--accent)]" />
                 </span>
                 <div className="flex-1 min-w-0">
-                  <h3 className="text-title font-semibold tracking-tight">Research</h3>
+                  <h3 className="t-title">Research</h3>
                   <p className="text-small text-[var(--fg-muted)]">Public sources · every finding cited</p>
                 </div>
                 <button onClick={() => setOsintOpen(false)} className="icon-btn w-9 h-9" aria-label="Close research"><X size={17} /></button>
@@ -158,7 +158,7 @@ export function OsintPanel() {
                   value={target} onChange={(e) => setTarget(e.target.value)}
                   onKeyDown={(e) => { if (e.key === 'Enter') start(); }}
                   placeholder="example.com · username · email · org · github repo URL"
-                  className="flex-1 h-12 rounded-2xl bg-[var(--surface-sunken)] border border-[var(--border)] px-4 text-body outline-none focus:border-[var(--accent)] placeholder:text-[var(--fg-subtle)] min-w-0"
+                  className="flex-1 h-12 rounded-[var(--radius-lg)] bg-[var(--surface-sunken)] border border-[var(--border)] px-4 text-body outline-none focus:border-[var(--accent)] placeholder:text-[var(--fg-subtle)] min-w-0"
                   aria-label="Investigation target"
                 />
                 <button onClick={start} disabled={busy} className="btn-primary h-12 px-5 text-body shrink-0 disabled:opacity-50 min-w-[88px]">
@@ -173,7 +173,7 @@ export function OsintPanel() {
                 <span>I own this target or am authorized to investigate it. Public sources only — no private data, no bypasses.</span>
               </label>
               {error && (
-                <div className="mt-3 flex items-start gap-2 rounded-2xl border border-danger/25 bg-danger/7 px-4 py-3 text-ui text-danger" role="alert">
+                <div className="mt-3 flex items-start gap-2 rounded-[var(--radius-lg)] border border-danger/25 bg-danger/7 px-4 py-3 text-ui text-danger" role="alert">
                   <ShieldAlert size={15} className="shrink-0 mt-0.5" /> {error}
                 </div>
               )}
@@ -183,12 +183,12 @@ export function OsintPanel() {
             {job && (
               <div className="px-6 py-3.5 border-b border-[var(--border-subtle)]">
                 <div className="flex items-center gap-2.5">
-                  <span className={cn('text-small font-bold tracking-[0.14em]',
+                  <span className={cn('text-small font-semibold tracking-[0.14em]',
                     job.status === 'complete' ? 'text-success' : job.status === 'failed' ? 'text-danger' : 'text-[var(--accent)]')}>
                     {(stateLabel[job.status] || job.status).toUpperCase()}
                   </span>
-                  <div className="flex-1 h-1 rounded-full bg-white/10 overflow-hidden">
-                    <div className="h-full rounded-full bg-gradient-to-r from-cyan-200 to-violet-300 transition-all duration-500" style={{ width: `${job.progress}%` }} />
+                  <div className="flex-1 h-1 rounded-full bg-[var(--surface-active)] overflow-hidden">
+                    <div className="h-full rounded-full bg-[var(--accent)] transition-all duration-500" style={{ width: `${job.progress}%` }} />
                   </div>
                   <span className="text-small text-[var(--fg-muted)]">{job.finding_count} findings</span>
                 </div>
@@ -200,7 +200,7 @@ export function OsintPanel() {
                       : c.state === 'failed' ? 'text-danger border-danger/25 bg-danger/5'
                       : 'text-[var(--fg-muted)] border-[var(--border)]')}>
                       <span className={cn('w-1.5 h-1.5 rounded-full',
-                        c.state === 'done' ? 'bg-success/10' : c.state === 'running' ? 'bg-info/10 animate-pulse' : c.state === 'failed' ? 'bg-danger/10' : 'bg-[var(--fg-subtle)]')} />
+                        c.state === 'done' ? 'bg-[var(--success)]' : c.state === 'running' ? 'bg-[var(--accent)] animate-pulse-soft' : c.state === 'failed' ? 'bg-[var(--danger)]' : 'bg-[var(--fg-subtle)]')} />
                       {c.id}
                     </span>
                   ))}
@@ -256,7 +256,7 @@ export function OsintPanel() {
                       <button key={f} onClick={() => setTypeF(f)} aria-pressed={typeF === f}
                         className={cn('px-3 h-8 rounded-full text-small border capitalize min-w-[36px]', typeF === f ? 'bg-[var(--accent-subtle)] border-[var(--accent)] text-[var(--accent)]' : 'border-[var(--border)] text-[var(--fg-muted)]')}>{f}</button>
                     ))}
-                    <span className="w-px bg-white/10 mx-1" />
+                    <span className="w-px bg-[var(--surface-active)] mx-1" />
                     {CONF_FILTERS.map((f) => (
                       <button key={f} onClick={() => setConfF(f)} aria-pressed={confF === f}
                         className={cn('px-3 h-8 rounded-full text-small border capitalize min-w-[36px]', confF === f ? 'bg-[var(--accent-subtle)] border-[var(--accent)] text-[var(--accent)]' : 'border-[var(--border)] text-[var(--fg-muted)]')}>{f}</button>
@@ -269,9 +269,9 @@ export function OsintPanel() {
                   ) : (
                     <div className="space-y-2">
                       {filtered.map((f, i) => (
-                        <div key={`${f.type}-${f.value}-${i}`} className="rounded-2xl border border-[var(--border-subtle)] bg-[var(--surface-sunken)] p-3.5">
+                        <div key={`${f.type}-${f.value}-${i}`} className="rounded-[var(--radius-lg)] border border-[var(--border-subtle)] bg-[var(--surface-sunken)] p-3.5">
                           <div className="flex items-center gap-2 flex-wrap">
-                            <span className={cn('text-micro font-bold tracking-[0.1em] rounded-full px-2 py-0.5 border', TYPE_COLOR[f.type] ?? TYPE_COLOR.record)}>{f.type.toUpperCase()}</span>
+                            <span className={cn('text-micro font-semibold tracking-[0.1em] rounded-full px-2 py-0.5 border', TYPE_COLOR[f.type] ?? TYPE_COLOR.record)}>{f.type.toUpperCase()}</span>
                             <span className={cn('inline-flex items-center gap-1 text-micro', f.confidence === 'high' ? 'text-success' : f.confidence === 'medium' ? 'text-warning' : 'text-[var(--fg-muted)]')}>
                               <Check size={11} /> {f.confidence}
                             </span>

@@ -31,7 +31,7 @@ export function PuterConnect() {
       <span
         className={cn(
           'h-1.5 w-1.5 rounded-full',
-          state === 'in' ? 'bg-success/10' : state === 'checking' || state === 'busy' ? 'bg-warning/10 animate-pulse' : 'bg-[var(--surface-hover)]'
+          state === 'in' ? 'bg-[var(--success)]' : state === 'checking' || state === 'busy' ? 'bg-[var(--warning)] animate-pulse-soft' : 'bg-[var(--fg-subtle)]'
         )}
       />
       <span className="text-small text-[var(--fg-muted)]">

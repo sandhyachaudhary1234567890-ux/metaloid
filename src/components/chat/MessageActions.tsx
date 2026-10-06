@@ -86,7 +86,7 @@ export function MessageActions({
                 animate={{ opacity: 1, y: 0, scale: 1 }}
                 exit={{ opacity: 0 }}
                 transition={{ duration: 0.15 }}
-                className="absolute left-0 bottom-9 z-50 w-44 rounded-xl border border-[var(--border)] bg-[var(--surface-elevated)] shadow-lg p-1"
+                className="absolute left-0 bottom-9 z-50 w-44 rounded-xl border border-[var(--border)] bg-[var(--surface-elevated)] shadow-pop p-1"
                 role="menu"
               >
                 <button

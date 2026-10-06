@@ -166,7 +166,7 @@ export function ModelSelector({ compact = false }: { compact?: boolean }) {
         )}
         aria-haspopup="dialog" aria-expanded={open} aria-label="Select provider and model"
       >
-        <span className={cn('w-1.5 h-1.5 rounded-full shrink-0', reachable ? 'bg-success/10' : 'bg-[var(--fg-subtle)]')} title={reachable ? 'Connected' : 'Local demo'} />
+        <span className={cn('w-1.5 h-1.5 rounded-full shrink-0', reachable ? 'bg-[var(--success)]' : 'bg-[var(--fg-subtle)]')} title={reachable ? 'Connected' : 'Local demo'} />
         <span className="font-medium whitespace-nowrap">{currentLabel}</span>
         <ChevronDown size={12} className={cn('text-[var(--fg-muted)] transition-transform', open && 'rotate-180')} />
       </button>
@@ -177,7 +177,7 @@ export function ModelSelector({ compact = false }: { compact?: boolean }) {
             <motion.div
               initial={{ opacity: 0, y: 6, scale: 0.98 }} animate={{ opacity: 1, y: 0, scale: 1 }} exit={{ opacity: 0, y: 6, scale: 0.98 }}
               transition={{ duration: 0.15 }}
-              className="absolute right-0 bottom-11 z-50 w-[340px] max-w-[86vw] rounded-2xl border border-[var(--border)] bg-[var(--surface-elevated)] text-[var(--fg)] shadow-pop p-1.5 max-h-[420px] overflow-y-auto"
+              className="absolute right-0 bottom-11 z-50 w-[340px] max-w-[86vw] rounded-[var(--radius-lg)] border border-[var(--border)] bg-[var(--surface-elevated)] text-[var(--fg)] shadow-pop p-1.5 max-h-[420px] overflow-y-auto"
               role="dialog" aria-label="Provider and model picker"
             >
               {view.kind === 'providers' ? (

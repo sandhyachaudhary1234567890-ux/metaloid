@@ -7,6 +7,7 @@ import {
 } from '../lib/transport';
 import { ArtifactCard } from '../components/ArtifactCard';
 import { EmptyState } from '../components/ui/EmptyState';
+import { LocalWork } from '../components/workspaces/LocalWork';
 import type { ArtKey } from '../design/assets';
 import { cn } from '../lib/cn';
 
@@ -130,11 +131,19 @@ export function WorkspaceScreen({ kind }: { kind: ScreenKind }) {
         )}
       </header>
 
+      {/* Unfinished work this device still holds. It is the one thing in the
+          workspace that does not need the gateway, so it shows either way. */}
+      {kind === 'tasks' && <LocalWork />}
+
       {!online ? (
         <EmptyState
           art="unavailable"
-          title={`${copy.title} needs the gateway`}
-          description="This workspace reads live data, so nothing is shown while the local demo is running. Connect a gateway in Settings to see it."
+          title={kind === 'tasks' ? 'Gateway tasks need the gateway' : `${copy.title} needs the gateway`}
+          description={
+            kind === 'tasks'
+              ? 'Work you started in chat is listed above and survives a reload. Gateway tasks need a connection.'
+              : 'This workspace reads live data, so nothing is shown while the local demo is running. Connect a gateway in Settings to see it.'
+          }
           action={
             <span className="flex items-center gap-2">
               <button onClick={() => { setOsintTarget(''); setOsintOpen(true); }} className="btn-ghost h-9 px-3.5 text-ui">

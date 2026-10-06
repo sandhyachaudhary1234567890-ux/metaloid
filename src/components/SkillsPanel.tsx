@@ -91,11 +91,11 @@ export function SkillsPanel({ open, onClose }: { open: boolean; onClose: () => v
             animate={{ y: 0, opacity: 1 }}
             exit={{ y: 40, opacity: 0 }}
             onClick={(e) => e.stopPropagation()}
-            className="w-full sm:max-w-[720px] max-h-[88vh] flex flex-col rounded-t-3xl sm:rounded-3xl border border-[var(--border)] bg-[var(--surface)] overflow-hidden"
+            className="w-full sm:max-w-[720px] max-h-[88vh] flex flex-col rounded-t-[var(--radius-xl)] sm:rounded-[var(--radius-xl)] border border-[var(--border)] bg-[var(--surface)] overflow-hidden"
           >
             <div className="flex items-center gap-3 px-5 py-4 border-b border-[var(--border)]">
               <div className="flex-1 min-w-0">
-                <h2 className="text-title font-bold text-[var(--fg)]">Skills</h2>
+                <h2 className="text-title font-semibold text-[var(--fg)]">Skills</h2>
                 <p className="text-small text-[var(--fg-muted)]">Add once — Metaloid uses them when relevant.</p>
               </div>
               <button onClick={() => setCreating(true)} className="h-9 px-3.5 rounded-xl bg-[var(--accent-solid)] text-[var(--accent-on-solid)] text-ui font-semibold flex items-center gap-1.5" title="Create skill">
@@ -187,7 +187,7 @@ export function SkillsPanel({ open, onClose }: { open: boolean; onClose: () => v
                 </p>
               )}
               {filtered.map((s) => (
-                <div key={s.id} className="rounded-2xl border border-[var(--border)] bg-[var(--surface-elevated)] p-3.5">
+                <div key={s.id} className="rounded-[var(--radius-lg)] border border-[var(--border)] bg-[var(--surface-elevated)] p-3.5">
                   <div className="flex items-start gap-3">
                     <button
                       onClick={() => act(`${s.id}:toggle`, async () => {
@@ -271,7 +271,7 @@ export function SkillsPanel({ open, onClose }: { open: boolean; onClose: () => v
             {updating && <UpdateView skill={updating} backendUrl={settings.backendUrl} onClose={() => setUpdating(null)} onSaved={load} />}
             {testing && (
               <SubSheet title={`Test — ${testing.skill.name}`} onClose={() => setTesting(null)}>
-                <p className={cn('text-body font-bold', testing.verdict === 'PASS' ? 'text-success' : testing.verdict === 'WARN' ? 'text-warning' : 'text-danger')}>
+                <p className={cn('text-body font-semibold', testing.verdict === 'PASS' ? 'text-success' : testing.verdict === 'WARN' ? 'text-warning' : 'text-danger')}>
                   {testing.verdict}
                 </p>
                 <div className="mt-2 space-y-1.5">
@@ -313,9 +313,9 @@ function PanelBtn({ icon, label, onClick, danger, busy }: { icon: React.ReactNod
 function SubSheet({ title, onClose, children }: { title: string; onClose: () => void; children: React.ReactNode }) {
   return (
     <div className="absolute inset-0 z-10 flex items-end sm:items-center justify-center bg-black/50 p-4" onClick={onClose}>
-      <div className="w-full max-w-[560px] max-h-[80%] overflow-y-auto rounded-2xl border border-[var(--border)] bg-[var(--surface)] p-5" onClick={(e) => e.stopPropagation()}>
+      <div className="w-full max-w-[560px] max-h-[80%] overflow-y-auto rounded-[var(--radius-lg)] border border-[var(--border)] bg-[var(--surface)] p-5" onClick={(e) => e.stopPropagation()}>
         <div className="flex items-center gap-2 mb-3">
-          <h3 className="text-read font-bold text-[var(--fg)] flex-1">{title}</h3>
+          <h3 className="text-read font-semibold text-[var(--fg)] flex-1">{title}</h3>
           <button onClick={onClose} className="icon-btn w-8 h-8 rounded-lg" aria-label="Close">
             <X size={15} />
           </button>
@@ -340,7 +340,7 @@ function PreInstallInspect({ payload, onCancel, onInstall, installing }: {
         <p className="text-ui text-danger">{payload.errors.join(' ')}</p>
       ) : (
         <>
-          <p className="text-read font-bold text-[var(--fg)]">{ins.name} <span className="font-mono font-normal text-micro text-[var(--fg-faint)]">v{ins.version}</span></p>
+          <p className="text-read font-semibold text-[var(--fg)]">{ins.name} <span className="font-mono font-normal text-micro text-[var(--fg-faint)]">v{ins.version}</span></p>
           <p className="text-ui text-[var(--fg-muted)] mt-1">{ins.description}</p>
           {payload.warnings.map((w, i) => (
             <p key={i} className="mt-1.5 text-small text-warning">⚠ {w}</p>

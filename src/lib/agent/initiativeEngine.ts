@@ -14,6 +14,7 @@ import {
   evaluateActionPolicy,
   type ActionClass,
   type PolicyDecision,
+  type UserAutonomyPreference,
 } from './initiativePolicy';
 import type { TaskArtifact } from './types';
 
@@ -81,6 +82,21 @@ export class InitiativeEngine {
   private static completedFingerprints = new Map<string, number>();
   private static userOverride = false;
   private static interrupted = false;
+  /**
+   * The user's chosen autonomy level, in the policy's own vocabulary. The app
+   * pushes this in from settings (see lib/control.ts); it defaults to acting
+   * so a caller that never sets it keeps the previous behaviour.
+   */
+  private static userAutonomy: UserAutonomyPreference = 'autonomy_on';
+
+  /** Called by the app whenever the autonomy setting or the pause changes. */
+  static setUserAutonomy(pref: UserAutonomyPreference): void {
+    this.userAutonomy = pref;
+  }
+
+  static getUserAutonomy(): UserAutonomyPreference {
+    return this.userAutonomy;
+  }
 
   static setUserOverride(active: boolean): void {
     this.userOverride = active;
@@ -302,7 +318,7 @@ export class InitiativeEngine {
         permissionScope: 'workspace_read',
         reversibility: 'easy',
         actionClass: 'READ_ONLY',
-        userPreference: 'autonomy_on',
+        userPreference: this.userAutonomy,
         resourceBudgetOk: true,
         requiredAuthorization: 'none',
         confidence: 0.5,
@@ -327,7 +343,7 @@ export class InitiativeEngine {
         permissionScope: 'workspace_write',
         reversibility: 'easy',
         actionClass: 'REVERSIBLE',
-        userPreference: 'autonomy_on',
+        userPreference: this.userAutonomy,
         resourceBudgetOk: true,
         requiredAuthorization: 'none',
         confidence: 0.95,
@@ -353,7 +369,7 @@ export class InitiativeEngine {
         permissionScope: 'workspace_write',
         reversibility: 'hard',
         actionClass: 'LOW_IMPACT',
-        userPreference: 'autonomy_on',
+        userPreference: this.userAutonomy,
         resourceBudgetOk: true,
         requiredAuthorization: 'user_confirm',
         confidence: 0.8,

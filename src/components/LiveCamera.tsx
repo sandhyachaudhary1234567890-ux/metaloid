@@ -86,7 +86,7 @@ export function LiveCamera({ embedded = false }: { embedded?: boolean }) {
       {/* top bar */}
       <div className="flex items-center gap-3 px-1 py-1">
         <span className="flex items-center gap-2 text-micro font-semibold tracking-[0.16em] uppercase text-danger">
-          <span className="w-2 h-2 rounded-full bg-danger/10 animate-pulse" /> LIVE
+          <span className="w-2 h-2 rounded-full bg-[var(--danger)] animate-pulse-soft" /> LIVE
         </span>
         <span className="chip !py-0.5 !text-micro"><Eye size={12} className="text-[var(--accent)]" /> Vision enabled · Demo</span>
         <span className="ml-auto text-small text-[var(--fg-muted)] hidden sm:inline">{visionPhase}</span>
@@ -94,7 +94,7 @@ export function LiveCamera({ embedded = false }: { embedded?: boolean }) {
 
       <div className="mt-3 grid lg:grid-cols-[1.5fr_1fr] gap-4 flex-1 min-h-0">
         {/* camera view */}
-        <div className="relative rounded-2xl overflow-hidden border border-[var(--border)] bg-black min-h-[320px] lg:min-h-[440px] shadow-sm">
+        <div className="relative rounded-[var(--radius-lg)] overflow-hidden border border-[var(--border)] bg-black min-h-[320px] lg:min-h-[440px]">
           <video
             ref={videoRef}
             className={camState === 'live' ? 'absolute inset-0 w-full h-full object-cover' : 'hidden'}
@@ -140,7 +140,7 @@ export function LiveCamera({ embedded = false }: { embedded?: boolean }) {
         </div>
 
         {/* agent conversation */}
-        <div className="rounded-2xl border border-[var(--border)] bg-[var(--surface)] flex flex-col min-h-[320px] max-h-[560px]">
+        <div className="rounded-[var(--radius-lg)] border border-[var(--border)] bg-[var(--surface)] flex flex-col min-h-[320px] max-h-[560px]">
           <div className="px-4 py-3 border-b border-[var(--border-subtle)] flex items-center gap-2.5">
             <div className="w-6 h-6 rounded-full bg-[var(--accent-subtle)] border border-[var(--border)] flex items-center justify-center text-micro font-semibold text-[var(--accent)]">m</div>
             <div>

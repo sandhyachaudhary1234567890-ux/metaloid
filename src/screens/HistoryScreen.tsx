@@ -116,7 +116,7 @@ export function HistoryScreen() {
         </button>
       </div>
 
-      <div className="mt-5 rounded-2xl border border-[var(--border)] bg-[var(--surface)] px-4 py-3.5">
+      <div className="mt-5 rounded-[var(--radius-lg)] border border-[var(--border)] bg-[var(--surface)] px-4 py-3.5">
         <p className="flex items-center gap-2 text-ui font-semibold text-[var(--fg)]">
           <Archive size={14} className="text-[var(--accent)] shrink-0" />
           History Vault

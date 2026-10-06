@@ -251,7 +251,7 @@ export function VoiceMode() {
       {fatal ? (
         <div className="flex-1 flex flex-col items-center justify-center px-8 text-center">
           <MetaloidCore status="error" size={140} />
-          <h2 className="mt-6 text-title font-bold">Voice unavailable here</h2>
+          <h2 className="mt-6 text-title font-semibold">Voice unavailable here</h2>
           <p className="mt-2 text-body text-[var(--fg-muted)] max-w-[420px]">{fatal}</p>
           <button onClick={() => { exit(); setView('chat'); }} className="btn-primary h-11 px-6 text-body mt-6">
             Continue in chat
@@ -306,7 +306,7 @@ export function VoiceMode() {
           {/* silence alarm */}
           <AnimatePresence>
             {silentAlarm && (
-              <motion.div initial={{ opacity: 0, y: 8 }} animate={{ opacity: 1, y: 0 }} className="mt-3 max-w-[480px] w-full rounded-2xl border border-warning/25 bg-warning/5 px-5 py-3.5 text-left" role="alert">
+              <motion.div initial={{ opacity: 0, y: 8 }} animate={{ opacity: 1, y: 0 }} className="mt-3 max-w-[480px] w-full rounded-[var(--radius-lg)] border border-warning/25 bg-warning/5 px-5 py-3.5 text-left" role="alert">
                 <p className="text-ui font-semibold text-warning">
                   {micGone ? 'Microphone disconnected' : dbg?.micMuted ? 'Microphone muted by the system' : 'Microphone is silent'}
                 </p>
@@ -324,7 +324,7 @@ export function VoiceMode() {
           {/* live transcript (interim) */}
           <AnimatePresence>
             {(partial || heard) && (
-              <motion.div initial={{ opacity: 0, y: 8 }} animate={{ opacity: 1, y: 0 }} className="mt-3 max-w-[480px] w-full rounded-2xl border border-[var(--border)] bg-[var(--surface-elevated)] px-5 py-3.5 text-left">
+              <motion.div initial={{ opacity: 0, y: 8 }} animate={{ opacity: 1, y: 0 }} className="mt-3 max-w-[480px] w-full rounded-[var(--radius-lg)] border border-[var(--border)] bg-[var(--surface-elevated)] px-5 py-3.5 text-left">
                 {heard && <p className="text-body text-[var(--fg)]">“{heard}”</p>}
                 {partial && <p className="text-body text-[var(--fg-muted)] italic mt-1">{partial}…</p>}
               </motion.div>
@@ -334,7 +334,7 @@ export function VoiceMode() {
           {/* spoken reply with current-phrase highlight */}
           <AnimatePresence>
             {reply && (
-              <motion.div initial={{ opacity: 0, y: 8 }} animate={{ opacity: 1, y: 0 }} className="mt-2.5 max-w-[480px] w-full rounded-2xl border border-[var(--accent)] bg-[var(--accent-subtle)] px-5 py-3.5 text-left">
+              <motion.div initial={{ opacity: 0, y: 8 }} animate={{ opacity: 1, y: 0 }} className="mt-2.5 max-w-[480px] w-full rounded-[var(--radius-lg)] border border-[var(--accent)] bg-[var(--accent-subtle)] px-5 py-3.5 text-left">
                 <SpokenText full={reply} current={spoken} />
               </motion.div>
             )}
@@ -343,7 +343,7 @@ export function VoiceMode() {
           {/* audible failure — never go silently quiet */}
           <AnimatePresence>
             {replyError && !reply && (
-              <motion.div initial={{ opacity: 0, y: 8 }} animate={{ opacity: 1, y: 0 }} className="mt-2.5 max-w-[480px] w-full rounded-2xl border border-danger/25 bg-danger/7 px-5 py-3.5 text-left" role="alert">
+              <motion.div initial={{ opacity: 0, y: 8 }} animate={{ opacity: 1, y: 0 }} className="mt-2.5 max-w-[480px] w-full rounded-[var(--radius-lg)] border border-danger/25 bg-danger/7 px-5 py-3.5 text-left" role="alert">
                 <p className="text-ui text-danger">{replyError}</p>
               </motion.div>
             )}
@@ -389,9 +389,9 @@ export function VoiceMode() {
                           <span
                             className={cn(
                               'w-2 h-2 rounded-full shrink-0',
-                              st.status === 'ok' && 'bg-success/10',
+                              st.status === 'ok' && 'bg-[var(--success)]',
                               st.status === 'active' && 'bg-[var(--accent)] animate-pulse',
-                              st.status === 'dead' && 'bg-danger/10',
+                              st.status === 'dead' && 'bg-[var(--danger)]',
                               st.status === 'idle' && 'bg-[var(--fg-subtle)]'
                             )}
                           />

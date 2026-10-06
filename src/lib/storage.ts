@@ -115,6 +115,8 @@ export const defaultSettings: AppSettings = {
   responseLength: 'Balanced',
   creativity: 'Medium',
   proactivity: 'Medium',
+  autonomy: 'assist',
+  paused: false,
   voiceBehavior: 'Warm',
   vadSensitivity: 'Medium',
   model: 'balanced',

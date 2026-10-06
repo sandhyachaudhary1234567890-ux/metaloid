@@ -45,7 +45,7 @@ export function ToolsDrawer() {
           >
             <div className="flex items-start gap-3">
               <div>
-                <h3 className="text-title font-semibold tracking-tight">Tools</h3>
+                <h3 className="t-title">Tools</h3>
                 <p className="text-small text-[var(--fg-muted)] mt-0.5">
                   What MetaIoid can use right now{offline ? ' — local demo' : ''}
                 </p>
@@ -56,7 +56,7 @@ export function ToolsDrawer() {
               {TOOLS.map((t) => (
                 <button
                   key={t.id} onClick={() => run(t)}
-                  className="w-full flex items-center gap-3.5 rounded-2xl border border-[var(--border-subtle)] bg-[var(--surface-sunken)] hover:bg-[var(--surface-hover)] hover:border-[var(--border-strong)] transition-colors p-3.5 text-left min-h-[64px]"
+                  className="w-full flex items-center gap-3.5 rounded-[var(--radius-lg)] border border-[var(--border-subtle)] bg-[var(--surface-sunken)] hover:bg-[var(--surface-hover)] hover:border-[var(--border-strong)] transition-colors p-3.5 text-left min-h-[64px]"
                 >
                   <span className="w-10 h-10 rounded-xl bg-[var(--surface-elevated)] border border-[var(--border)] flex items-center justify-center shrink-0">
                     <t.icon size={17} className="text-[var(--accent)]" />

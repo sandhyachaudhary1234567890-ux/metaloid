@@ -58,7 +58,7 @@ export function CommandBar({
   autoFocus?: boolean;
   showModel?: boolean;
 }) {
-  const { sendMessage, isGenerating, stopGenerating, setVoiceOpen, setView, newConversation, toast, connection } = useApp();
+  const { sendMessage, isGenerating, stopGenerating, setVoiceOpen, setView, newConversation, toast, connection, composerDraft, setComposerDraft } = useApp();
   const [value, setValue] = useState('');
   const [focused, setFocused] = useState(false);
   const [atts, setAtts] = useState<Attachment[]>([]);
@@ -77,6 +77,22 @@ export function CommandBar({
     window.addEventListener('keydown', onKey);
     return () => window.removeEventListener('keydown', onKey);
   }, [menuOpen]);
+
+  // A draft handed over from elsewhere — home, pulse, command palette — lands
+  // here and takes focus, so "continue" really continues.
+  useEffect(() => {
+    if (!composerDraft) return;
+    setValue(composerDraft);
+    setComposerDraft('');
+    const el = taRef.current;
+    if (el) {
+      el.style.height = '0px';
+      el.style.height = `${Math.min(el.scrollHeight, 182)}px`;
+      el.focus();
+      el.setSelectionRange(el.value.length, el.value.length);
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [composerDraft]);
 
   // Grow with the thought, up to seven comfortable lines, then scroll.
   useEffect(() => {

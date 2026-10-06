@@ -309,7 +309,7 @@ export function AccountSection() {
               <button
                 onClick={deleteAccount}
                 disabled={busy !== null}
-                className="inline-flex items-center gap-1.5 px-3.5 py-2.5 rounded-xl bg-danger/10 text-white text-small font-semibold disabled:opacity-50 min-h-[42px]"
+                className="inline-flex items-center gap-1.5 px-3.5 py-2.5 rounded-xl bg-[var(--danger)] text-white text-small font-semibold disabled:opacity-50 min-h-[42px]"
               >
                 {busy === 'delete' ? <Loader2 size={14} className="animate-spin" /> : <Trash2 size={14} />}
                 Yes, delete everything

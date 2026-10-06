@@ -342,7 +342,7 @@ export function ProviderSettings() {
         const detected = detectProviderFromKey(keyInput);
         const wrongProvider = detected && detected !== p.providerId && expanded;
         return (
-          <div key={p.providerId} className="rounded-2xl border border-[var(--border)] bg-[var(--surface-elevated)] p-3.5 mt-2.5">
+          <div key={p.providerId} className="rounded-[var(--radius-lg)] border border-[var(--border)] bg-[var(--surface-elevated)] p-3.5 mt-2.5">
             <div className="flex items-start gap-2.5">
               <span
                 className={cn('mt-1.5 h-2 w-2 rounded-full shrink-0',
@@ -352,8 +352,8 @@ export function ProviderSettings() {
               <div className="flex-1 min-w-0">
                 <p className="text-body font-semibold text-[var(--fg)]">
                   {p.name}
-                  {isDefault && <span className="ml-2 text-micro font-bold uppercase text-[var(--accent)]">Default</span>}
-                  {isFallback && !isDefault && <span className="ml-2 text-micro font-bold uppercase text-[var(--fg-muted)]">Fallback</span>}
+                  {isDefault && <span className="ml-2 text-micro font-semibold uppercase text-[var(--accent)]">Default</span>}
+                  {isFallback && !isDefault && <span className="ml-2 text-micro font-semibold uppercase text-[var(--fg-muted)]">Fallback</span>}
                 </p>
                 <p className={cn('text-small', st.tone === 'bad' ? 'text-danger' : st.tone === 'ok' ? 'text-success' : 'text-[var(--fg-muted)]')}>
                   {cred ? `${cred.redacted || 'key stored'} · ` : ''}{st.label}
@@ -637,8 +637,8 @@ function OnboardingCard({ providers, help, ensureHelp, onDone }: {
   };
 
   return (
-    <div className="rounded-2xl border border-[color-mix(in_srgb,var(--accent)_40%,transparent)] bg-[var(--accent)]/[0.06] p-4">
-      <p className="text-body font-bold text-[var(--fg)]">Connect your AI — one key, three steps.</p>
+    <div className="rounded-[var(--radius-lg)] border border-[color-mix(in_srgb,var(--accent)_40%,transparent)] bg-[var(--accent)]/[0.06] p-4">
+      <p className="text-body font-semibold text-[var(--fg)]">Connect your AI — one key, three steps.</p>
       <p className="text-small text-[var(--fg-muted)] mt-0.5">Pick a provider → paste the key → verify. Nothing else is needed.</p>
 
       <div className="flex gap-1.5 mt-3 flex-wrap">

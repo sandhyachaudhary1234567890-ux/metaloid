@@ -103,13 +103,13 @@ export function ModalRoot() {
         animate={{ opacity: 1, scale: 1, y: 0 }}
         exit={{ opacity: 0, scale: 0.96, y: 6 }}
         transition={{ duration: 0.16 }}
-        className="relative w-full max-w-[390px] rounded-2xl border border-[var(--border)] bg-[var(--surface-elevated)] shadow-elevated p-6"
+        className="relative w-full max-w-[390px] rounded-[var(--radius-lg)] border border-[var(--border)] bg-[var(--surface-elevated)] shadow-elevated p-6"
       >
         <button onClick={closeModal} className="absolute top-4 right-4 icon-btn w-8 h-8" aria-label="Close dialog"><X size={15} /></button>
         <div className={`w-10 h-10 rounded-xl flex items-center justify-center border mb-4 ${meta.danger ? 'bg-danger/10 border-danger/25' : 'bg-[var(--accent-subtle)] border-[var(--border)]'}`}>
           {meta.danger ? <AlertTriangle size={18} className="text-danger" /> : <Info size={18} className="text-[var(--accent)]" />}
         </div>
-        <h3 className="text-read font-semibold tracking-tight text-[var(--fg)]">{meta.title}</h3>
+        <h3 className="t-read text-[var(--fg)]">{meta.title}</h3>
         <p className="text-ui text-[var(--fg-muted)] mt-1.5 leading-relaxed">{meta.desc}</p>
         {modal.kind === 'rename-chat' && (
           <input

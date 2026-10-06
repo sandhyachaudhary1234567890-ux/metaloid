@@ -218,6 +218,50 @@ waveform, scan, skeletons). Chat intents route to runtime (`investigate`,
 `mission:`, `continue`). Honesty invariants: connection pill, DEMO tags,
 provenance on findings, confidence ≠ truth copy. Motion: 180/300/550ms.
 
+### 21a. PRESENCE, PULSE AND CONTROL (frontend engines)
+
+Three pure engines sit under the experience layer. All are derived from real
+state; none of them is allowed to invent liveness or invent work.
+
+```
+src/lib/ready/presence.ts   derivePresence({status, voiceState, tasks,
+                          connected, paused}) → {state, label, detail, live}
+                          States: offline · paused · ready · listening ·
+                          thinking · working · verifying · speaking.
+src/lib/ready/pulse.ts      pulseFromTasks / pulseFromMissions / rankPulse
+                          → at most PULSE_LIMIT+1 items, weight-gated.
+src/lib/control.ts          AutonomyLevel ('ask'|'assist'|'approved'|
+                          'autopilot') → UserAutonomyPreference for the
+                          initiative policy. paused ⇒ 'ask_always'.
+```
+
+* **Presence** — one dot and one word on the home composition, and nothing
+  else. `live` is the only thing allowed to breathe.
+* **Pulse** — "what matters right now?". A hard filter, not a feed: below
+  `SURFACE_THRESHOLD` an item is dropped, not ranked last, so a busy day
+  cannot turn the home screen into a notification tray. No data → no UI.
+* **Control** — the user's autonomy level is pushed into
+  `InitiativeEngine.setUserAutonomy()`, and `GlobalStopController.stopAll()`
+  is what `Pause MetaIoid` calls. Pausing holds speech, checkpoints in-flight
+  work, and drops the policy to "ask first" until resumed.
+
+### 21b. CHECKPOINTED WORK IN CHAT
+
+Deliverable intents (presentation / document / spreadsheet / research / code)
+now write a `TaskCheckpoint` as they run:
+
+```
+saveCheckpoint(EXECUTING) → advanceStep per stage → attachArtifact → COMPLETED
+                                 ↘ aborted → PAUSED  (resumable, and listed)
+```
+
+On boot `TaskCheckpointManager.recoverPendingTasks()` adopts anything a closed
+tab left behind, which is what makes "pick up where you left off" true rather
+than decorative. Those checkpoints are surfaced in **Tasks → Unfinished on
+this device** (no gateway required) and as a Pulse row on the home screen, and
+the in-flight turn renders `MinimalActivity` so a build is never an empty
+bubble.
+
 ## 22. FOLDER / REPOSITORY STRUCTURE
 
 ```

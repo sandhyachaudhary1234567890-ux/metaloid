@@ -185,31 +185,59 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
 
   // Session bootstrap + refresh. `onAuthStateChange` also fires for token
   // refreshes, so this one subscription keeps the whole app current.
+  //
+  // Every await is guarded: a build with no auth service, an unreachable
+  // /api/config, or a client that throws on getSession() must all land on
+  // 'unconfigured'. An unhandled rejection here used to leave the shell stuck
+  // on "Restoring your session…" with no way out.
   useEffect(() => {
     let alive = true;
-    getSupabase().then(async (sb) => {
-      if (!alive) return;
-      if (!sb) {
-        setStatus('unconfigured');
-        return;
-      }
-      const { data } = await sb.auth.getSession();
-      if (!alive) return;
-      setSession(data.session ?? null);
-      mirrorSupabaseSession(data.session ?? null);
-      setStatus(data.session ? 'signed-in' : 'signed-out');
+    let unsubscribe: (() => void) | undefined;
 
-      const { data: sub } = sb.auth.onAuthStateChange((event, next) => {
+    const settle = (next: Session | null) => {
+      if (!alive) return;
+      setSession(next);
+      mirrorSupabaseSession(next);
+      setStatus(next ? 'signed-in' : 'signed-out');
+    };
+
+    getSupabase()
+      .then(async (sb) => {
         if (!alive) return;
-        setSession(next ?? null);
-        mirrorSupabaseSession(next ?? null);
-        setStatus(next ? 'signed-in' : 'signed-out');
-        // A recovery link lands as PASSWORD_RECOVERY: show the new-password form
-        if (event === 'PASSWORD_RECOVERY') setRecoveryMode(true);
+        if (!sb) {
+          setStatus('unconfigured');
+          return;
+        }
+        try {
+          const { data } = await sb.auth.getSession();
+          if (!alive) return;
+          settle(data.session ?? null);
+        } catch {
+          if (alive) setStatus('unconfigured');
+          return;
+        }
+        try {
+          const { data: sub } = sb.auth.onAuthStateChange((event, next) => {
+            if (!alive) return;
+            setSession(next ?? null);
+            mirrorSupabaseSession(next ?? null);
+            setStatus(next ? 'signed-in' : 'signed-out');
+            // A recovery link lands as PASSWORD_RECOVERY: show the new-password form
+            if (event === 'PASSWORD_RECOVERY') setRecoveryMode(true);
+          });
+          unsubscribe = () => sub?.subscription?.unsubscribe?.();
+        } catch {
+          /* the subscription is optional — bootstrap already reported state */
+        }
+      })
+      .catch(() => {
+        if (alive) setStatus('unconfigured');
       });
-      return () => sub?.subscription?.unsubscribe?.();
-    });
-    return () => { alive = false; };
+
+    return () => {
+      alive = false;
+      unsubscribe?.();
+    };
   }, []);
 
   const signUp = useCallback(async (email: string, password: string, displayName?: string): Promise<AuthResult> => {

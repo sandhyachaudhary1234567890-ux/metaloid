@@ -125,7 +125,7 @@ export function SkillForgePanel({ open, onClose }: SkillForgePanelProps) {
           animate={{ opacity: 1, scale: 1, y: 0 }}
           exit={{ opacity: 0, scale: 0.96, y: 8 }}
           transition={{ duration: 0.18 }}
-          className="relative w-full max-w-4xl h-[85vh] flex flex-col rounded-2xl border border-[var(--border)] bg-[var(--surface-elevated)] shadow-2xl overflow-hidden text-[var(--fg)]"
+          className="relative w-full max-w-4xl h-[85vh] flex flex-col rounded-[var(--radius-lg)] border border-[var(--border)] bg-[var(--surface-elevated)] shadow-dialog overflow-hidden text-[var(--fg)]"
           role="dialog"
           aria-label="Developer Skill Forge"
         >
@@ -137,7 +137,7 @@ export function SkillForgePanel({ open, onClose }: SkillForgePanelProps) {
               </div>
               <div>
                 <div className="flex items-center gap-2">
-                  <h2 className="text-read font-bold tracking-tight">Developer / Owner &middot; Skill Forge</h2>
+                  <h2 className="t-read">Developer / Owner &middot; Skill Forge</h2>
                   <span className="text-micro font-mono uppercase px-2 py-0.5 rounded border border-success/30 bg-success/10 text-success">
                     Sandboxed Engine
                   </span>

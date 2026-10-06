@@ -28,7 +28,7 @@ export function LanguageSelector({ compact = false }: { compact?: boolean }) {
       >
         <Globe size={14} className="text-[var(--fg-muted)]" />
         <span className="text-left leading-none">
-          <span className="block text-micro font-bold tracking-wider uppercase text-[var(--fg-muted)]">LANGUAGE</span>
+          <span className="block text-micro font-semibold tracking-wider uppercase text-[var(--fg-muted)]">LANGUAGE</span>
           <span className="block font-medium text-[var(--fg)] mt-0.5">{language === 'auto' ? 'AUTO' : languageShort(language)}</span>
         </span>
         <ChevronDown size={13} className={cn('text-[var(--fg-muted)] transition-transform', open && 'rotate-180')} />
@@ -41,7 +41,7 @@ export function LanguageSelector({ compact = false }: { compact?: boolean }) {
             <motion.div
               initial={{ opacity: 0, y: -6, scale: 0.98 }} animate={{ opacity: 1, y: 0, scale: 1 }} exit={{ opacity: 0, y: -6, scale: 0.98 }}
               transition={{ duration: 0.15 }}
-              className="absolute right-0 top-11 z-50 w-[240px] rounded-2xl border border-[var(--border)] bg-[var(--surface-elevated)] text-[var(--fg)] shadow-pop p-1.5 max-h-[340px] overflow-y-auto"
+              className="absolute right-0 top-11 z-50 w-[240px] rounded-[var(--radius-lg)] border border-[var(--border)] bg-[var(--surface-elevated)] text-[var(--fg)] shadow-pop p-1.5 max-h-[340px] overflow-y-auto"
               role="listbox" aria-label="Languages"
             >
               {LANGUAGES.map((l) => {

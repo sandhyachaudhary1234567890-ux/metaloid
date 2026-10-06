@@ -7,6 +7,7 @@ import { useApp } from '../lib/store';
 import { Markdown } from './chat/Markdown';
 import { MessageActions } from './chat/MessageActions';
 import { formatSize } from './CommandBar';
+import { MinimalActivity } from './MinimalActivity';
 import { cn } from '../lib/cn';
 import { ActivityStack, Activity, ToolActivity } from './ui/Activity';
 import { duration, ease } from '../design/motion';
@@ -125,6 +126,18 @@ const AssistantTurn = memo(function AssistantTurn({
             />
           ))}
         </ActivityStack>
+      )}
+
+      {/* Work in progress on this turn. Rendered in place of the answer so a
+          deliverable being built is never an empty bubble. */}
+      {msg.activity && !shown && (
+        <MinimalActivity
+          label={msg.activity.label}
+          stages={msg.activity.stages}
+          currentStageIndex={msg.activity.currentStageIndex}
+          isComplete={msg.activity.isComplete}
+          held={msg.activity.held}
+        />
       )}
 
       {/* The reading surface. */}

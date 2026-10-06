@@ -91,7 +91,7 @@ export function SetupChecklist() {
             <span
               aria-hidden="true"
               className={cn(
-                'grid h-5 w-5 shrink-0 place-items-center rounded-full border text-micro font-bold',
+                'grid h-5 w-5 shrink-0 place-items-center rounded-full border text-micro font-semibold',
                 s.done
                   ? 'border-[var(--accent)] bg-[color-mix(in_srgb,var(--accent)_14%,transparent)] text-[var(--accent)]'
                   : 'border-[var(--border)] text-[var(--fg-faint)]',

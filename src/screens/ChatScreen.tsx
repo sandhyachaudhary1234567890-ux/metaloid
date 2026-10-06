@@ -8,7 +8,7 @@ import { ChatWindow } from '../components/ChatWindow';
 import { SetupChecklist } from '../components/SetupChecklist';
 import { CommandBar, COMPOSER_MODES, type ComposerMode } from '../components/CommandBar';
 import { Artwork } from '../components/ui/Artwork';
-import { Proactive } from '../components/ui/Proactive';
+import { ActiveMission, HomeGreeting, HomeSignals, PresenceLine } from '../components/ui/Home';
 import { LiveActivity } from '../components/LiveActivity';
 import { MetaIoidLockup } from '../components/brand';
 import { cn } from '../lib/cn';
@@ -28,11 +28,12 @@ const STARTERS: { mode: ComposerMode; sample: string; icon: typeof Sparkles }[] 
 ];
 
 /**
- * The welcome composition — what a brand-new user sees before they type.
+ * The welcome composition — what a user sees before they type.
  *
- * Order matters: identity, one visual moment, the question, one line of
- * support, four entrances. Nothing else. It is deliberately centred with a lot
- * of air around it, because the first screen is where the product decides
+ * Order matters, and it is the product's opening sentence: who is here
+ * (presence), where you are (greeting), what is already open (mission, pulse),
+ * and only then the ways in. Nothing else. It is deliberately centred with a
+ * lot of air around it, because the first screen is where the product decides
  * whether it feels expensive or feels like a dashboard.
  */
 function Welcome({ firstName, onPick }: { firstName: string | null; onPick: (m: ComposerMode) => void }) {
@@ -44,7 +45,10 @@ function Welcome({ firstName, onPick }: { firstName: string | null; onPick: (m: 
         transition={{ duration: duration.large, ease: ease.out }}
         className="flex w-full max-w-[var(--welcome-width)] flex-col items-center text-center"
       >
-        <MetaIoidLockup variant="full" size="sm" className="opacity-90" />
+        {/* Presence — the first thing on the screen, and the quietest. */}
+        <PresenceLine />
+
+        <MetaIoidLockup variant="full" size="sm" className="mt-6 opacity-90" />
 
         {/* The one visual moment on this screen. */}
         <Artwork
@@ -55,18 +59,15 @@ function Welcome({ firstName, onPick }: { firstName: string | null; onPick: (m: 
           className="mt-7 mb-7 opacity-95"
         />
 
-        <h1 className="t-hero text-[var(--fg)] text-balance">
-          What are we working on?
-        </h1>
+        <HomeGreeting name={firstName} />
 
         <p className="mt-3 max-w-[42ch] text-body text-[var(--fg-muted)] text-pretty">
-          {firstName
-            ? `${firstName}, ask anything, or pick a place to start.`
-            : 'Ask anything, or pick a place to start.'}
+          Ask anything, or pick a place to start.
         </p>
 
-        {/* Only ever rendered when there is something real to say. */}
-        <Proactive />
+        {/* What is already open. Renders nothing when nothing is. */}
+        <ActiveMission className="mt-7" />
+        <HomeSignals className="mt-2.5" />
 
         {/* Capability entrances — a quiet row, not a wall of cards. */}
         <div className="mt-9 grid w-full grid-cols-2 gap-2.5 sm:grid-cols-4">

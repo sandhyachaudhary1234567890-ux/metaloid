@@ -22,6 +22,7 @@ import { VOICE_SYSTEM_INSTRUCTION } from '../lib/voice/responsePlanner';
 import { HumanBehaviorPipeline } from '../lib/behavior';
 import { CapabilityGapEngine } from '../lib/skills';
 import { resolveWorkIntent } from '../lib/intentResolver';
+import { TaskCheckpointManager } from '../lib/agent/checkpoint';
 import {
   generatePresentationArtifact,
   generateDocumentArtifact,
@@ -439,6 +440,72 @@ function titleFrom(text: string): string {
       setStatus('thinking');
       renameTask(taskId, workIntent.kind);
 
+      // This work is checkpointed, so it survives the tab closing: the home
+      // screen can say where it stopped and offer to continue, and the Tasks
+      // view can list it. Without this, a half-finished deliverable is work
+      // the user has to remember on MetaIoid's behalf.
+      const checkpointId = `task_${Date.now()}_${Math.random().toString(36).slice(2, 6)}`;
+      TaskCheckpointManager.saveCheckpoint({
+        taskId: checkpointId,
+        objective: workIntent.topic || workIntent.headline,
+        status: 'EXECUTING',
+        currentStepIndex: 0,
+        steps: workIntent.stages.map((label, idx) => ({
+          id: `step_${idx + 1}`,
+          type: 'UNDERSTAND',
+          label,
+          detail: '',
+          status: idx === 0 ? 'running' : 'pending',
+          retries: 0,
+        })),
+        artifacts: [],
+        context: { origin: 'chat' },
+        telemetry: { resumedCount: 0, errorCount: 0, lastHeartbeat: Date.now() },
+        createdAt: Date.now(),
+        updatedAt: Date.now(),
+      });
+
+      // The staged progression is interruptible, so Stop means stop: the
+      // checkpoint stays open at the step it reached and can be resumed.
+      const actl = new AbortController();
+      abortRef.current = actl;
+      const holdAt = (reason: string) => {
+        const cp = TaskCheckpointManager.getCheckpoint(checkpointId);
+        if (cp && cp.status !== 'COMPLETED') {
+          cp.status = 'PAUSED';
+          cp.updatedAt = Date.now();
+          TaskCheckpointManager.saveCheckpoint(cp);
+        }
+        // The turn itself says it is held, and keeps the steps it finished.
+        setConversations((prev) =>
+          prev.map((c) =>
+            c.id === convId
+              ? {
+                  ...c,
+                  messages: c.messages.map((m) =>
+                    m.id === assistantId
+                      ? {
+                          ...m,
+                          activity: {
+                            ...m.activity,
+                            label: reason,
+                            stages: workIntent.stages,
+                            currentStageIndex: m.activity?.currentStageIndex ?? 0,
+                            isComplete: true,
+                            held: true,
+                          },
+                        }
+                      : m,
+                  ),
+                }
+              : c,
+          ),
+        );
+        setIsGenerating(false);
+        setStatus('idle');
+        finishTask(reason, false);
+      };
+
       setConversations((prev) =>
         prev.map((c) =>
           c.id === convId
@@ -468,6 +535,11 @@ function titleFrom(text: string): string {
       // Smooth step progression for calm visual feedback
       for (let sIdx = 1; sIdx < workIntent.stages.length; sIdx++) {
         await new Promise((r) => setTimeout(r, 400));
+        if (actl.signal.aborted) {
+          holdAt('Held — continue whenever you are ready');
+          return;
+        }
+        TaskCheckpointManager.advanceStep(checkpointId, sIdx - 1);
         setConversations((prev) =>
           prev.map((c) =>
             c.id === convId
@@ -530,6 +602,17 @@ function titleFrom(text: string): string {
       }
 
       const artifactId = uid('art');
+      abortRef.current = null;
+      TaskCheckpointManager.advanceStep(checkpointId, workIntent.stages.length - 1);
+      TaskCheckpointManager.attachArtifact(checkpointId, {
+        id: artifactId,
+        name: artName,
+        type: workIntent.kind === 'code' ? 'code' : workIntent.kind === 'spreadsheet' ? 'data' : 'report',
+        format: artKind === 'pptx' ? 'pptx' : artKind === 'docx' ? 'md' : 'md',
+        content: finalContent,
+        createdAt: Date.now(),
+        verified: true,
+      });
       setConversations((prev) =>
         prev.map((c) =>
           c.id === convId

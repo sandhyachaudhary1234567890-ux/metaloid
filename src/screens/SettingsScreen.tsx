@@ -1,5 +1,5 @@
 import { useState } from 'react';
-import { Check, Trash2, Flame, Mic2, Palette, Brain, SlidersHorizontal, Sparkles, ShieldCheck } from 'lucide-react';
+import { Check, Trash2, Flame, Mic2, Palette, Brain, SlidersHorizontal, Sparkles, ShieldCheck, Pause, Play } from 'lucide-react';
 import { useApp } from '../lib/store';
 import { SettingsSection, SettingsRow, Seg, Toggle, Select } from '../components/SettingsGroup';
 import { SystemStatus } from '../components/SystemStatus';
@@ -9,6 +9,7 @@ import { LANGUAGES, MODELS } from '../lib/i18n';
 import { getVoices } from '../providers/tts';
 import { THEME_PRESETS } from '../lib/theme';
 import { ACCENTS } from '../design/tokens';
+import { AUTONOMY_LEVELS, autonomyOption, type AutonomyLevel } from '../lib/control';
 import type { LanguageId, ModelId, RadiusScale } from '../lib/types';
 import { cn } from '../lib/cn';
 
@@ -28,6 +29,7 @@ const SECTIONS = [
   { id: 'ai', label: 'AI' },
   { id: 'voice', label: 'Voice' },
   { id: 'memory', label: 'Memory & Research' },
+  { id: 'control', label: 'Control' },
   { id: 'privacy', label: 'Privacy' },
   { id: 'advanced', label: 'Advanced' },
 ];
@@ -76,7 +78,7 @@ function VoiceSelect({
 }
 
 export function SettingsScreen() {
-  const { settings, updateSettings, toast, openModal, setView, setSkillForgeOpen } = useApp();
+  const { settings, updateSettings, toast, openModal, setView, setSkillForgeOpen, pauseMetaIoid, resumeMetaIoid } = useApp();
   const saved = (msg: string) => toast({ title: msg });
   const [advanced, setAdvanced] = useState(false);
   const [appearanceMore, setAppearanceMore] = useState(false);
@@ -543,6 +545,73 @@ export function SettingsScreen() {
                 }
                 label="Research depth"
               />
+            }
+          />
+        </SettingsSection>
+
+        {/* ── CONTROL ──────────────────────────────────────────────────── */}
+        <SettingsSection
+          id="control"
+          icon={ShieldCheck}
+          title="Control"
+          desc="What MetaIoid is allowed to do on its own, and how to stop it."
+        >
+          <SettingsRow
+            label={settings.paused ? 'Paused' : 'Pause MetaIoid'}
+            hint={
+              settings.paused
+                ? 'Everything in flight is held. Completed work and checkpoints are kept.'
+                : 'Stops speech, holds work in progress and keeps everything already finished.'
+            }
+            control={
+              settings.paused ? (
+                <button onClick={resumeMetaIoid} className="btn-primary h-9 gap-1.5 px-3.5 text-small">
+                  <Play size={13} />
+                  Resume
+                </button>
+              ) : (
+                <button onClick={pauseMetaIoid} className="btn-ghost h-9 gap-1.5 px-3.5 text-small">
+                  <Pause size={13} />
+                  Pause
+                </button>
+              )
+            }
+          />
+
+          <SettingsRow
+            label="What can MetaIoid do automatically?"
+            hint={autonomyOption(settings.autonomy).hint}
+            stacked
+            control={
+              <div className="grid gap-2 sm:grid-cols-2" role="radiogroup" aria-label="Autonomy level">
+                {AUTONOMY_LEVELS.map((level) => {
+                  const on = settings.autonomy === level.id;
+                  return (
+                    <button
+                      key={level.id}
+                      role="radio"
+                      aria-checked={on}
+                      onClick={() => {
+                        updateSettings({ autonomy: level.id as AutonomyLevel });
+                        saved(`Autonomy: ${level.label}`);
+                      }}
+                      className={cn(
+                        'flex flex-col rounded-[var(--radius-md)] border p-3 text-left',
+                        'transition-colors duration-small ease-out',
+                        on
+                          ? 'border-[var(--accent)] bg-[var(--surface-elevated)]'
+                          : 'border-[var(--border)] bg-[var(--surface-elevated)] hover:border-[var(--border-strong)]',
+                      )}
+                    >
+                      <span className="flex items-center gap-1.5">
+                        <span className="text-ui font-medium text-[var(--fg)]">{level.label}</span>
+                        {on && <Check size={13} className="text-[var(--accent)]" />}
+                      </span>
+                      <span className="mt-0.5 text-small text-[var(--fg-muted)] text-pretty">{level.hint}</span>
+                    </button>
+                  );
+                })}
+              </div>
             }
           />
         </SettingsSection>

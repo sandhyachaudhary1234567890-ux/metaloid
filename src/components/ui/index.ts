@@ -8,8 +8,13 @@
 export { Artwork } from './Artwork';
 export { EmptyState } from './EmptyState';
 export { StatusDot, StatusPill } from './Status';
-export { Activity, ToolActivity } from './Activity';
+export { Activity, ToolActivity, ActivityStack } from './Activity';
 export { SectionHeader } from './SectionHeader';
 export { Sentinel } from './Sentinel';
-export { Proactive } from './Proactive';
 export { ProviderMark, ProviderCard } from './Provider';
+export {
+  PresenceLine, HomeGreeting, ActiveMission, HomeSignals,
+  useOpenTasks, useMissions,
+  /** Legacy name for the welcome composition's proactive stack. */
+  HomeSignals as Proactive,
+} from './Home';

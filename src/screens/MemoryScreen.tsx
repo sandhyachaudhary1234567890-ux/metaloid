@@ -58,7 +58,7 @@ export function MemoryScreen() {
         </div>
         <div className="ml-auto flex items-center gap-2">
           <span className={cn('chip !text-small', settings.memoryEnabled ? '' : 'opacity-60')}>
-            <span className={cn('w-1.5 h-1.5 rounded-full', settings.memoryEnabled ? 'bg-success/10' : 'bg-[var(--fg-muted)]')} />
+            <span className={cn('w-1.5 h-1.5 rounded-full', settings.memoryEnabled ? 'bg-[var(--success)]' : 'bg-[var(--fg-muted)]')} />
             {settings.memoryEnabled ? 'Active · on-device' : 'Paused'}
           </span>
           <button onClick={() => setAdding(true)} disabled={!settings.memoryEnabled} className="btn-primary h-9 px-3.5 text-ui disabled:opacity-40">
@@ -88,7 +88,7 @@ export function MemoryScreen() {
               className={cn(
                 'shrink-0 px-3 py-1.5 rounded-full text-small font-medium border transition-all min-h-[34px]',
                 filter === c
-                  ? 'bg-[var(--surface-elevated)] border-[var(--accent)] text-[var(--fg)] shadow-sm'
+                  ? 'bg-[var(--surface-elevated)] border-[var(--accent)] text-[var(--fg)]'
                   : 'border-[var(--border)] bg-[var(--surface)] text-[var(--fg-muted)] hover:text-[var(--fg)]'
               )}
             >
@@ -129,7 +129,7 @@ export function MemoryScreen() {
                     key={m.id}
                     initial={{ opacity: 0, y: 8 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: i * 0.03 }}
                     onClick={() => { setSelected(m); setEditing(false); setEditText(m.content); }}
-                    className="rounded-2xl border border-[var(--border)] bg-[var(--surface)] p-4 text-left hover:bg-[var(--surface-hover)] hover:border-[var(--border-strong)] transition-all"
+                    className="rounded-[var(--radius-lg)] border border-[var(--border)] bg-[var(--surface)] p-4 text-left hover:bg-[var(--surface-hover)] hover:border-[var(--border-strong)] transition-all"
                   >
                     <span className={cn('inline-flex text-micro font-medium tracking-wider uppercase rounded-md px-2 py-0.5 border', CAT_CHIP)}>
                       {m.category}
@@ -151,7 +151,7 @@ export function MemoryScreen() {
             <motion.div className="fixed inset-0 z-[75] bg-black/60 backdrop-blur-xs" initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} onClick={() => setAdding(false)} />
             <motion.div
               initial={{ y: 20, opacity: 0 }} animate={{ y: 0, opacity: 1 }} exit={{ y: 20, opacity: 0 }}
-              className="fixed bottom-0 sm:bottom-8 inset-x-0 sm:inset-x-auto sm:right-8 sm:w-[420px] z-[76] rounded-t-3xl sm:rounded-2xl border border-[var(--border)] bg-[var(--surface-elevated)] p-5 shadow-pop text-[var(--fg)]"
+              className="fixed bottom-0 sm:bottom-8 inset-x-0 sm:inset-x-auto sm:right-8 sm:w-[420px] z-[76] rounded-t-[var(--radius-xl)] sm:rounded-[var(--radius-lg)] border border-[var(--border)] bg-[var(--surface-elevated)] p-5 shadow-pop text-[var(--fg)]"
             >
               <h3 className="text-read font-semibold text-[var(--fg)]">Add memory</h3>
               <p className="text-small text-[var(--fg-muted)] mt-0.5">Durable preferences, project context, or instructions.</p>

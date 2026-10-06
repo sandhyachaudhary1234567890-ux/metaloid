@@ -44,7 +44,7 @@ export function SpreadsheetWorkspace({ sheet, onClose }: SpreadsheetWorkspacePro
         <div className="flex items-center gap-2 shrink-0">
           <button
             onClick={handleDownloadCsv}
-            className="btn-primary h-8 px-3 text-xs rounded-lg inline-flex items-center gap-1.5"
+            className="btn-primary h-8 px-3 text-micro rounded-lg inline-flex items-center gap-1.5"
           >
             <Download size={13} /> Export CSV
           </button>
@@ -65,7 +65,7 @@ export function SpreadsheetWorkspace({ sheet, onClose }: SpreadsheetWorkspacePro
 
       {/* Summary KPI Bar */}
       {sheet.summary && (
-        <div className="grid grid-cols-2 sm:grid-cols-4 gap-2.5 p-3.5 bg-[color-mix(in_srgb,var(--surface-sunken)_40%,transparent)] border-b border-[var(--border)] text-xs">
+        <div className="grid grid-cols-2 sm:grid-cols-4 gap-2.5 p-3.5 bg-[color-mix(in_srgb,var(--surface-sunken)_40%,transparent)] border-b border-[var(--border)] text-micro">
           {Object.entries(sheet.summary).map(([k, v]) => (
             <div key={k} className="p-2.5 rounded-xl border border-[var(--border)] bg-[var(--surface)]">
               <span className="text-micro text-[var(--fg-muted)] uppercase tracking-wider block font-medium">
@@ -84,14 +84,14 @@ export function SpreadsheetWorkspace({ sheet, onClose }: SpreadsheetWorkspacePro
           value={query}
           onChange={(e) => setQuery(e.target.value)}
           placeholder="Filter rows by keyword…"
-          className="bg-transparent text-xs outline-none flex-1 text-[var(--fg)] placeholder:text-[var(--fg-muted)]"
+          className="bg-transparent text-micro outline-none flex-1 text-[var(--fg)] placeholder:text-[var(--fg-muted)]"
         />
       </div>
 
       {/* Table Body */}
       <div className="flex-1 overflow-auto p-4 bg-[var(--bg)]">
-        <div className="border border-[var(--border)] rounded-xl overflow-hidden bg-[var(--surface)] shadow-sm">
-          <table className="w-full text-left border-collapse text-xs">
+        <div className="border border-[var(--border)] rounded-xl overflow-hidden bg-[var(--surface)]">
+          <table className="w-full text-left border-collapse text-micro">
             <thead>
               <tr className="border-b border-[var(--border)] bg-[var(--surface-elevated)] text-[var(--fg-secondary)] font-medium">
                 {sheet.columns.map((col, i) => (

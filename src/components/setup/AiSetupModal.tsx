@@ -192,7 +192,7 @@ export function AiSetupModal({ onComplete, canSkip = true }: AiSetupModalProps) 
                   <div className="flex-1 min-w-0">
                     <div className="flex items-center gap-2">
                       <span className="text-ui font-medium text-[var(--fg)]">Use a free AI</span>
-                      <span className="text-micro font-bold uppercase tracking-wider bg-[var(--accent-solid)] text-[var(--accent-on-solid)] px-2 py-0.5 rounded-full">
+                      <span className="text-micro font-semibold uppercase tracking-wider bg-[var(--accent-solid)] text-[var(--accent-on-solid)] px-2 py-0.5 rounded-full">
                         Recommended
                       </span>
                     </div>
@@ -276,7 +276,7 @@ export function AiSetupModal({ onComplete, canSkip = true }: AiSetupModalProps) 
                 </span>
               </div>
 
-              <h3 className="text-heading font-bold text-[var(--fg)] mt-3">
+              <h3 className="text-heading font-semibold text-[var(--fg)] mt-3">
                 Connect {selectedProvider.name}
               </h3>
               <p className="text-ui text-[var(--fg-muted)] mt-1">
@@ -452,7 +452,7 @@ export function AiSetupModal({ onComplete, canSkip = true }: AiSetupModalProps) 
                 </span>
               </div>
 
-              <h3 className="text-heading font-bold text-[var(--fg)] mt-2">
+              <h3 className="text-heading font-semibold text-[var(--fg)] mt-2">
                 Choose an AI Provider
               </h3>
 
@@ -531,7 +531,7 @@ export function AiSetupModal({ onComplete, canSkip = true }: AiSetupModalProps) 
                 </span>
               </div>
 
-              <h3 className="text-heading font-bold text-[var(--fg)] mt-3">
+              <h3 className="text-heading font-semibold text-[var(--fg)] mt-3">
                 Configure Local AI
               </h3>
               <p className="text-ui text-[var(--fg-muted)] mt-1">

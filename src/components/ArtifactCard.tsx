@@ -107,7 +107,7 @@ export function ArtifactCard({ artifact, onOpenWorkspace }: ArtifactCardProps) {
   };
 
   return (
-    <div className="mt-3 rounded-2xl border border-[var(--border)] bg-[var(--surface)] p-4 max-w-[440px] shadow-sm select-none">
+    <div className="mt-3 rounded-[var(--radius-lg)] border border-[var(--border)] bg-[var(--surface)] p-4 max-w-[440px] select-none">
       <div className="flex items-center gap-3">
         <span className="w-10 h-10 rounded-xl bg-[color-mix(in_srgb,var(--accent)_10%,transparent)] text-[var(--accent)] border border-[var(--border)] flex items-center justify-center shrink-0">
           <IconComponent size={18} />

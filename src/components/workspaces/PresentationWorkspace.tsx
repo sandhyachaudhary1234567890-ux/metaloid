@@ -84,16 +84,16 @@ export function PresentationWorkspace({ deck, onClose }: PresentationWorkspacePr
       <div className="flex-1 flex overflow-hidden">
         {/* Slide Thumbnails Column */}
         <div className="hidden md:block w-48 sm:w-56 border-r border-[var(--border)] overflow-y-auto p-3 space-y-2.5 bg-[color-mix(in_srgb,var(--surface-sunken)_40%,transparent)] shrink-0">
-          <div className="text-micro font-bold uppercase tracking-wider text-[var(--fg-muted)] px-1 mb-1">
+          <div className="text-micro font-semibold uppercase tracking-wider text-[var(--fg-muted)] px-1 mb-1">
             Slides ({deck.slides.length})
           </div>
           {deck.slides.map((s, idx) => (
             <button
               key={s.id}
               onClick={() => setCurrentSlideIndex(idx)}
-              className={`w-full text-left p-2.5 rounded-xl border transition-all text-xs ${
+              className={`w-full text-left p-2.5 rounded-xl border transition-all text-micro ${
                 idx === currentSlideIndex
-                  ? 'border-[var(--accent)] bg-[var(--surface-elevated)] shadow-sm font-medium text-[var(--fg)]'
+                  ? 'border-[var(--accent)] bg-[var(--surface-elevated)] font-medium text-[var(--fg)]'
                   : 'border-[var(--border)] bg-[var(--surface)] text-[var(--fg-muted)] hover:bg-[var(--surface-hover)]'
               }`}
             >
@@ -109,7 +109,7 @@ export function PresentationWorkspace({ deck, onClose }: PresentationWorkspacePr
         {/* Slide Stage Canvas */}
         <div className="flex-1 flex flex-col p-3 sm:p-6 overflow-y-auto items-center justify-between bg-[var(--bg)]">
           {/* Main Slide Canvas */}
-          <div className="w-full max-w-[720px] aspect-[16/9] rounded-2xl border border-[var(--border-strong)] bg-[var(--surface)] p-5 sm:p-8 md:p-12 shadow-pop flex flex-col justify-between select-text transition-all relative overflow-hidden">
+          <div className="w-full max-w-[720px] aspect-[16/9] rounded-[var(--radius-lg)] border border-[var(--border-strong)] bg-[var(--surface)] p-5 sm:p-8 md:p-12 shadow-pop flex flex-col justify-between select-text transition-all relative overflow-hidden">
             {/* Subtle background glow */}
             <div className="absolute top-0 right-0 w-64 h-64 bg-[color-mix(in_srgb,var(--accent)_5%,transparent)] rounded-full blur-3xl pointer-events-none" />
 
@@ -118,7 +118,7 @@ export function PresentationWorkspace({ deck, onClose }: PresentationWorkspacePr
                 <span>{deck.title}</span>
                 <span>{currentSlide.slideNumber} / {deck.slides.length}</span>
               </div>
-              <h2 className="text-xl sm:text-2xl font-bold tracking-tight text-[var(--fg)] leading-snug">
+              <h2 className="t-heading sm:t-display text-[var(--fg)] leading-snug">
                 {currentSlide.title}
               </h2>
               {currentSlide.subtitle && (
@@ -150,17 +150,17 @@ export function PresentationWorkspace({ deck, onClose }: PresentationWorkspacePr
             <button
               onClick={() => setCurrentSlideIndex((i) => Math.max(0, i - 1))}
               disabled={currentSlideIndex === 0}
-              className="btn-ghost h-9 px-3 rounded-xl border border-[var(--border)] text-xs inline-flex items-center gap-1 disabled:opacity-40"
+              className="btn-ghost h-9 px-3 rounded-xl border border-[var(--border)] text-micro inline-flex items-center gap-1 disabled:opacity-40"
             >
               <ChevronLeft size={14} /> Previous
             </button>
-            <span className="text-xs font-medium text-[var(--fg-muted)]">
+            <span className="text-micro font-medium text-[var(--fg-muted)]">
               Slide {currentSlideIndex + 1} of {deck.slides.length}
             </span>
             <button
               onClick={() => setCurrentSlideIndex((i) => Math.min(deck.slides.length - 1, i + 1))}
               disabled={currentSlideIndex === deck.slides.length - 1}
-              className="btn-ghost h-9 px-3 rounded-xl border border-[var(--border)] text-xs inline-flex items-center gap-1 disabled:opacity-40"
+              className="btn-ghost h-9 px-3 rounded-xl border border-[var(--border)] text-micro inline-flex items-center gap-1 disabled:opacity-40"
             >
               Next <ChevronRight size={14} />
             </button>
@@ -168,7 +168,7 @@ export function PresentationWorkspace({ deck, onClose }: PresentationWorkspacePr
 
           {/* Speaker Notes */}
           {currentSlide.speakerNotes && (
-            <div className="w-full max-w-[720px] mt-4 p-3.5 rounded-xl border border-[var(--border)] bg-[color-mix(in_srgb,var(--surface-elevated)_60%,transparent)] text-xs text-[var(--fg-secondary)] leading-relaxed">
+            <div className="w-full max-w-[720px] mt-4 p-3.5 rounded-xl border border-[var(--border)] bg-[color-mix(in_srgb,var(--surface-elevated)_60%,transparent)] text-micro text-[var(--fg-secondary)] leading-relaxed">
               <span className="font-semibold text-[var(--fg)] block mb-0.5">Speaker Notes:</span>
               {currentSlide.speakerNotes}
             </div>

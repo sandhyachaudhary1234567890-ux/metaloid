@@ -57,6 +57,33 @@ const WORKSPACE_ITEMS = [
   { id: 'tasks' as const, label: 'Tasks', hint: 'Long-running agent work', icon: CheckCircle2 },
 ];
 
+/**
+ * The one screen in the product that is allowed to look like it is waiting.
+ * It offers a way out after a few seconds so a slow auth service can never
+ * make the app feel broken.
+ */
+function RestoringSession({ onSkip }: { onSkip: () => void }) {
+  const [slow, setSlow] = useState(false);
+  useEffect(() => {
+    const id = window.setTimeout(() => setSlow(true), 5000);
+    return () => window.clearTimeout(id);
+  }, []);
+
+  return (
+    <div className="h-full flex flex-col items-center justify-center gap-4 bg-[var(--bg)] text-[var(--fg-muted)]">
+      <div className="flex flex-col items-center gap-3">
+        <div className="h-8 w-8 rounded-full border-2 border-[var(--border)] border-t-[var(--accent)] animate-spin" />
+        <span className="text-small tracking-wide">Restoring your session…</span>
+      </div>
+      {slow && (
+        <button onClick={onSkip} className="btn-ghost h-9 px-4 text-ui">
+          Continue without signing in
+        </button>
+      )}
+    </div>
+  );
+}
+
 /** Secondary destinations on phones: workspaces plus the skills panel. */
 function MobileMoreSheet({ open, onClose }: { open: boolean; onClose: () => void }) {
   const { setView, setSkillsOpen } = useApp();
@@ -117,6 +144,9 @@ function AppShell() {
   } = useApp();
 
   const [moreOpen, setMoreOpen] = useState(false);
+  // A way past a stalled session restore. The bootstrap always resolves now,
+  // but a slow /api/config should never be able to trap anyone on a spinner.
+  const [authBypass, setAuthBypass] = useState(false);
 
   const prevViewRef = useRef(view);
   const [intro, setIntro] = useState(
@@ -147,16 +177,9 @@ function AppShell() {
   };
   const head = meta[view] || { title: 'MetaIoid', sub: '' };
 
-  if (gate) {
+  if (gate && !authBypass) {
     if (auth.status === 'loading') {
-      return (
-        <div className="h-full flex items-center justify-center bg-[var(--bg)] text-[var(--fg-muted)]">
-          <div className="flex flex-col items-center gap-3">
-            <div className="h-8 w-8 rounded-full border-2 border-[var(--border)] border-t-[var(--accent)] animate-spin" />
-            <span className="text-small tracking-wide">Restoring your session…</span>
-          </div>
-        </div>
-      );
+      return <RestoringSession onSkip={() => setAuthBypass(true)} />;
     }
     return <AuthScreen />;
   }

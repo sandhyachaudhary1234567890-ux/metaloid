@@ -38,7 +38,7 @@ export function MetaCodeWorkspace({ code, onClose }: MetaCodeWorkspaceProps) {
         <div className="flex items-center gap-2 shrink-0">
           <button
             onClick={handleCopy}
-            className="btn-ghost h-8 px-2.5 text-xs rounded-lg inline-flex items-center gap-1.5 text-[var(--fg-muted)] hover:text-[var(--fg)]"
+            className="btn-ghost h-8 px-2.5 text-micro rounded-lg inline-flex items-center gap-1.5 text-[var(--fg-muted)] hover:text-[var(--fg)]"
           >
             {copied ? <Check size={13} className="text-success" /> : <Copy size={13} />}
             {copied ? 'Copied' : 'Copy Code'}
@@ -66,7 +66,7 @@ export function MetaCodeWorkspace({ code, onClose }: MetaCodeWorkspaceProps) {
             <button
               key={file.filename}
               onClick={() => setActiveFileIndex(idx)}
-              className={`px-3 py-1.5 rounded-t-lg text-xs font-mono inline-flex items-center gap-1.5 transition-colors border-t border-x ${
+              className={`px-3 py-1.5 rounded-t-lg text-micro font-mono inline-flex items-center gap-1.5 transition-colors border-t border-x ${
                 idx === activeFileIndex
                   ? 'bg-[#0d0f14] text-info border-[var(--fg-faint)]'
                   : 'bg-transparent text-[var(--fg-secondary)] border-transparent hover:text-[var(--fg)]'
@@ -78,7 +78,7 @@ export function MetaCodeWorkspace({ code, onClose }: MetaCodeWorkspaceProps) {
         </div>
 
         {/* Code Content View */}
-        <div className="flex-1 overflow-auto p-4 font-mono text-xs leading-relaxed select-text">
+        <div className="flex-1 overflow-auto p-4 font-mono text-ui leading-relaxed select-text">
           <pre className="text-[var(--fg-secondary)]">
             <code>{currentFile.content}</code>
           </pre>
@@ -88,7 +88,7 @@ export function MetaCodeWorkspace({ code, onClose }: MetaCodeWorkspaceProps) {
         <div className="px-4 py-2 border-t border-[var(--fg-faint)] bg-[#090b0e] text-micro text-[var(--fg-secondary)] flex items-center justify-between">
           <span>{currentFile.filename}</span>
           <span className="flex items-center gap-1.5 text-success">
-            <span className="w-1.5 h-1.5 rounded-full bg-success/10" /> Syntax Verified
+            <span className="w-1.5 h-1.5 rounded-full bg-[var(--success)]" /> Syntax Verified
           </span>
         </div>
       </div>

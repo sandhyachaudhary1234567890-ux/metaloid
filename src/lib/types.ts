@@ -33,6 +33,20 @@ export interface ToolActivity {
   demo?: boolean;
 }
 
+/**
+ * A staged piece of work shown inside the assistant turn — the calm step
+ * progression for a deliverable being built, rather than a blank bubble while
+ * the work happens.
+ */
+export interface MessageActivity {
+  label: string;
+  stages: string[];
+  currentStageIndex: number;
+  isComplete: boolean;
+  /** The user stopped mid-work. Completed steps are kept; the rest waits. */
+  held?: boolean;
+}
+
 export interface Attachment {
   id: string;
   name: string;
@@ -52,6 +66,8 @@ export interface ChatMessage {
   toolActivity?: ToolActivity[];
   vision?: boolean;
   detectedLang?: string;
+  /** staged work in progress on this turn (deliverables, pipelines) */
+  activity?: MessageActivity;
   /** previous assistant generations (regenerate history), oldest first */
   versions?: string[];
   /** which version is displayed: -1 = current content, else index into versions */
@@ -115,6 +131,10 @@ export interface AppSettings {
   responseLength: 'Concise' | 'Balanced' | 'Detailed';
   creativity: 'Low' | 'Medium' | 'High';
   proactivity: 'Low' | 'Medium' | 'High';
+  /** How much MetaIoid may do without being asked. See lib/control.ts. */
+  autonomy: 'ask' | 'assist' | 'approved' | 'autopilot';
+  /** True while MetaIoid is holding. Completed work is preserved. */
+  paused: boolean;
   voiceBehavior: 'Friendly' | 'Professional' | 'Minimal' | 'Warm';
   vadSensitivity: 'Low' | 'Medium' | 'High';
   model: ModelId;

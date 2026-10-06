@@ -87,7 +87,7 @@ export function Onboarding() {
     <div className="h-full flex items-center justify-center px-4 overflow-y-auto">
       <div className="w-full max-w-[480px] py-10">
         <p className="text-small font-semibold tracking-[0.18em] text-[var(--accent)]">FIRST-RUN SETUP</p>
-        <h1 className="text-display font-bold tracking-tight text-[var(--fg)] mt-1">Tell MetaIoid the essentials.</h1>
+        <h1 className="t-display text-[var(--fg)] mt-1">Tell MetaIoid the essentials.</h1>
         <p className="text-ui text-[var(--fg-muted)] mt-1">Thirty seconds now — everything else it learns from how you use it.</p>
 
         <label className="block mt-6">

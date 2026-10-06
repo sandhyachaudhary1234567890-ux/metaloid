@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { AnimatePresence, motion } from 'framer-motion';
-import { Search, MessageSquare, Mic, Radio, Brain, History, Settings, Trash2, Plus, Globe, Command, Sparkles, Radar, Rocket, Palette, Flame } from 'lucide-react';
+import { Search, MessageSquare, Mic, Radio, Brain, History, Settings, Trash2, Plus, Globe, Command, Sparkles, Radar, Rocket, Palette, Flame, Pause, Play } from 'lucide-react';
 import { useApp } from '../lib/store';
 import type { ThemeId } from '../lib/types';
 import { cn } from '../lib/cn';
@@ -13,6 +13,7 @@ export function CommandPalette() {
     paletteOpen, setPaletteOpen, newConversation, setView, setVoiceOpen,
     setToolsOpen, setOsintOpen, setOsintTarget, setMissionsOpen, setMissionDraft,
     toast, openModal, activeConv, setLanguage, language, updateSettings, settings,
+    pauseMetaIoid, resumeMetaIoid,
   } = useApp();
   const [q, setQ] = useState('');
   const [idx, setIdx] = useState(0);
@@ -23,6 +24,8 @@ export function CommandPalette() {
         toast({ title: 'MetaIoid Stopped', desc: res.message });
       }
     },
+    { id: 'pause', label: 'Pause MetaIoid', hint: 'Hold everything until you say otherwise', icon: Pause, run: () => { pauseMetaIoid(); setPaletteOpen(false); } },
+    { id: 'resume', label: 'Resume MetaIoid', hint: 'Release the hold and continue preserved work', icon: Play, run: () => { resumeMetaIoid(); setPaletteOpen(false); } },
     { id: 'situation', label: 'What is MetaIoid doing?', hint: 'Live situational brief of active and background tasks', icon: Sparkles, run: () => {
         const sit = SituationAwareness.getStatusBrief();
         toast({ title: sit.headline, desc: sit.speechResponse });
@@ -76,7 +79,7 @@ export function CommandPalette() {
         animate={{ opacity: 1, y: 0, scale: 1 }}
         exit={{ opacity: 0 }}
         transition={{ duration: 0.18 }}
-        className="relative w-full max-w-[560px] rounded-2xl border border-[var(--border)] bg-[var(--surface-elevated)] text-[var(--fg)] shadow-pop overflow-hidden"
+        className="relative w-full max-w-[560px] rounded-[var(--radius-lg)] border border-[var(--border)] bg-[var(--surface-elevated)] text-[var(--fg)] shadow-pop overflow-hidden"
       >
         <div className="flex items-center gap-3 px-4 border-b border-[var(--border)]">
           <Search size={16} className="text-[var(--fg-muted)] shrink-0" />
@@ -138,7 +141,7 @@ export function CommandPalette() {
 
 export function EmptyState({ title, desc, action }: { title: string; desc: string; action?: React.ReactNode }) {
   return (
-    <div className="rounded-2xl border border-[var(--border)] bg-[var(--surface)] p-8 text-center max-w-[420px] mx-auto">
+    <div className="rounded-[var(--radius-lg)] border border-[var(--border)] bg-[var(--surface)] p-8 text-center max-w-[420px] mx-auto">
       <h3 className="text-read font-semibold text-[var(--fg)]">{title}</h3>
       <p className="text-ui text-[var(--fg-muted)] mt-1">{desc}</p>
       {action && <div className="mt-4">{action}</div>}

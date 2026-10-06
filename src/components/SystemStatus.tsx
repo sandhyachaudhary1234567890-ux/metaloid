@@ -65,7 +65,7 @@ export function SystemStatus() {
         return (
           <div key={r.key} className="flex items-center gap-3 px-3.5 py-2.5">
             <span className={cn('h-2 w-2 rounded-full shrink-0',
-              connection === 'checking' ? 'bg-warning/10 animate-pulse' : ok ? 'bg-success/10' : 'bg-[var(--fg-subtle)]')} />
+              connection === 'checking' ? 'bg-[var(--warning)] animate-pulse-soft' : ok ? 'bg-[var(--success)]' : 'bg-[var(--fg-subtle)]')} />
             <span className="flex-1 min-w-0">
               <span className="block text-ui font-medium text-[var(--fg)]">{r.label}</span>
               <span className="block text-micro text-[var(--fg-muted)]">{r.hint}</span>
